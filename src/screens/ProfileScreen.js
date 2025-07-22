@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,16 @@ import {
   Switch,
   Image,
   Modal,
+  TextInput,
+  FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { supabase } from '../services/supabase';
 import { locationTracker } from '../services/locationTracker';
 import { Buffer } from 'buffer';
+import MapView, { Marker } from 'react-native-maps';
 
 // Utility function to convert BYTEA hex to base64
 function hexToBase64(hexString) {
@@ -22,6 +26,83 @@ function hexToBase64(hexString) {
   // Remove all leading backslashes and 'x'
   const hex = hexString.replace(/^\\*x/, '');
   return Buffer.from(hex, 'hex').toString('base64');
+}
+
+function LocationSearchBar({ onLocationFound }) {
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const debounceTimeout = useRef(null);
+
+  const fetchSuggestions = async (text) => {
+    if (!text) {
+      setSuggestions([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&addressdetails=1&limit=5`;
+      const response = await fetch(url);
+      const results = await response.json();
+      setSuggestions(results);
+    } catch (e) {
+      setSuggestions([]);
+    }
+    setLoading(false);
+  };
+
+  const onChangeText = (text) => {
+    setQuery(text);
+    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+    debounceTimeout.current = setTimeout(() => fetchSuggestions(text), 400);
+  };
+
+  const onSuggestionPress = (item) => {
+    setQuery(item.display_name);
+    setSuggestions([]);
+    onLocationFound({ latitude: parseFloat(item.lat), longitude: parseFloat(item.lon) });
+  };
+
+  // In LocationSearchBar, update renderItem in FlatList to highlight the matched part
+  // Add this helper function inside LocationSearchBar
+  const highlightMatch = (text, query) => {
+    if (!query) return <Text>{text}</Text>;
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i');
+    const parts = text.split(regex);
+    return parts.map((part, i) =>
+      regex.test(part) ? (
+        <Text key={i} style={{ fontWeight: 'bold', color: '#007AFF' }}>{part}</Text>
+      ) : (
+        <Text key={i}>{part}</Text>
+      )
+    );
+  };
+
+  return (
+    <View style={{ marginBottom: 8 }}>
+      <View style={{ flexDirection: 'row' }}>
+        <TextInput
+          value={query}
+          onChangeText={onChangeText}
+          placeholder="Search address"
+          style={{ flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 8 }}
+        />
+        {loading && <ActivityIndicator size="small" style={{ marginLeft: 8 }} />}
+      </View>
+      {suggestions.length > 0 && (
+        <FlatList
+          data={suggestions}
+          keyExtractor={(item) => item.place_id.toString()}
+          style={{ backgroundColor: '#fff', borderRadius: 8, elevation: 2, maxHeight: 150, marginTop: 2 }}
+          renderItem={({ item }) => (
+            <TouchableOpacity onPress={() => onSuggestionPress(item)} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+              {highlightMatch(item.display_name, query)}
+            </TouchableOpacity>
+          )}
+        />
+      )}
+    </View>
+  );
 }
 
 export default function ProfileScreen({ navigation, user, userProfile, reloadUserProfile }) {
@@ -32,13 +113,18 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     highAccuracy: true,
   });
   const [showImageModal, setShowImageModal] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [mapRegion, setMapRegion] = useState({
+    latitude: userProfile?.latitude || 37.78825,
+    longitude: userProfile?.longitude || -122.4324,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  });
 
   useEffect(() => {
     if (userProfile?.profile_photo_data) {
-      console.log('profile_photo_data (first 100):', userProfile.profile_photo_data.slice(0, 100));
-      const imgUri = `data:image/jpeg;base64,${userProfile.profile_photo_data}`;
-      console.log('Profile image URI (first 100):', imgUri.slice(0, 100));
-      setProfileImage(imgUri);
+      setProfileImage(userProfile.profile_photo_data);
     } else {
       setProfileImage(null);
     }
@@ -78,41 +164,73 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     }
   };
 
+  const uploadProfileImage = async (uri, userId, mimeType) => {
+    try {
+      // Generate a unique file name using timestamp and random number
+      const fileExt = mimeType.split('/')[1];
+      const fileName = `${Date.now()}_${Math.floor(Math.random() * 100000)}.${fileExt}`;
+      const filePath = `profiles/${userId}/${fileName}`;
+      // Read file as binary
+      const fileData = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const fileBuffer = Buffer.from(fileData, 'base64');
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('locationtracker')
+        .upload(filePath, fileBuffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
+      if (error) {
+        Alert.alert('Error', 'Failed to upload profile image: ' + error.message);
+        return null;
+      }
+      // Get the public URL (or signed URL if private bucket)
+      const { data: urlData } = supabase.storage.from('locationtracker').getPublicUrl(filePath);
+      const publicUrl = urlData?.publicUrl || '';
+      // Store only the URL in profile_photo_data
+      const { error: updateError } = await supabase.from('users').update({ profile_photo_data: publicUrl }).eq('id', userId);
+      if (updateError) {
+        console.error('Failed to update profile_photo_data in users table:', updateError);
+      } else {
+        console.log('profile_photo_data updated in users table:', publicUrl);
+      }
+      return publicUrl;
+    } catch (error) {
+      Alert.alert('Error', 'Failed to upload profile image: ' + error.message);
+      return null;
+    }
+  };
+
+  const getProfileImageUrl = (filePath) => {
+    const { data } = supabase.storage.from('locationtracker').getPublicUrl(filePath);
+    if (data?.publicUrl) {
+      console.log('Generated Supabase image URL:', data.publicUrl);
+    } else {
+      console.warn('No public URL generated for filePath:', filePath, data);
+    }
+    return data?.publicUrl || '';
+  };
+
+  // Update pickImage to use Supabase Storage
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.3, // Lower quality for smaller file
-        base64: true, // Get base64 directly
+        quality: 0.3,
       });
-
-      if (!result.canceled && result.assets[0].base64) {
-        await uploadImage(result.assets[0].base64);
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const publicUrl = await uploadProfileImage(asset.uri, user.id, asset.mimeType || 'image/jpeg');
+        if (publicUrl) {
+          setProfileImage(publicUrl);
+          Alert.alert('Success', 'Profile image updated successfully');
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image');
       console.error('Image picker error:', error);
-    }
-  };
-
-  const uploadImage = async (base64) => {
-    try {
-      // Update user profile with base64 image data
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ profile_photo_data: base64 })
-        .eq('id', user.id);
-      if (updateError) {
-        throw updateError;
-      }
-      setProfileImage(`data:image/jpeg;base64,${base64}`); // Use base64 for display
-      // Do NOT call reloadUserProfile here to avoid infinite loop
-      Alert.alert('Success', 'Profile image updated successfully');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to upload image');
-      console.error('Upload error:', error);
     }
   };
 
@@ -214,8 +332,57 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     );
   };
 
+  // Add location picker functions
+  const openLocationPicker = () => {
+    setSelectedLocation({
+      latitude: userProfile?.latitude || 37.78825,
+      longitude: userProfile?.longitude || -122.4324,
+    });
+    setMapRegion({
+      latitude: userProfile?.latitude || 37.78825,
+      longitude: userProfile?.longitude || -122.4324,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    });
+    setShowLocationPicker(true);
+  };
+
+  const handleMapPress = (event) => {
+    const { latitude, longitude } = event.nativeEvent.coordinate;
+    setSelectedLocation({ latitude, longitude });
+  };
+
+  const confirmLocationSelection = async () => {
+    if (!selectedLocation || !user) return;
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          latitude: selectedLocation.latitude,
+          longitude: selectedLocation.longitude,
+        })
+        .eq('id', user.id);
+      if (error) {
+        Alert.alert('Error', 'Failed to update location: ' + error.message);
+      } else {
+        Alert.alert('Success', 'Location updated successfully!');
+        setShowLocationPicker(false);
+        if (reloadUserProfile) reloadUserProfile(user.id);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update location');
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
+      {/* Location Icon Button at Top */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <Text style={styles.sectionTitle}>Profile Picture</Text>
+        <TouchableOpacity onPress={openLocationPicker} style={{ padding: 8 }}>
+          <Text style={{ fontSize: 24 }}>📍</Text>
+        </TouchableOpacity>
+      </View>
       {/* Profile Image Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Profile Picture</Text>
@@ -225,6 +392,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
               <Image
                 source={{ uri: profileImage }}
                 style={styles.profileImage}
+                onError={e => console.error('Image load error:', e.nativeEvent)}
               />
             </TouchableOpacity>
           )}
@@ -341,6 +509,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
           <Image
             source={{ uri: profileImage }}
             style={{ width: 300, height: 300, borderRadius: 12, resizeMode: 'contain' }}
+            onError={e => console.error('Modal image load error:', e.nativeEvent)}
           />
           <TouchableOpacity
             style={{ marginTop: 20, backgroundColor: '#fff', padding: 10, borderRadius: 8 }}
@@ -349,6 +518,66 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
             <Text style={{ color: '#007AFF', fontWeight: 'bold' }}>Close</Text>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+      {/* Location Picker Modal */}
+      <Modal
+        visible={showLocationPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowLocationPicker(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' }}>
+          <View style={{ width: '90%', backgroundColor: '#fff', borderRadius: 12, padding: 16 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 8 }}>Select Location</Text>
+            <LocationSearchBar onLocationFound={(coords) => {
+              setSelectedLocation(coords);
+              setMapRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 });
+            }} />
+            <View style={{ width: '100%', height: 200, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+              <MapView
+                style={{ width: '100%', height: '100%' }}
+                region={mapRegion}
+                onPress={handleMapPress}
+                showsUserLocation={true}
+                showsMyLocationButton={true}
+              >
+                {selectedLocation && (
+                  <Marker
+                    coordinate={selectedLocation}
+                    title="Selected Location"
+                    pinColor="red"
+                  />
+                )}
+              </MapView>
+            </View>
+            {selectedLocation && (
+              <View style={{ backgroundColor: '#f0f0f0', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 4 }}>Selected Location:</Text>
+                <Text style={{ fontSize: 12, color: '#666' }}>
+                  Latitude: {selectedLocation.latitude.toFixed(6)}
+                </Text>
+                <Text style={{ fontSize: 12, color: '#666' }}>
+                  Longitude: {selectedLocation.longitude.toFixed(6)}
+                </Text>
+              </View>
+            )}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#ccc', borderRadius: 8, paddingVertical: 12, marginRight: 8, alignItems: 'center' }}
+                onPress={() => setShowLocationPicker(false)}
+              >
+                <Text style={{ color: '#333', fontWeight: 'bold', fontSize: 16 }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 12, marginLeft: 8, alignItems: 'center' }}
+                onPress={confirmLocationSelection}
+                disabled={!selectedLocation}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </ScrollView>
   );

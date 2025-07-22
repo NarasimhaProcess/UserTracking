@@ -3,8 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, StyleSheet } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { registerRootComponent } from 'expo';
 import { AppRegistry } from 'react-native';
 import { Buffer } from 'buffer';
@@ -29,6 +28,18 @@ import { supabase } from './src/services/supabase';
 import { locationTracker } from './src/services/locationTracker';
 
 
+let Storage;
+if (Platform.OS === 'web') {
+  Storage = {
+    getItem: async (key) => window.localStorage.getItem(key),
+    setItem: async (key, value) => window.localStorage.setItem(key, value),
+    removeItem: async (key) => window.localStorage.removeItem(key),
+  };
+} else {
+  Storage = require('@react-native-async-storage/async-storage').default;
+}
+
+
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -37,6 +48,7 @@ function TabNavigator({ route }) {
   const { user, userProfile } = route.params || {};
   const isAdmin = userProfile?.user_type === 'admin' || userProfile?.user_type === 'superadmin';
   const isCustomer = userProfile?.user_type === 'customer';
+  const isUser = userProfile?.user_type === 'user';
   
   console.log('📱 TabNavigator received props:', { user, userProfile });
   console.log('📧 User email from TabNavigator:', user?.email);
@@ -66,7 +78,7 @@ function TabNavigator({ route }) {
       >
         {(props) => <DashboardScreen {...props} user={user} userProfile={userProfile} />}
       </Tab.Screen>
-      {!isCustomer && (
+      {!isCustomer && !isUser && (
         <Tab.Screen 
           name="Map" 
           options={{
@@ -78,7 +90,7 @@ function TabNavigator({ route }) {
           {(props) => <MapScreen {...props} user={user} userProfile={userProfile} />}
         </Tab.Screen>
       )}
-      {!isCustomer && (
+      {!isCustomer && !isUser && (
         <Tab.Screen 
           name="History" 
           options={{

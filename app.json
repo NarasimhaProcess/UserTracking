@@ -42,7 +42,8 @@
       "package": "com.narasimhaexpo.locationtrackermobile"
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
       [
@@ -59,10 +60,16 @@
         }
       ]
     ],
+    "updates": {
+      "url": "https://u.expo.dev/e1129aeb-d49c-498a-8a68-9063bb755b96"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "sdkVersion": "53.0.0",
     "extra": {
       "eas": {
-        "projectId": "42174a55-6b72-42c7-a7af-2a0f9c48e526"
+        "projectId": "e1129aeb-d49c-498a-8a68-9063bb755b96"
       }
     }
   }

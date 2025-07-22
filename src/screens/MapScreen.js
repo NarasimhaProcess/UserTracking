@@ -15,10 +15,14 @@ import { supabase } from '../services/supabase';
 // Conditionally import react-native-maps only on native platforms
 let MapView, Marker, Polyline;
 if (Platform.OS !== 'web') {
-  const Maps = require('react-native-maps');
-  MapView = Maps.default;
-  Marker = Maps.Marker;
-  Polyline = Maps.Polyline;
+  try {
+    const Maps = require('react-native-maps');
+    MapView = Maps.default;
+    Marker = Maps.Marker;
+    Polyline = Maps.Polyline;
+  } catch (error) {
+    console.warn('react-native-maps not available on this platform:', error);
+  }
 }
 
 const { width, height } = Dimensions.get('window');
@@ -202,42 +206,40 @@ export default function MapScreen({ user, userProfile }) {
     </View>
   );
 
-  if (isLoading) {
+  // Render map or fallback
+  const renderMap = () => {
+    if (Platform.OS === 'web') {
+      return <WebMapFallback />;
+    }
+
+    if (!MapView) {
+      return (
+        <View style={styles.webFallback}>
+          <Text style={styles.webFallbackTitle}>🗺️ Map View</Text>
+          <Text style={styles.webFallbackText}>
+            Maps are not available on this platform.
+          </Text>
+          <Text style={styles.webFallbackText}>
+            Please use the mobile app for full map functionality.
+          </Text>
+        </View>
+      );
+    }
+
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading map...</Text>
-      </View>
-    );
-  }
-
-  // Show web fallback if on web platform
-  if (Platform.OS === 'web') {
-    return <WebMapFallback />;
-  }
-
-  // Native map component
-  return (
-    <View style={styles.container}>
       <MapView
         ref={mapRef}
         style={styles.map}
-        initialRegion={currentLocation}
+        initialRegion={currentLocation || {
+          latitude: 37.78825,
+          longitude: -122.4324,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        }}
         showsUserLocation={true}
-        showsMyLocationButton={false}
-        showsCompass={true}
-        showsScale={true}
+        showsMyLocationButton={true}
       >
-        {/* Current location marker */}
-        {currentLocation && (
-          <Marker
-            coordinate={currentLocation}
-            title="Current Location"
-            description="You are here"
-            pinColor="blue"
-          />
-        )}
-
-        {/* User location history markers */}
+        {/* Render user location markers */}
         {userLocations.map((location, index) => (
           <Marker
             key={location.id || index}
@@ -247,20 +249,32 @@ export default function MapScreen({ user, userProfile }) {
             }}
             title={`Location ${index + 1}`}
             description={new Date(location.timestamp).toLocaleString()}
-            pinColor={index === userLocations.length - 1 ? 'red' : 'green'}
           />
         ))}
 
-        {/* Route polyline */}
-        {userLocations.length > 1 && (
+        {/* Render route line if there are multiple points */}
+        {userLocations.length > 1 && Polyline && (
           <Polyline
             coordinates={getRouteCoordinates()}
-            strokeColor="#007AFF"
+            strokeColor="#FF0000"
             strokeWidth={3}
-            lineDashPattern={[1]}
           />
         )}
       </MapView>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading map...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {renderMap()}
 
       {/* Control buttons */}
       <View style={styles.controls}>

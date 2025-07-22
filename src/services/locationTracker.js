@@ -2,8 +2,19 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import * as Device from 'expo-device';
 import * as Application from 'expo-application';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
+
+let Storage;
+if (Platform.OS === 'web') {
+  Storage = {
+    getItem: async (key) => window.localStorage.getItem(key),
+    setItem: async (key, value) => window.localStorage.setItem(key, value),
+    removeItem: async (key) => window.localStorage.removeItem(key),
+  };
+} else {
+  Storage = require('@react-native-async-storage/async-storage').default;
+}
 
 const BACKGROUND_LOCATION_TASK = 'background-location-tracking';
 const OFFLINE_LOCATIONS_KEY = 'offline_locations';
@@ -67,13 +78,13 @@ class LocationTracker {
         console.log('📍 Background task data received:', data);
         const { locations } = data;
         if (locations && locations.length > 0) {
-          // Always load user info from AsyncStorage
-          const userId = await AsyncStorage.getItem('user_id');
-          const userEmail = await AsyncStorage.getItem('user_email');
+          // Always load user info from Storage
+          const userId = await Storage.getItem('user_id');
+          const userEmail = await Storage.getItem('user_email');
           if (userId && userEmail) {
             locationTracker.handleLocationUpdateWithUser(locations[0], userId, userEmail);
           } else {
-            console.warn('No user info found in AsyncStorage for background location update');
+            console.warn('No user info found in Storage for background location update');
           }
         } else {
           console.log('⚠️ No locations in background task data');
@@ -101,8 +112,8 @@ class LocationTracker {
     this.currentUser = userId;
     this.currentUserEmail = userEmail;
     // Persist user info for background task
-    await AsyncStorage.setItem('user_id', String(userId));
-    await AsyncStorage.setItem('user_email', String(userEmail));
+    await Storage.setItem('user_id', String(userId));
+    await Storage.setItem('user_email', String(userEmail));
     
     // Fetch location_update_interval from users table
     let interval = 30; // default
@@ -342,13 +353,13 @@ class LocationTracker {
 
   async storeOfflineLocation(locationData) {
     this.offlineLocations.push(locationData);
-    await AsyncStorage.setItem(OFFLINE_LOCATIONS_KEY, JSON.stringify(this.offlineLocations));
+    await Storage.setItem(OFFLINE_LOCATIONS_KEY, JSON.stringify(this.offlineLocations));
     console.log('Location stored offline');
   }
 
   async loadOfflineLocations() {
     try {
-      const stored = await AsyncStorage.getItem(OFFLINE_LOCATIONS_KEY);
+      const stored = await Storage.getItem(OFFLINE_LOCATIONS_KEY);
       if (stored) {
         this.offlineLocations = JSON.parse(stored);
         console.log('Loaded offline locations:', this.offlineLocations.length);
@@ -374,7 +385,7 @@ class LocationTracker {
 
       // Clear offline locations
       this.offlineLocations = [];
-      await AsyncStorage.removeItem(OFFLINE_LOCATIONS_KEY);
+      await Storage.removeItem(OFFLINE_LOCATIONS_KEY);
       
       console.log('Offline locations synced successfully');
       

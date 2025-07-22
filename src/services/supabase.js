@@ -1,12 +1,24 @@
 import { createClient } from '@supabase/supabase-js';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-const supabaseUrl = 'https://wtcxhhbigmqrmqdyhzcz.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0Y3hoaGJpZ21xcm1xZHloemN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIxNjE3ODgsImV4cCI6MjA2NzczNzc4OH0.AIViaiRT2odHJM2wQXl3dDZ69YxEj7t_7UiRFqEgZjY';
+let Storage;
+if (Platform.OS === 'web') {
+  Storage = {
+    getItem: async (key) => window.localStorage.getItem(key),
+    setItem: async (key, value) => window.localStorage.setItem(key, value),
+    removeItem: async (key) => window.localStorage.removeItem(key),
+  };
+} else {
+  Storage = require('@react-native-async-storage/async-storage').default;
+}
+
+const supabaseUrl = Constants.expoConfig.extra.SUPABASE_URL;
+const supabaseAnonKey = Constants.expoConfig.extra.SUPABASE_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: Storage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

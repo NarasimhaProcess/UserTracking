@@ -9,6 +9,7 @@ import {
   Switch,
   RefreshControl,
   Image,
+  Modal,
 } from 'react-native';
 import { supabase } from '../services/supabase';
 import { locationTracker } from '../services/locationTracker';
@@ -38,6 +39,7 @@ export default function DashboardScreen({ user, userProfile }) {
   const [areaDetails, setAreaDetails] = useState(null);
   const [groupSearch, setGroupSearch] = useState('');
   const [areaSearch, setAreaSearch] = useState('');
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   // Debug logging
   console.log('📱 DashboardScreen received props:', { user, userProfile });
@@ -273,101 +275,19 @@ export default function DashboardScreen({ user, userProfile }) {
       }
     >
       <View style={styles.header}>
-        <Text style={styles.title}>Dashboard</Text>
+        {userProfile?.profile_photo_data ? (
+          <TouchableOpacity onPress={() => setShowProfileModal(true)}>
+            <Image
+              source={{ uri: userProfile.profile_photo_data }}
+              style={styles.headerImage}
+            />
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.title}>Dashboard</Text>
+        )}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
-      </View>
-
-      {/* User Info */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>User Information</Text>
-        
-        {/* Show warning if user profile is missing */}
-        {!userProfile && user && (
-          <View style={styles.warningContainer}>
-            <Text style={styles.warningText}>⚠️ User profile not found</Text>
-            <Text style={styles.warningSubtext}>Click below to create your profile</Text>
-            <TouchableOpacity
-              style={styles.createProfileButton}
-              onPress={handleCreateProfile}
-            >
-              <Text style={styles.createProfileButtonText}>Create User Profile</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {userProfile?.profile_photo_data && (
-          <View style={{ alignItems: 'center', marginBottom: 16 }}>
-            <Image
-              source={{ uri: `data:image/jpeg;base64,${userProfile.profile_photo_data}` }}
-              style={{ width: 80, height: 80, borderRadius: 40, marginBottom: 8 }}
-            />
-          </View>
-        )}
-
-        <View style={styles.userInfo}>
-          <Text style={styles.userLabel}>Name:</Text>
-          <Text style={styles.userValue}>{userProfile?.name || 'Not set'}</Text>
-        </View>
-        <View style={styles.userInfo}>
-          <Text style={styles.userLabel}>Email:</Text>
-          <Text style={styles.userValue}>{userProfile?.email || user?.email || 'Loading...'}</Text>
-        </View>
-        <View style={styles.userInfo}>
-          <Text style={styles.userLabel}>User Type:</Text>
-          <Text style={styles.userValue}>{userProfile?.user_type || 'user'}</Text>
-        </View>
-        <View style={styles.userInfo}>
-          <Text style={styles.userLabel}>Location Status:</Text>
-          <Text style={[styles.userValue, { color: userProfile?.location_status === 1 ? '#34C759' : '#FF3B30' }]}>
-            {userProfile?.location_status === 1 ? 'Active' : 'Inactive'}
-          </Text>
-        </View>
-        
-        {/* Manual Profile Creation Button */}
-        {!userProfile && user && (
-          <TouchableOpacity
-            style={styles.createProfileButton}
-            onPress={handleCreateProfile}
-          >
-            <Text style={styles.createProfileButtonText}>Create User Profile</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Tracking Control */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Location Tracking</Text>
-        <View style={styles.trackingControl}>
-          <Text style={styles.trackingLabel}>
-            {userProfile?.location_status === 1 ? 'Tracking Active' : 'Tracking Inactive'}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.syncButton}
-          onPress={handleSyncOffline}
-          disabled={offlineCount === 0}
-        >
-          <Text style={styles.syncButtonText}>
-            Sync Offline Data ({offlineCount})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Statistics */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Statistics</Text>
-        <View style={styles.statsGrid}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{locationCount}</Text>
-            <Text style={styles.statLabel}>Total Locations</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{offlineCount}</Text>
-            <Text style={styles.statLabel}>Offline Data</Text>
-          </View>
-        </View>
       </View>
 
       {/* Last Location */}
@@ -448,6 +368,28 @@ export default function DashboardScreen({ user, userProfile }) {
           )}
         </View>
       )}
+
+      <Modal
+        visible={showProfileModal}
+        onRequestClose={() => setShowProfileModal(false)}
+        animationType="slide"
+        transparent={true}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Image
+              source={{ uri: userProfile?.profile_photo_data }}
+              style={styles.modalImage}
+            />
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowProfileModal(false)}
+            >
+              <Text style={styles.closeButtonText}>X</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -465,6 +407,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
+  },
+  headerImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#007AFF',
   },
   title: {
     fontSize: 24,
@@ -594,5 +543,41 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  modalContent: {
+    width: '90%',
+    height: '90%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    overflow: 'hidden',
+    alignItems: 'center',
+  },
+  modalImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    backgroundColor: '#FF3B30',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  closeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: 'bold',
   },
 }); 
