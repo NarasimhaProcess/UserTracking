@@ -1,7 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-
 let Storage;
 if (Platform.OS === 'web') {
   Storage = {

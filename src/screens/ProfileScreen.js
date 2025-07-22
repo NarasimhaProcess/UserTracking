@@ -377,8 +377,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
   return (
     <ScrollView style={styles.container}>
       {/* Location Icon Button at Top */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <Text style={styles.sectionTitle}>Profile Picture</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 12 }}>
         <TouchableOpacity onPress={openLocationPicker} style={{ padding: 8 }}>
           <Text style={{ fontSize: 24 }}>📍</Text>
         </TouchableOpacity>
