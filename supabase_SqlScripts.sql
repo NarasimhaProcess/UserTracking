@@ -161,3 +161,33 @@ CREATE TABLE public.users (
   location_update_interval integer DEFAULT 30,
   CONSTRAINT users_pkey PRIMARY KEY (id)
 );
+
+-- Repayment Plans Master Table
+CREATE TABLE IF NOT EXISTS repayment_plans (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL, -- e.g., '12 Weeks', '100 Days', etc.
+    frequency VARCHAR(20) NOT NULL, -- 'daily', 'weekly', etc.
+    periods INTEGER NOT NULL, -- Number of periods (days/weeks)
+    base_amount NUMERIC(12,2) NOT NULL, -- The base amount for scaling
+    repayment_per_period NUMERIC(12,2) NOT NULL, -- Repayment per period for the base amount
+    advance_amount NUMERIC(12,2) DEFAULT 0, -- Advance amount for the base amount
+    late_fee_per_period NUMERIC(12,2) DEFAULT 0, -- Late fee per period (not scaled)
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Optional: Add a trigger to update updated_at on row update
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = NOW();
+   RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+DROP TRIGGER IF EXISTS set_updated_at_on_repayment_plans ON repayment_plans;
+CREATE TRIGGER set_updated_at_on_repayment_plans
+BEFORE UPDATE ON repayment_plans
+FOR EACH ROW
+EXECUTE PROCEDURE update_updated_at_column();

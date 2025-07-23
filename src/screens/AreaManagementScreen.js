@@ -22,7 +22,7 @@ function hexToBase64(hexString) {
 }
 
 export default function AreaManagementScreen({ navigation, user, userProfile }) {
-  const [activeTab, setActiveTab] = useState('areas'); // 'areas' or 'groups'
+  const [activeTab, setActiveTab] = useState('repaymentPlans'); // default to new tab
   const [areas, setAreas] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -46,6 +46,22 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
   const [userSearch, setUserSearch] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [users, setUsers] = useState([]);
+
+  // Repayment Plan Management State
+  const [repaymentPlans, setRepaymentPlans] = useState([]);
+  const [loadingPlans, setLoadingPlans] = useState(false);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState(null);
+  const [planForm, setPlanForm] = useState({
+    name: '',
+    frequency: 'weekly',
+    periods: '',
+    base_amount: '',
+    repayment_per_period: '',
+    advance_amount: '',
+    late_fee_per_period: '',
+    description: '',
+  });
 
   useEffect(() => {
     loadAreas();
@@ -100,6 +116,23 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
     if (!error) setUsers(data || []);
   };
   useEffect(() => { loadUsers(); }, []);
+
+  const loadRepaymentPlans = async () => {
+    setLoadingPlans(true);
+    try {
+      const { data, error } = await supabase
+        .from('repayment_plans')
+        .select('*')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      setRepaymentPlans(data || []);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to load repayment plans');
+    } finally {
+      setLoadingPlans(false);
+    }
+  };
+  useEffect(() => { if (activeTab === 'repaymentPlans') loadRepaymentPlans(); }, [activeTab]);
 
   const handleAddArea = () => {
     setEditingArea(null);
@@ -295,6 +328,81 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
         },
       ]
     );
+  };
+
+  const handleAddPlan = () => {
+    setEditingPlan(null);
+    setPlanForm({
+      name: '',
+      frequency: 'weekly',
+      periods: '',
+      base_amount: '',
+      repayment_per_period: '',
+      advance_amount: '',
+      late_fee_per_period: '',
+      description: '',
+    });
+    setShowPlanModal(true);
+  };
+  const handleEditPlan = (plan) => {
+    setEditingPlan(plan);
+    setPlanForm({
+      name: plan.name,
+      frequency: plan.frequency,
+      periods: plan.periods.toString(),
+      base_amount: plan.base_amount.toString(),
+      repayment_per_period: plan.repayment_per_period.toString(),
+      advance_amount: plan.advance_amount?.toString() || '',
+      late_fee_per_period: plan.late_fee_per_period?.toString() || '',
+      description: plan.description || '',
+    });
+    setShowPlanModal(true);
+  };
+  const handleSavePlan = async () => {
+    if (!planForm.name.trim() || !planForm.frequency || !planForm.periods || !planForm.base_amount || !planForm.repayment_per_period) {
+      Alert.alert('Error', 'Please fill all required fields');
+      return;
+    }
+    const planData = {
+      name: planForm.name.trim(),
+      frequency: planForm.frequency,
+      periods: parseInt(planForm.periods),
+      base_amount: parseFloat(planForm.base_amount),
+      repayment_per_period: parseFloat(planForm.repayment_per_period),
+      advance_amount: planForm.advance_amount ? parseFloat(planForm.advance_amount) : 0,
+      late_fee_per_period: planForm.late_fee_per_period ? parseFloat(planForm.late_fee_per_period) : 0,
+      description: planForm.description?.trim() || null,
+    };
+    try {
+      if (editingPlan) {
+        const { error } = await supabase.from('repayment_plans').update(planData).eq('id', editingPlan.id);
+        if (error) throw error;
+        Alert.alert('Success', 'Repayment plan updated!');
+      } else {
+        const { error } = await supabase.from('repayment_plans').insert(planData);
+        if (error) throw error;
+        Alert.alert('Success', 'Repayment plan created!');
+      }
+      setShowPlanModal(false);
+      loadRepaymentPlans();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save repayment plan');
+    }
+  };
+  const handleDeletePlan = (plan) => {
+    Alert.alert('Delete Plan', `Are you sure you want to delete "${plan.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          const { error } = await supabase.from('repayment_plans').delete().eq('id', plan.id);
+          if (error) throw error;
+          Alert.alert('Success', 'Repayment plan deleted!');
+          loadRepaymentPlans();
+        } catch (error) {
+          Alert.alert('Error', 'Failed to delete repayment plan');
+        }
+      }}
+    ]);
   };
 
   const renderAreaItem = ({ item }) => (
@@ -554,6 +662,46 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
     </Modal>
   );
 
+  const renderPlanModal = () => (
+    <Modal
+      visible={showPlanModal}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowPlanModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>{editingPlan ? 'Edit Repayment Plan' : 'Add Repayment Plan'}</Text>
+          <TextInput style={styles.input} placeholder="Plan Name" value={planForm.name} onChangeText={v => setPlanForm(f => ({ ...f, name: v }))} />
+          <View style={styles.pickerContainer}>
+            <Text style={styles.label}>Frequency:</Text>
+            <View style={styles.pickerRow}>
+              {['daily', 'weekly', 'monthly', 'yearly'].map(freq => (
+                <TouchableOpacity key={freq} style={[styles.pickerOption, planForm.frequency === freq && styles.pickerOptionSelected]} onPress={() => setPlanForm(f => ({ ...f, frequency: freq }))}>
+                  <Text style={[styles.pickerOptionText, planForm.frequency === freq && styles.pickerOptionTextSelected]}>{freq.charAt(0).toUpperCase() + freq.slice(1)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          <TextInput style={styles.input} placeholder="Number of Periods" value={planForm.periods} onChangeText={v => setPlanForm(f => ({ ...f, periods: v.replace(/[^0-9]/g, '') }))} keyboardType="numeric" />
+          <TextInput style={styles.input} placeholder="Base Amount" value={planForm.base_amount} onChangeText={v => setPlanForm(f => ({ ...f, base_amount: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
+          <TextInput style={styles.input} placeholder="Repayment Per Period" value={planForm.repayment_per_period} onChangeText={v => setPlanForm(f => ({ ...f, repayment_per_period: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
+          <TextInput style={styles.input} placeholder="Advance Amount (optional)" value={planForm.advance_amount} onChangeText={v => setPlanForm(f => ({ ...f, advance_amount: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
+          <TextInput style={styles.input} placeholder="Late Fee Per Period (optional)" value={planForm.late_fee_per_period} onChangeText={v => setPlanForm(f => ({ ...f, late_fee_per_period: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
+          <TextInput style={styles.input} placeholder="Description (optional)" value={planForm.description} onChangeText={v => setPlanForm(f => ({ ...f, description: v }))} multiline numberOfLines={2} />
+          <View style={styles.modalActions}>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowPlanModal(false)}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.saveButton} onPress={handleSavePlan}>
+              <Text style={styles.saveButtonText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -562,6 +710,14 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
 
       {/* Tab Navigation */}
       <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'repaymentPlans' && styles.activeTab]}
+          onPress={() => setActiveTab('repaymentPlans')}
+        >
+          <Text style={[styles.tabText, activeTab === 'repaymentPlans' && styles.activeTabText]}>
+            Repayment Plans
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'areas' && styles.activeTab]}
           onPress={() => setActiveTab('areas')}
@@ -581,13 +737,44 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
       </View>
 
       {/* Content */}
-      <View style={styles.content}>
-        {activeTab === 'areas' ? (
+      {activeTab === 'repaymentPlans' ? (
+        <View style={{ flex: 1, padding: 20 }}>
+          <TouchableOpacity style={styles.addButton} onPress={handleAddPlan}>
+            <Text style={styles.addButtonText}>+ Add Repayment Plan</Text>
+          </TouchableOpacity>
+          <FlatList
+            data={repaymentPlans}
+            renderItem={({ item }) => (
+              <View style={styles.itemCard}>
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemType}>{item.frequency.charAt(0).toUpperCase() + item.frequency.slice(1)} - {item.periods} periods</Text>
+                  <Text style={styles.itemDetail}>Base Amount: ₹{item.base_amount} | Repayment/Period: ₹{item.repayment_per_period}</Text>
+                  {item.advance_amount ? <Text style={styles.itemDetail}>Advance: ₹{item.advance_amount}</Text> : null}
+                  {item.late_fee_per_period ? <Text style={styles.itemDetail}>Late Fee/Period: ₹{item.late_fee_per_period}</Text> : null}
+                  {item.description ? <Text style={styles.itemDetail}>{item.description}</Text> : null}
+                </View>
+                <View style={styles.itemActions}>
+                  <TouchableOpacity style={styles.editButton} onPress={() => handleEditPlan(item)}>
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeletePlan(item)}>
+                    <Text style={styles.deleteButtonText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+            keyExtractor={item => item.id.toString()}
+            refreshControl={<RefreshControl refreshing={loadingPlans} onRefresh={loadRepaymentPlans} />}
+            ListEmptyComponent={<Text style={styles.emptyText}>No repayment plans found. Add your first plan!</Text>}
+          />
+          {renderPlanModal()}
+        </View>
+      ) : activeTab === 'areas' ? (
           <>
             <TouchableOpacity style={styles.addButton} onPress={handleAddArea}>
               <Text style={styles.addButtonText}>+ Add Area</Text>
             </TouchableOpacity>
-            
             <FlatList
               data={areas}
               renderItem={renderAreaItem}
@@ -599,13 +786,13 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
                 <Text style={styles.emptyText}>No areas found. Add your first area!</Text>
               }
             />
+          {renderAreaModal()}
           </>
         ) : (
           <>
             <TouchableOpacity style={styles.addButton} onPress={handleAddGroup}>
               <Text style={styles.addButtonText}>+ Add Group</Text>
             </TouchableOpacity>
-            
             <FlatList
               data={groups}
               renderItem={renderGroupItem}
@@ -617,12 +804,11 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
                 <Text style={styles.emptyText}>No groups found. Add your first group!</Text>
               }
             />
+          {renderGroupModal()}
           </>
         )}
-      </View>
-
-      {renderAreaModal()}
-      {renderGroupModal()}
+      {/* Always render plan modal for edit/add plan */}
+      {activeTab !== 'repaymentPlans' && renderPlanModal()}
     </View>
   );
 }

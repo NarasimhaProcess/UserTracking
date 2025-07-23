@@ -11,11 +11,53 @@ import {
   TextInput,
 } from 'react-native';
 import { supabase } from '../services/supabase';
+import { Buffer } from 'buffer';
 
 export default function AdminScreen({ navigation, user, userProfile }) {
+  // Tab state
+  const [activeTab, setActiveTab] = useState('users');
+
+  // User management state (existing)
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [intervals, setIntervals] = useState({});
+
+  // Area management state
+  const [areas, setAreas] = useState([]);
+  const [showAreaModal, setShowAreaModal] = useState(false);
+  const [editingArea, setEditingArea] = useState(null);
+  const [areaName, setAreaName] = useState('');
+  const [areaType, setAreaType] = useState('city');
+  const [pinCode, setPinCode] = useState('');
+  const [state, setState] = useState('');
+  const [description, setDescription] = useState('');
+
+  // Group management state
+  const [groups, setGroups] = useState([]);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState(null);
+  const [groupName, setGroupName] = useState('');
+  const [selectedAreaIds, setSelectedAreaIds] = useState([]);
+  const [groupDescription, setGroupDescription] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [groupUsers, setGroupUsers] = useState([]);
+
+  // Repayment plan management state
+  const [repaymentPlans, setRepaymentPlans] = useState([]);
+  const [loadingPlans, setLoadingPlans] = useState(false);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState(null);
+  const [planForm, setPlanForm] = useState({
+    name: '',
+    frequency: 'weekly',
+    periods: '',
+    base_amount: '',
+    repayment_per_period: '',
+    advance_amount: '',
+    late_fee_per_period: '',
+    description: '',
+  });
 
   useEffect(() => {
     loadUsers();
@@ -201,7 +243,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       <View style={styles.userCard}>
         <View style={styles.userInfo}>
           <Text style={styles.userName}>{item.name || 'No Name'}</Text>
-          <Text style={styles.userEmail}>{item.id}</Text>
+          <Text style={styles.userEmail}>{item.email}</Text>
           <Text style={[styles.userRole, { color: getRoleColor(item.user_type) }]}> {item.user_type || 'user'} </Text>
           <Text style={[styles.userStatus, { color: item.location_status === 1 ? '#34C759' : '#FF3B30' }]}> Location: {item.location_status === 1 ? 'Active' : 'Inactive'} </Text>
           <Text style={styles.userDate}> Created: {new Date(item.created_at).toLocaleDateString()} </Text>

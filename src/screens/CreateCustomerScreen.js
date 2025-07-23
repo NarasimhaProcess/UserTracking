@@ -146,6 +146,11 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   const [isTransactionSaving, setIsTransactionSaving] = useState(false);
   const [loadingImages, setLoadingImages] = useState(false);
 
+  // Add state for repayment plans
+  const [repaymentPlans, setRepaymentPlans] = useState([]);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [planOptions, setPlanOptions] = useState([]);
+
   const isImage = (doc) => {
     if (!doc || !doc.file_name) return false;
     // Check for common image file extensions
@@ -201,6 +206,46 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     }
     if (user?.id) fetchCustomers();
   }, [user, search, areaSearch, page, areas]);
+
+  // Fetch repayment plans on mount
+  useEffect(() => {
+    async function fetchPlans() {
+      const { data, error } = await supabase
+        .from('repayment_plans')
+        .select('*')
+        .order('name', { ascending: true });
+      if (!error) setRepaymentPlans(data || []);
+    }
+    fetchPlans();
+  }, []);
+
+  // Filter plans by frequency if selected
+  useEffect(() => {
+    if (repaymentFrequency) {
+      setPlanOptions(repaymentPlans.filter(p => p.frequency === repaymentFrequency));
+    } else {
+      setPlanOptions(repaymentPlans);
+    }
+    setSelectedPlanId('');
+  }, [repaymentFrequency, repaymentPlans]);
+
+  // Auto-calculate repayment/advance/days/late fee when plan or amount changes
+  useEffect(() => {
+    const plan = planOptions.find(p => p.id === selectedPlanId);
+    if (plan && amountGiven) {
+      const scale = parseFloat(amountGiven) / parseFloat(plan.base_amount);
+      setRepaymentAmount((scale * plan.repayment_per_period).toFixed(2));
+      setAdvanceAmount(plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0');
+      setDaysToComplete(plan.periods.toString());
+      setLateFee(plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0');
+      setRepaymentFrequency(plan.frequency);
+    } else {
+      setRepaymentAmount('');
+      setAdvanceAmount('');
+      setDaysToComplete('');
+      setLateFee('');
+    }
+  }, [selectedPlanId, amountGiven, planOptions]);
 
   const getLocation = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
@@ -491,6 +536,10 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   };
 
   const openCreateCustomerModal = () => {
+    if (!repaymentPlans || repaymentPlans.length === 0) {
+      Alert.alert('No Repayment Plans', 'No repayment plans are configured. Please contact the administrator to configure repayment plans.');
+      return;
+    }
     setIsEditMode(false);
     setSelectedCustomer(null);
     setName(''); setMobile(''); setEmail(''); setBookNo(''); setCustomerType(''); setAreaId(null);
@@ -938,6 +987,32 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     );
   };
 
+  const handleEditCustomer = (item) => {
+    if (!repaymentPlans || repaymentPlans.length === 0) {
+      Alert.alert('No Repayment Plans', 'No repayment plans are configured. Please contact the administrator to configure repayment plans.');
+      return;
+    }
+    setIsEditMode(true);
+    setSelectedCustomer(item);
+    setName(item.name);
+    setMobile(item.mobile);
+    setEmail(item.email);
+    setBookNo(item.book_no);
+    setCustomerType(item.customer_type);
+    setAreaId(item.area_id);
+    setLatitude(item.latitude);
+    setLongitude(item.longitude);
+    setRemarks(item.remarks);
+    setAmountGiven(item.amount_given ? String(item.amount_given) : '');
+    setRepaymentFrequency(item.repayment_frequency || '');
+    setRepaymentAmount(item.repayment_amount ? String(item.repayment_amount) : '');
+    setDaysToComplete(item.days_to_complete ? String(item.days_to_complete) : '');
+    setAdvanceAmount(item.advance_amount ? String(item.advance_amount) : '0');
+    setLateFee(item.late_fee_per_day ? String(item.late_fee_per_day) : '');
+    fetchCustomerDocs(item.id);
+    setShowCustomerFormModal(true);
+  };
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -1031,7 +1106,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
               <TextInput value={mobile} onChangeText={setMobile} style={styles.input} keyboardType="phone-pad" />
               <Text style={styles.formLabel}>Email</Text>
               <TextInput value={email} onChangeText={setEmail} style={styles.input} keyboardType="email-address" />
-              <Text style={styles.formLabel}>Book No</Text>
+              <Text style={styles.formLabel}>Card No</Text>
               <TextInput value={bookNo} onChangeText={setBookNo} style={styles.input} />
               <Text style={styles.formLabel}>Customer Type</Text>
               <Picker selectedValue={customerType} onValueChange={setCustomerType} style={styles.formPicker}>
@@ -1042,18 +1117,25 @@ export default function CreateCustomerScreen({ user, userProfile }) {
               <Text style={styles.formLabel}>Amount Given</Text>
               <TextInput value={amountGiven} onChangeText={setAmountGiven} style={[styles.input, isMissing('amountGiven') && { borderColor: 'red', borderWidth: 2 }]} keyboardType="numeric" />
               <Text style={styles.formLabel}>Repayment Frequency</Text>
-              <Picker selectedValue={repaymentFrequency} onValueChange={setRepaymentFrequency} style={[styles.formPicker, isMissing('repaymentFrequency') && { borderColor: 'red', borderWidth: 2 }]}>
+              <Picker selectedValue={repaymentFrequency} onValueChange={setRepaymentFrequency} style={styles.formPicker}>
                 <Picker.Item label="Select Frequency" value="" />
                 {REPAYMENT_FREQUENCIES.map(freq => <Picker.Item key={freq} label={freq.charAt(0).toUpperCase() + freq.slice(1)} value={freq} />)}
               </Picker>
-              <Text style={styles.formLabel}>Repayment Amount</Text>
-              <TextInput value={repaymentAmount} onChangeText={setRepaymentAmount} style={[styles.input, isMissing('repaymentAmount') && { borderColor: 'red', borderWidth: 2 }]} keyboardType="numeric" />
-              <Text style={styles.formLabel}>Days to Complete</Text>
-              <TextInput value={daysToComplete} onChangeText={setDaysToComplete} style={[styles.input, isMissing('daysToComplete') && { borderColor: 'red', borderWidth: 2 }]} keyboardType="numeric" />
-              <Text style={styles.formLabel}>Advance Amount</Text>
-              <TextInput value={advanceAmount} onChangeText={setAdvanceAmount} style={[styles.input, isMissing('advanceAmount') && { borderColor: 'red', borderWidth: 2 }]} keyboardType="numeric" />
-              <Text style={styles.formLabel}>Late Fee Per Day</Text>
-              <TextInput value={lateFee} onChangeText={setLateFee} style={[styles.input, isMissing('lateFee') && { borderColor: 'red', borderWidth: 2 }]} keyboardType="numeric" placeholder="0" />
+              <Text style={styles.formLabel}>Repayment Plan</Text>
+              <Picker selectedValue={selectedPlanId} onValueChange={setSelectedPlanId} style={styles.formPicker} enabled={!!repaymentFrequency}>
+                <Picker.Item label="Select Plan" value="" />
+                {planOptions.map(plan => <Picker.Item key={plan.id} label={plan.name} value={plan.id} />)}
+              </Picker>
+              <Text style={styles.formLabel}>Amount Given</Text>
+              <TextInput value={amountGiven} onChangeText={setAmountGiven} style={styles.input} keyboardType="numeric" />
+              <Text style={styles.formLabel}>Repayment Amount (auto-calculated)</Text>
+              <TextInput value={repaymentAmount} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
+              <Text style={styles.formLabel}>Advance Amount (auto-calculated)</Text>
+              <TextInput value={advanceAmount} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
+              <Text style={styles.formLabel}>Days to Complete (auto-filled)</Text>
+              <TextInput value={daysToComplete} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
+              <Text style={styles.formLabel}>Late Fee Per Period (auto-filled)</Text>
+              <TextInput value={lateFee} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
               <Text style={styles.sectionHeader}>Other</Text>
               <Text style={styles.formLabel}>Area</Text>
               <Picker selectedValue={areaId} onValueChange={setAreaId} style={styles.formPicker}>
@@ -1090,7 +1172,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                 <Text style={styles.modalTitle}>{selectedCustomer.name}</Text>
                 <Text style={styles.modalDetail}>Mobile: {selectedCustomer.mobile}</Text>
                 <Text style={styles.modalDetail}>Email: {selectedCustomer.email}</Text>
-                <Text style={styles.modalDetail}>Book No: {selectedCustomer.book_no}</Text>
+                <Text style={styles.modalDetail}>Card No: {selectedCustomer.book_no}</Text>
                 <Text style={styles.modalDetail}>Type: {selectedCustomer.customer_type}</Text>
                 <Text style={styles.modalDetail}>Area ID: {selectedCustomer.area_id}</Text>
                 <Text style={styles.modalDetail}>Latitude: {selectedCustomer.latitude}</Text>
@@ -1199,7 +1281,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                   style={isMissing('email') ? styles.formInputError : styles.formInput} 
                   keyboardType="email-address" 
                 />
-                <Text style={styles.formLabel}>Book No</Text>
+                <Text style={styles.formLabel}>Card No</Text>
                 <TextInput 
                   value={selectedCustomer.book_no} 
                   onChangeText={val => setSelectedCustomer({ ...selectedCustomer, book_no: val })} 
@@ -1302,10 +1384,60 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                   keyboardType="numeric" 
                 />
                 <Text style={styles.formLabel}>Repayment Frequency</Text>
-                <Picker selectedValue={selectedCustomer.repayment_frequency} onValueChange={val => setSelectedCustomer({ ...selectedCustomer, repayment_frequency: val })} style={styles.formPicker}>
+                <Picker selectedValue={selectedCustomer.repayment_frequency} onValueChange={val => {
+                  setSelectedCustomer({ ...selectedCustomer, repayment_frequency: val });
+                  // Reset plan and calculated fields
+                  setSelectedCustomer({ ...selectedCustomer, repayment_frequency: val, repayment_plan_id: '', repayment_amount: '', advance_amount: '', days_to_complete: '', late_fee_per_day: '' });
+                }} style={styles.formPicker}>
                   <Picker.Item label="Select Frequency" value="" />
-                  {REPAYMENT_FREQUENCIES.map(freq => <Picker.Item key={freq} label={freq.charAt(0).toUpperCase() + freq.slice(1)} value={freq} />)}
+                  {['daily','weekly','monthly','yearly'].map(freq => <Picker.Item key={freq} label={freq.charAt(0).toUpperCase()+freq.slice(1)} value={freq} />)}
                 </Picker>
+                <Text style={styles.formLabel}>Repayment Plan</Text>
+                <Picker selectedValue={selectedCustomer.repayment_plan_id} onValueChange={val => {
+                  setSelectedCustomer({ ...selectedCustomer, repayment_plan_id: val });
+                  // Recalculate fields below
+                  const plan = repaymentPlans.find(p => p.id === val);
+                  if (plan && selectedCustomer.amount_given) {
+                    const scale = parseFloat(selectedCustomer.amount_given) / parseFloat(plan.base_amount);
+                    setSelectedCustomer({
+                      ...selectedCustomer,
+                      repayment_plan_id: val,
+                      repayment_frequency: plan.frequency,
+                      repayment_amount: (scale * plan.repayment_per_period).toFixed(2),
+                      advance_amount: plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0',
+                      days_to_complete: plan.periods.toString(),
+                      late_fee_per_day: plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0',
+                    });
+                  }
+                }} style={styles.formPicker} enabled={!!selectedCustomer.repayment_frequency}>
+                  <Picker.Item label="Select Plan" value="" />
+                  {repaymentPlans.filter(p => p.frequency === selectedCustomer.repayment_frequency).map(plan => <Picker.Item key={plan.id} label={plan.name} value={plan.id} />)}
+                </Picker>
+                <Text style={styles.formLabel}>Amount Given</Text>
+                <TextInput value={selectedCustomer.amount_given} onChangeText={val => {
+                  setSelectedCustomer({ ...selectedCustomer, amount_given: val });
+                  // Recalculate if plan is selected
+                  const plan = repaymentPlans.find(p => p.id === selectedCustomer.repayment_plan_id);
+                  if (plan && val) {
+                    const scale = parseFloat(val) / parseFloat(plan.base_amount);
+                    setSelectedCustomer({
+                      ...selectedCustomer,
+                      amount_given: val,
+                      repayment_amount: (scale * plan.repayment_per_period).toFixed(2),
+                      advance_amount: plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0',
+                      days_to_complete: plan.periods.toString(),
+                      late_fee_per_day: plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0',
+                    });
+                  }
+                }} style={styles.input} keyboardType="numeric" />
+                <Text style={styles.formLabel}>Repayment Amount (auto-calculated)</Text>
+                <TextInput value={selectedCustomer.repayment_amount} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
+                <Text style={styles.formLabel}>Advance Amount (auto-calculated)</Text>
+                <TextInput value={selectedCustomer.advance_amount} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
+                <Text style={styles.formLabel}>Days to Complete (auto-filled)</Text>
+                <TextInput value={selectedCustomer.days_to_complete} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
+                <Text style={styles.formLabel}>Late Fee Per Period (auto-filled)</Text>
+                <TextInput value={selectedCustomer.late_fee_per_day} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
                 <View style={{ maxHeight: 120 }}>
                   <ScrollView>
                     {customerDocs
