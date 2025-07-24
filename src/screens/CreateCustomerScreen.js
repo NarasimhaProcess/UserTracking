@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, Button, Alert, TouchableOpacity, ScrollView, Modal, FlatList, Image, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Button, Alert, TouchableOpacity, ScrollView, Modal, FlatList, Image, ActivityIndicator, Platform } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
 import { supabase } from '../services/supabase';
 import * as DocumentPicker from 'expo-document-picker';
@@ -10,6 +11,7 @@ import styles from './CustomerStyles';
 import * as ImagePicker from 'expo-image-picker';
 import MapView, { Marker } from 'react-native-maps';
 import * as uuid from 'uuid';
+import EnhancedDatePicker from '../components/EnhancedDatePicker';
 
 function LocationSearchBar({ onLocationFound }) {
   const [query, setQuery] = useState('');
@@ -131,6 +133,51 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   const [repaymentAmount, setRepaymentAmount] = useState('');
   const [missingFields, setMissingFields] = useState([]);
   const isMissing = field => missingFields.includes(field);
+  // Add transaction date state
+  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showTransactionDatePicker, setShowTransactionDatePicker] = useState(false);
+
+  // Auto-populate repayment amount when transaction type changes
+  useEffect(() => {
+    if (transactionCustomer && newTransactionType === 'repayment') {
+      setNewTransactionAmount(transactionCustomer.repaymentAmount || '');
+    }
+  }, [newTransactionType, transactionCustomer]);
+
+  // Calculate end date based on start date, frequency, and periods
+  const calculateEndDate = (startDate, frequency, periods) => {
+    if (!startDate || !frequency || !periods) return '';
+    
+    const start = new Date(startDate);
+    const periodsNum = parseInt(periods);
+    
+    switch (frequency) {
+      case 'daily':
+        start.setDate(start.getDate() + periodsNum);
+        break;
+      case 'weekly':
+        start.setDate(start.getDate() + (periodsNum * 7));
+        break;
+      case 'monthly':
+        start.setMonth(start.getMonth() + periodsNum);
+        break;
+      case 'yearly':
+        start.setFullYear(start.getFullYear() + periodsNum);
+        break;
+      default:
+        start.setDate(start.getDate() + periodsNum);
+    }
+    
+    return start.toISOString().split('T')[0];
+  };
+
+  // Auto-calculate end date when start date, frequency, or periods change
+  useEffect(() => {
+    if (startDate && repaymentFrequency && daysToComplete) {
+      const calculatedEndDate = calculateEndDate(startDate, repaymentFrequency, daysToComplete);
+      setEndDate(calculatedEndDate);
+    }
+  }, [startDate, repaymentFrequency, daysToComplete]);
   // Add state for expanded transaction
   const [expandedTransactionId, setExpandedTransactionId] = useState(null);
   // Add state for location selection
@@ -145,11 +192,19 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   // Add loading state for transaction save
   const [isTransactionSaving, setIsTransactionSaving] = useState(false);
   const [loadingImages, setLoadingImages] = useState(false);
+  // Add state for enhanced date picker
+  const [showEnhancedDatePicker, setShowEnhancedDatePicker] = useState(false);
 
   // Add state for repayment plans
   const [repaymentPlans, setRepaymentPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [planOptions, setPlanOptions] = useState([]);
+  
+  // Add state for start/end dates
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerMode, setDatePickerMode] = useState('start'); // 'start' or 'end'
 
   const isImage = (doc) => {
     if (!doc || !doc.file_name) return false;
@@ -247,6 +302,52 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     }
   }, [selectedPlanId, amountGiven, planOptions]);
 
+  // Auto-calculate end date when start date or days to complete changes
+  useEffect(() => {
+    if (startDate && daysToComplete && repaymentFrequency) {
+      const start = new Date(startDate);
+      const days = parseInt(daysToComplete);
+      let endDateCalculated;
+      
+      if (repaymentFrequency === 'daily') {
+        endDateCalculated = new Date(start.getTime() + (days * 24 * 60 * 60 * 1000));
+      } else if (repaymentFrequency === 'weekly') {
+        endDateCalculated = new Date(start.getTime() + (days * 7 * 24 * 60 * 60 * 1000));
+      } else if (repaymentFrequency === 'monthly') {
+        endDateCalculated = new Date(start);
+        endDateCalculated.setMonth(endDateCalculated.getMonth() + days);
+      } else if (repaymentFrequency === 'yearly') {
+        endDateCalculated = new Date(start);
+        endDateCalculated.setFullYear(endDateCalculated.getFullYear() + days);
+      }
+      
+      if (endDateCalculated) {
+        setEndDate(endDateCalculated.toISOString().split('T')[0]);
+      }
+    }
+  }, [startDate, daysToComplete, repaymentFrequency]);
+
+  // Check if customer has transactions (to prevent editing)
+  const checkCustomerTransactions = async (customerId) => {
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('customer_id', customerId)
+        .limit(1);
+      
+      if (error) {
+        console.error('Error checking transactions:', error);
+        return false;
+      }
+      
+      return data && data.length > 0;
+    } catch (error) {
+      console.error('Error in checkCustomerTransactions:', error);
+      return false;
+    }
+  };
+
   const getLocation = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
@@ -258,73 +359,76 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     setLongitude(location.coords.longitude);
   };
 
-  const handleCreate = async () => {
-    // Check for missing required fields
-    const missingFields = [];
-    if (!name) missingFields.push('name');
-    if (!customerType) missingFields.push('customerType');
-    if (!areaId) missingFields.push('areaId');
-    if (!amountGiven) missingFields.push('amountGiven');
-    if (!daysToComplete) missingFields.push('daysToComplete');
-    if (!repaymentFrequency) missingFields.push('repaymentFrequency');
-    if (!repaymentAmount) missingFields.push('repaymentAmount');
-    if (!advanceAmount) missingFields.push('advanceAmount');
+  // Date picker functions
+  const showDatePickerModal = (mode) => {
+    setDatePickerMode(mode);
+    setShowDatePicker(true);
+  };
 
-    if (missingFields.length > 0) {
-      setMissingFields(missingFields);
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
+  const showEnhancedDatePickerModal = () => {
+    setShowEnhancedDatePicker(true);
+  };
 
-    // Clear missing fields if validation passes
-    setMissingFields([]);
-
-    let lat = latitude;
-    let lon = longitude;
-    if (!lat || !lon) {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location permission is required');
-        return;
+  const onDateChange = (event, selectedDate) => {
+    const currentDate = selectedDate || new Date();
+    setShowDatePicker(Platform.OS === 'ios');
+    
+    if (event.type === 'set') {
+      const dateString = currentDate.toISOString().split('T')[0];
+      if (datePickerMode === 'start') {
+        setStartDate(dateString);
+      } else {
+        setEndDate(dateString);
       }
-      let location = await Location.getCurrentPositionAsync({});
-      lat = location.coords.latitude;
-      lon = location.coords.longitude;
-      setLatitude(lat);
-      setLongitude(lon);
-    }
-    const lateFeeValue = lateFee === '' ? '0' : lateFee;
-    const customerData = {
-      name, mobile, email, book_no: bookNo,
-      latitude: lat, longitude: lon,
-      area_id: areaId,
-      user_id: user.id,
-      customer_type: customerType,
-      remarks,
-      amount_given: amountGiven,
-      repayment_frequency: repaymentFrequency,
-      repayment_amount: repaymentAmount,
-      days_to_complete: daysToComplete,
-      advance_amount: advanceAmount === '' ? '0' : advanceAmount,
-      late_fee_per_day: lateFeeValue,
-    };
-    const { error } = await supabase.from('customers').insert(customerData);
-    if (error) {
-      Alert.alert('Error', error.message);
-    } else {
-      Alert.alert('Success', 'Customer created!');
-      setName(''); setMobile(''); setEmail(''); setBookNo(''); setCustomerType(''); setAreaId(null);
-      setLatitude(null); setLongitude(null); setRemarks(''); setAmountGiven(''); setDaysToComplete(''); setAdvanceAmount(''); setLateFee('');
-      setRepaymentFrequency(''); setRepaymentAmount('');
-      // Refresh customer list
-      const { data } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      setCustomers(data || []);
     }
   };
+
+  const onEnhancedDateSelect = (dates) => {
+    setStartDate(dates.startDate);
+    setEndDate(dates.endDate);
+    setShowEnhancedDatePicker(false);
+  };
+
+  // Transaction date change alert function
+  const handleTransactionDateChange = (selectedDate) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (selectedDate !== today) {
+      Alert.alert(
+        "Date Selection",
+        "You have selected a different date than current date. Do you want to proceed?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "OK", onPress: () => setTransactionDate(selectedDate) }
+        ]
+      );
+    } else {
+      setTransactionDate(selectedDate);
+    }
+  };
+
+  // Open transaction modal with auto-populated repayment amount
+  const openTransactionModal = (customer) => {
+    console.log('openTransactionModal called with customer:', customer);
+    setTransactionCustomer(customer);
+    setNewTransactionAmount(customer.repaymentAmount || ''); // Auto-populate
+    setTransactionDate(new Date().toISOString().split('T')[0]); // Reset to current date
+    setShowTransactionModal(true);
+    fetchTransactions(customer.id);
+    fetchCustomerDocs(customer.id);
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Select Date';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  // --- END handleCreate unified definition ---
+
 
   const fetchTransactions = async (customerId) => {
     try {
@@ -389,6 +493,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
         user_id: user.id,
         amount: newTransactionAmount,
         transaction_type: newTransactionType,
+        transaction_date: transactionDate,
         remarks: newTransactionRemarks,
         latitude: lat,
         longitude: lon,
@@ -478,28 +583,66 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     return Number(transactionCustomer.amount_given || 0) - totalRepaid;
   };
   const getPendingDays = () => {
-    if (!transactionCustomer || !transactions.length) return transactionCustomer?.days_to_complete || 0;
+    if (!transactionCustomer || !transactions.length) {
+      const totalPeriods = Number(transactionCustomer?.days_to_complete || 0);
+      return `${totalPeriods} ${getFrequencyUnit(transactionCustomer?.repayment_frequency)}`;
+    }
+    
     const firstTx = transactions[transactions.length - 1]; // assuming sorted desc
-    if (!firstTx) return transactionCustomer.days_to_complete;
+    if (!firstTx) {
+      const totalPeriods = Number(transactionCustomer.days_to_complete || 0);
+      return `${totalPeriods} ${getFrequencyUnit(transactionCustomer.repayment_frequency)}`;
+    }
+    
     const firstDate = new Date(firstTx.transaction_date);
     const today = new Date();
     const daysPassed = Math.floor((today - firstDate) / (1000 * 60 * 60 * 24));
-    return Number(transactionCustomer.days_to_complete || 0) - daysPassed;
+    const totalPeriods = Number(transactionCustomer.days_to_complete || 0);
+    const frequency = transactionCustomer.repayment_frequency;
+    
+    let pendingPeriods;
+    switch (frequency) {
+      case 'daily':
+        pendingPeriods = totalPeriods - daysPassed;
+        break;
+      case 'weekly':
+        const weeksPassed = Math.floor(daysPassed / 7);
+        pendingPeriods = totalPeriods - weeksPassed;
+        break;
+      case 'monthly':
+        const monthsPassed = Math.floor(daysPassed / 30); // Approximate
+        pendingPeriods = totalPeriods - monthsPassed;
+        break;
+      case 'yearly':
+        const yearsPassed = Math.floor(daysPassed / 365); // Approximate
+        pendingPeriods = totalPeriods - yearsPassed;
+        break;
+      default:
+        pendingPeriods = totalPeriods - daysPassed;
+    }
+    
+    return `${Math.max(0, pendingPeriods)} ${getFrequencyUnit(frequency)}`;
+  };
+  
+  // Helper function to get frequency unit label
+  const getFrequencyUnit = (frequency) => {
+    switch (frequency) {
+      case 'daily': return 'days';
+      case 'weekly': return 'weeks';
+      case 'monthly': return 'months';
+      case 'yearly': return 'years';
+      default: return 'days';
+    }
   };
 
-  const openTransactionModal = (customer) => {
-    console.log('openTransactionModal called with customer:', customer);
-    setTransactionCustomer(customer);
-    setShowTransactionModal(true);
-    fetchTransactions(customer.id);
-    fetchCustomerDocs(customer.id);
-  };
+
 
   const renderCustomerItem = ({ item }) => {
     return (
       <View style={{ borderBottomWidth: 1, borderColor: '#eee', paddingVertical: 12, backgroundColor: '#fff' }}>
         {/* Customer Info Row */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <Text style={[styles.cell, { flex: 1.5 }]}>{item.book_no || 'N/A'}</Text>
           <Text style={[styles.cell, { flex: 2 }]}>{item.name}</Text>
           <Text style={[styles.cell, { flex: 2 }]}>{item.mobile}</Text>
           <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'center' }}>
@@ -549,82 +692,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     setShowCustomerFormModal(true);
   };
 
-  const handleSaveCustomer = async () => {
-    // Check for missing required fields
-    const missingFields = [];
-    if (!name) missingFields.push('name');
-    if (!customerType) missingFields.push('customerType');
-    if (!areaId) missingFields.push('areaId');
-    if (!amountGiven) missingFields.push('amountGiven');
-    if (!daysToComplete) missingFields.push('daysToComplete');
-    if (!repaymentFrequency) missingFields.push('repaymentFrequency');
-    if (!repaymentAmount) missingFields.push('repaymentAmount');
-    if (!advanceAmount) missingFields.push('advanceAmount');
-
-    if (missingFields.length > 0) {
-      setMissingFields(missingFields);
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
-
-    // Clear missing fields if validation passes
-    setMissingFields([]);
-
-    let lat = latitude;
-    let lon = longitude;
-    if (!lat || !lon) {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location permission is required');
-        return;
-      }
-      let location = await Location.getCurrentPositionAsync({});
-      lat = location.coords.latitude;
-      lon = location.coords.longitude;
-      setLatitude(lat);
-      setLongitude(lon);
-    }
-    const lateFeeValue = lateFee === '' ? '0' : lateFee;
-    const customerData = {
-      name, mobile, email, book_no: bookNo,
-      latitude: lat, longitude: lon,
-      area_id: areaId,
-      user_id: user.id,
-      customer_type: customerType,
-      remarks,
-      amount_given: amountGiven,
-      repayment_frequency: repaymentFrequency,
-      repayment_amount: repaymentAmount,
-      days_to_complete: daysToComplete,
-      advance_amount: advanceAmount === '' ? '0' : advanceAmount,
-      late_fee_per_day: lateFeeValue,
-    };
-    let error;
-    if (isEditMode && selectedCustomer) {
-      ({ error } = await supabase.from('customers').update(customerData).eq('id', selectedCustomer.id));
-    } else {
-      ({ error } = await supabase.from('customers').insert(customerData));
-    }
-    if (error) {
-      Alert.alert('Error', error.message);
-    } else {
-      Alert.alert('Success', isEditMode ? 'Customer updated!' : 'Customer created!');
-      setShowCustomerFormModal(false);
-      setIsEditMode(false);
-      setSelectedCustomer(null);
-      setName(''); setMobile(''); setEmail(''); setBookNo(''); setCustomerType(''); setAreaId(null);
-      setLatitude(null); setLongitude(null); setRemarks(''); setAmountGiven(''); setDaysToComplete(''); setAdvanceAmount(''); setLateFee('');
-      setRepaymentFrequency('');
-      setRepaymentAmount('');
-      // Refresh customer list
-      const { data } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      setCustomers(data || []);
-    }
-  };
+  // First handleSaveCustomer removed - keeping only the unified version with repayment_plan_id
 
   const handleUploadCustomerDoc = (customer) => {
     // To be implemented: open file/image picker and upload logic
@@ -987,11 +1055,23 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     );
   };
 
-  const handleEditCustomer = (item) => {
+  const handleEditCustomer = async (item) => {
     if (!repaymentPlans || repaymentPlans.length === 0) {
       Alert.alert('No Repayment Plans', 'No repayment plans are configured. Please contact the administrator to configure repayment plans.');
       return;
     }
+    
+    // Check if customer has any transactions
+    const hasTransactions = await checkCustomerTransactions(item.id);
+    if (hasTransactions) {
+      Alert.alert(
+        'Cannot Edit Customer',
+        'This customer has existing transactions and cannot be edited. Please contact administrator if changes are needed.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
     setIsEditMode(true);
     setSelectedCustomer(item);
     setName(item.name);
@@ -1009,31 +1089,185 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     setDaysToComplete(item.days_to_complete ? String(item.days_to_complete) : '');
     setAdvanceAmount(item.advance_amount ? String(item.advance_amount) : '0');
     setLateFee(item.late_fee_per_day ? String(item.late_fee_per_day) : '');
+    setSelectedPlanId(item.repayment_plan_id ? String(item.repayment_plan_id) : '');
+    
+    // Set start and end dates if they exist
+    setStartDate(item.start_date || '');
+    setEndDate(item.end_date || '');
+    
     fetchCustomerDocs(item.id);
     setShowCustomerFormModal(true);
   };
 
+  const handleCreate = async () => {
+  // Check for missing required fields
+  const missingFields = [];
+  if (!name) missingFields.push('name');
+  if (!customerType) missingFields.push('customerType');
+  if (!areaId) missingFields.push('areaId');
+  if (!amountGiven) missingFields.push('amountGiven');
+  if (!daysToComplete) missingFields.push('daysToComplete');
+  if (!repaymentFrequency) missingFields.push('repaymentFrequency');
+  if (!repaymentAmount) missingFields.push('repaymentAmount');
+  if (!advanceAmount) missingFields.push('advanceAmount');
+
+  if (missingFields.length > 0) {
+    setMissingFields(missingFields);
+    Alert.alert('Error', 'Please fill in all required fields');
+    return;
+  }
+
+  // Clear missing fields if validation passes
+  setMissingFields([]);
+
+  let lat = latitude;
+  let lon = longitude;
+  if (!lat || !lon) {
+    let { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission denied', 'Location permission is required');
+      return;
+    }
+    let location = await Location.getCurrentPositionAsync({});
+    lat = location.coords.latitude;
+    lon = location.coords.longitude;
+    setLatitude(lat);
+    setLongitude(lon);
+  }
+  const lateFeeValue = lateFee === '' ? '0' : lateFee;
+  const customerData = {
+    name,
+    mobile,
+    email,
+    book_no: bookNo,
+    customer_type: customerType,
+    area_id: areaId,
+    latitude: lat,
+    longitude: lon,
+    remarks,
+    amount_given: Number(amountGiven),
+    repayment_frequency: repaymentFrequency,
+    repayment_plan_id: selectedPlanId,
+    repayment_amount: Number(repaymentAmount),
+    days_to_complete: Number(daysToComplete),
+    advance_amount: Number(advanceAmount),
+    late_fee_per_day: Number(lateFee),
+    start_date: startDate || null,
+    end_date: endDate || null,
+    user_id: user.id,
+  };
+
+  try {
+    const { error } = await supabase.from('customers').insert([customerData]);
+    if (error) {
+      Alert.alert('Error', 'Failed to create customer: ' + error.message);
+    } else {
+      Alert.alert('Success', 'Customer created successfully!');
+      setShowCustomerFormModal(false);
+      // Refresh customer list
+      const { data } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      setCustomers(data || []);
+    }
+  } catch (error) {
+    console.error('Error creating customer:', error);
+    Alert.alert('Error', 'Failed to create customer');
+  }
+};
+
+  const handleSaveCustomer = async () => {
+    const customerData = {
+      name,
+      mobile,
+      email,
+      book_no: bookNo,
+      customer_type: customerType,
+      area_id: areaId,
+      latitude,
+      longitude,
+      remarks,
+      amount_given: Number(amountGiven),
+      repayment_frequency: repaymentFrequency,
+      repayment_plan_id: selectedPlanId,
+      repayment_amount: Number(repaymentAmount),
+      days_to_complete: Number(daysToComplete),
+      advance_amount: Number(advanceAmount),
+      late_fee_per_day: Number(lateFee),
+      start_date: startDate || null,
+      end_date: endDate || null,
+    };
+
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .update(customerData)
+        .eq('id', selectedCustomer.id);
+      if (error) {
+        Alert.alert('Error', 'Failed to update customer: ' + error.message);
+      } else {
+        Alert.alert('Success', 'Customer updated successfully!');
+        setShowCustomerFormModal(false);
+        // Refresh customer list
+        const { data } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        setCustomers(data || []);
+      }
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      Alert.alert('Error', 'Failed to update customer');
+    }
+  };
+
+  // Helper function for dynamic frequency labels
+  const getFrequencyLabel = (frequency) => {
+    switch (frequency) {
+      case 'daily': return 'Days to Complete';
+      case 'weekly': return 'Weeks to Complete';
+      case 'monthly': return 'Months to Complete';
+      case 'yearly': return 'Years to Complete';
+      default: return 'Days to Complete';
+    }
+  };
+
+  // Filter customers based on search criteria with comma-separated support
+  const filteredCustomers = customers.filter(customer => {
+    if (!search) return true;
+    
+    // Split search terms by comma and trim whitespace
+    const searchTerms = search.split(',').map(term => term.trim().toLowerCase()).filter(term => term);
+    
+    // Check if any search term matches any customer field
+    return searchTerms.some(term => 
+      customer.name?.toLowerCase().includes(term) ||
+      customer.mobile?.toLowerCase().includes(term) ||
+      customer.email?.toLowerCase().includes(term) ||
+      customer.book_no?.toLowerCase().includes(term) ||
+      customer.area_name?.toLowerCase().includes(term)
+    );
+  });
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={customers}
+        data={filteredCustomers}
         renderItem={renderCustomerItem}
         keyExtractor={item => item.id.toString()}
         ListHeaderComponent={
           <View>
             <TextInput
-              value={areaSearch}
-              onChangeText={setAreaSearch}
-              placeholder="Search by area name"
-              style={[styles.searchInput, { marginBottom: 6 }]}
-            />
-            <TextInput
               value={search}
               onChangeText={setSearch}
-              placeholder="Search by name, mobile, or email"
+              placeholder="Search by name, mobile, email, card no, area (use comma to search multiple)"
               style={styles.searchInput}
             />
             <View style={{ flexDirection: 'row', backgroundColor: '#E3E6F0', borderTopLeftRadius: 8, borderTopRightRadius: 8, paddingVertical: 8 }}>
+              <Text style={[styles.headerCell, { flex: 1.5 }]}>Card No</Text>
               <Text style={[styles.headerCell, { flex: 2 }]}>Name</Text>
               <Text style={[styles.headerCell, { flex: 2 }]}>Mobile</Text>
               <Text style={[styles.headerCell, { flex: 2 }]}>Actions</Text>
@@ -1132,10 +1366,38 @@ export default function CreateCustomerScreen({ user, userProfile }) {
               <TextInput value={repaymentAmount} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
               <Text style={styles.formLabel}>Advance Amount (auto-calculated)</Text>
               <TextInput value={advanceAmount} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
-              <Text style={styles.formLabel}>Days to Complete (auto-filled)</Text>
+              <Text style={styles.formLabel}>{getFrequencyLabel(repaymentFrequency)} (auto-filled)</Text>
               <TextInput value={daysToComplete} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
               <Text style={styles.formLabel}>Late Fee Per Period (auto-filled)</Text>
               <TextInput value={lateFee} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
+              
+              <Text style={styles.sectionHeader}>Repayment Dates</Text>
+              <Text style={styles.formLabel}>Date Range Selection</Text>
+              <TouchableOpacity 
+                style={[styles.input, { justifyContent: 'center', paddingVertical: 12, backgroundColor: startDate && endDate ? '#e8f5e8' : '#f8f9fa' }]} 
+                onPress={() => setShowEnhancedDatePicker(true)}
+              >
+                <Text style={{ color: startDate && endDate ? '#2e7d32' : '#666', textAlign: 'center', fontSize: 16 }}>
+                  {startDate && endDate 
+                    ? `${formatDate(startDate)} 📅 ${formatDate(endDate)}`
+                    : 'Select Date Range'
+                  }
+                </Text>
+              </TouchableOpacity>
+              
+              <EnhancedDatePicker
+                visible={showEnhancedDatePicker}
+                onClose={() => setShowEnhancedDatePicker(false)}
+                onDateSelect={(start, end) => {
+                  setStartDate(start);
+                  setEndDate(end);
+                  setShowEnhancedDatePicker(false);
+                }}
+                startDate={startDate}
+                endDate={endDate}
+                repaymentFrequency={repaymentFrequency}
+                daysToComplete={daysToComplete}
+              />
               <Text style={styles.sectionHeader}>Other</Text>
               <Text style={styles.formLabel}>Area</Text>
               <Picker selectedValue={areaId} onValueChange={setAreaId} style={styles.formPicker}>
@@ -1434,10 +1696,71 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                 <TextInput value={selectedCustomer.repayment_amount} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
                 <Text style={styles.formLabel}>Advance Amount (auto-calculated)</Text>
                 <TextInput value={selectedCustomer.advance_amount} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
-                <Text style={styles.formLabel}>Days to Complete (auto-filled)</Text>
+                <Text style={styles.formLabel}>
+                  {selectedCustomer.repayment_frequency === 'weekly' ? 'Weeks to Complete (auto-filled)' :
+                   selectedCustomer.repayment_frequency === 'monthly' ? 'Months to Complete (auto-filled)' :
+                   selectedCustomer.repayment_frequency === 'yearly' ? 'Years to Complete (auto-filled)' :
+                   'Days to Complete (auto-filled)'}
+                </Text>
                 <TextInput value={selectedCustomer.days_to_complete} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
                 <Text style={styles.formLabel}>Late Fee Per Period (auto-filled)</Text>
                 <TextInput value={selectedCustomer.late_fee_per_day} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
+                
+                <Text style={styles.sectionHeader}>Repayment Dates</Text>
+                
+                {/* Enhanced Date Range Picker Button */}
+                <Text style={styles.formLabel}>Select Date Range (Start - End)</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.input, 
+                    { 
+                      justifyContent: 'center', 
+                      paddingVertical: 16, 
+                      backgroundColor: startDate && endDate ? '#E8F5E8' : '#F0F8FF',
+                      borderColor: startDate && endDate ? '#4CAF50' : '#007AFF',
+                      borderWidth: 2
+                    }
+                  ]} 
+                  onPress={showEnhancedDatePickerModal}
+                >
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ 
+                      fontSize: 16, 
+                      fontWeight: 'bold', 
+                      color: startDate && endDate ? '#2E7D32' : '#007AFF',
+                      marginBottom: 4
+                    }}>
+                      📅 {startDate && endDate ? 'Date Range Selected' : 'Select Date Range'}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={{ 
+                        fontSize: 14, 
+                        color: startDate ? '#333' : '#999',
+                        fontWeight: startDate ? 'bold' : 'normal'
+                      }}>
+                        {startDate ? formatDate(startDate) : 'Start Date'}
+                      </Text>
+                      <Text style={{ marginHorizontal: 8, fontSize: 16, color: '#666' }}>✈️</Text>
+                      <Text style={{ 
+                        fontSize: 14, 
+                        color: endDate ? '#333' : '#999',
+                        fontWeight: endDate ? 'bold' : 'normal'
+                      }}>
+                        {endDate ? formatDate(endDate) : 'End Date'}
+                      </Text>
+                    </View>
+                    {repaymentFrequency && (
+                      <Text style={{ 
+                        fontSize: 12, 
+                        color: '#666', 
+                        marginTop: 4,
+                        fontStyle: 'italic'
+                      }}>
+                        Repayment: {repaymentFrequency} | Highlights: {repaymentFrequency === 'daily' ? daysToComplete + ' day intervals' : repaymentFrequency + ' intervals'}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
                 <View style={{ maxHeight: 120 }}>
                   <ScrollView>
                     {customerDocs
@@ -1477,7 +1800,9 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                     late_fee_per_day: selectedCustomer.late_fee_per_day,
                     repayment_frequency: selectedCustomer.repayment_frequency,
                     repayment_amount: selectedCustomer.repayment_amount,
-                    area_id: selectedCustomer.area_id
+                    area_id: selectedCustomer.area_id,
+                    start_date: startDate,
+                    end_date: endDate
                   }).eq('id', selectedCustomer.id);
                   if (error) {
                     Alert.alert('Error', error.message);
@@ -1568,9 +1893,68 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                   ListEmptyComponent={<Text style={styles.transactionEmpty}>No transactions found.</Text>}
                   ListHeaderComponent={
                     <View>
+                      {/* Customer Info and Date Range Display */}
+                      <View style={{ backgroundColor: '#E8F4FD', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                        <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#2E5BBA', marginBottom: 6 }}>Customer: {transactionCustomer.name}</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <Text style={{ fontSize: 14, color: '#666', fontWeight: '500' }}>📅 Start Date:</Text>
+                          <Text style={{ fontSize: 14, color: '#333', fontWeight: 'bold' }}>{formatDate(transactionCustomer.start_date)}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <Text style={{ fontSize: 14, color: '#666', fontWeight: '500' }}>📅 End Date:</Text>
+                          <Text style={{ fontSize: 14, color: '#333', fontWeight: 'bold' }}>{formatDate(transactionCustomer.end_date)}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                          <Text style={{ fontSize: 14, color: '#666', fontWeight: '500' }}>💰 Repayment:</Text>
+                          <Text style={{ fontSize: 14, color: '#333', fontWeight: 'bold' }}>₹{transactionCustomer.repayment_amount} ({transactionCustomer.repayment_frequency})</Text>
+                        </View>
+                      </View>
+
+                      {/* Financial Summary - Moved to Top */}
+                      <View style={{ backgroundColor: '#F8F9FA', borderRadius: 8, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E9ECEF' }}>
+                        <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#495057', marginBottom: 8, textAlign: 'center' }}>💼 Financial Summary</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <Text style={{ fontWeight: 'bold', color: '#DC3545', fontSize: 15 }}>⏳ Pending Amount:</Text>
+                          <Text style={{ fontWeight: 'bold', color: '#DC3545', fontSize: 15 }}>₹{getPendingAmount()}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <Text style={{ fontWeight: 'bold', color: '#FD7E14', fontSize: 15 }}>📅 Pending Days:</Text>
+                          <Text style={{ fontWeight: 'bold', color: '#FD7E14', fontSize: 15 }}>{getPendingDays()}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <Text style={{ fontWeight: 'bold', color: '#28A745', fontSize: 15 }}>💵 Cash Received:</Text>
+                          <Text style={{ fontWeight: 'bold', color: '#28A745', fontSize: 15 }}>₹{getTotalCashReceived()}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                          <Text style={{ fontWeight: 'bold', color: '#007BFF', fontSize: 15 }}>📱 UPI Received:</Text>
+                          <Text style={{ fontWeight: 'bold', color: '#007BFF', fontSize: 15 }}>₹{getTotalUpiReceived()}</Text>
+                        </View>
+                      </View>
+
                       {/* Add Transaction form */}
                       <View style={{ backgroundColor: '#F7F9FC', borderRadius: 8, padding: 12, marginBottom: 16 }}>
                         <Text style={styles.modalTitle}>Add Transaction</Text>
+                        
+                        {/* Transaction Date Picker */}
+                        <Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: '#333' }}>Transaction Date:</Text>
+                        <TouchableOpacity 
+                          style={[
+                            styles.formInput, 
+                            { 
+                              justifyContent: 'center', 
+                              backgroundColor: transactionDate !== new Date().toISOString().split('T')[0] ? '#FFF3CD' : '#fff',
+                              borderColor: transactionDate !== new Date().toISOString().split('T')[0] ? '#856404' : '#ccc'
+                            }
+                          ]}
+                          onPress={() => setShowTransactionDatePicker(true)}
+                        >
+                          <Text style={{ 
+                            color: transactionDate !== new Date().toISOString().split('T')[0] ? '#856404' : '#333',
+                            fontWeight: transactionDate !== new Date().toISOString().split('T')[0] ? 'bold' : 'normal'
+                          }}>
+                            {formatDate(transactionDate)} {transactionDate === new Date().toISOString().split('T')[0] ? '(Today)' : '(Custom Date)'}
+                          </Text>
+                        </TouchableOpacity>
                         <TextInput value={newTransactionAmount} onChangeText={setNewTransactionAmount} placeholder="Amount" keyboardType="numeric" style={styles.formInput} />
                         <Picker selectedValue={newTransactionType} onValueChange={setNewTransactionType} style={styles.formPicker}>
                           <Picker.Item label="Repayment" value="repayment" />
@@ -1611,17 +1995,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                           </TouchableOpacity>
                         </View>
                       </View>
-                      {/* Pending/Cash/UPI labels after Add Transaction */}
-                      <View style={{ backgroundColor: '#fff', zIndex: 2, paddingBottom: 8, marginBottom: 8 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <Text style={{ fontWeight: 'bold', color: '#333' }}>Pending Amount: {getPendingAmount()}</Text>
-                          <Text style={{ fontWeight: 'bold', color: '#333' }}>Pending Days: {getPendingDays()}</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <Text style={{ fontWeight: 'bold', color: 'green' }}>Cash Received: {getTotalCashReceived()}</Text>
-                          <Text style={{ fontWeight: 'bold', color: 'blue' }}>UPI Received: {getTotalUpiReceived()}</Text>
-                        </View>
-                      </View>
+
                       {/* Transaction grid header row */}
                       <View style={{ flexDirection: 'row', backgroundColor: '#E3E6F0', borderRadius: 6, paddingVertical: 6, marginBottom: 4 }}>
                         <Text style={[styles.headerCell, { flex: 1 }]}>Type</Text>
@@ -1725,6 +2099,58 @@ export default function CreateCustomerScreen({ user, userProfile }) {
           </View>
         </View>
       </Modal>
+      
+      {/* Date Picker Modal */}
+      {showDatePicker && (
+        <DateTimePicker
+          value={new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onDateChange}
+        />
+      )}
+
+      {/* Enhanced Date Picker Modal */}
+      <EnhancedDatePicker
+        visible={showEnhancedDatePicker}
+        onClose={() => setShowEnhancedDatePicker(false)}
+        onDateSelect={onEnhancedDateSelect}
+        startDate={startDate}
+        endDate={endDate}
+        repaymentFrequency={repaymentFrequency}
+        daysToComplete={daysToComplete}
+      />
+
+      {/* Transaction Date Picker Modal */}
+      {showTransactionDatePicker && (
+        <DateTimePicker
+          value={new Date(transactionDate)}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          minimumDate={transactionCustomer?.start_date ? new Date(transactionCustomer.start_date) : undefined}
+          maximumDate={transactionCustomer?.end_date ? new Date(transactionCustomer.end_date) : undefined}
+          onChange={(event, selectedDate) => {
+            setShowTransactionDatePicker(Platform.OS === 'ios');
+            if (event.type === 'set' && selectedDate) {
+              const dateString = selectedDate.toISOString().split('T')[0];
+              // Check if selected date is within customer range
+              const customerStart = transactionCustomer?.start_date;
+              const customerEnd = transactionCustomer?.end_date;
+              
+              if (customerStart && dateString < customerStart) {
+                Alert.alert('Invalid Date', 'Selected date is before customer start date.');
+                return;
+              }
+              if (customerEnd && dateString > customerEnd) {
+                Alert.alert('Invalid Date', 'Selected date is after customer end date.');
+                return;
+              }
+              
+              handleTransactionDateChange(dateString);
+            }
+          }}
+        />
+      )}
     </View>
   );
 } 
