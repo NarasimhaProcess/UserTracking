@@ -8,69 +8,108 @@ const EnhancedDatePicker = ({
   onClose, 
   onDateSelect, 
   startDate, 
-  endDate, 
+  endDate, // Add endDate prop
   repaymentFrequency, 
   daysToComplete 
 }) => {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedStartDate, setSelectedStartDate] = useState(startDate ? new Date(startDate) : null);
-  const [selectedEndDate, setSelectedEndDate] = useState(endDate ? new Date(endDate) : null);
+  const today = new Date();
+  const [currentMonth, setCurrentMonth] = useState(today);
+  const [selectedStartDate, setSelectedStartDate] = useState(() => {
+    if (startDate) {
+      const [year, month, day] = startDate.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      return isNaN(date.getTime()) ? null : date; // Return null if date is invalid
+    }
+    return null; // Default to null if no startDate
+  });
+  const [calculatedEndDate, setCalculatedEndDate] = useState(() => {
+    if (endDate) {
+      const [year, month, day] = endDate.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      return isNaN(date.getTime()) ? null : date; // Return null if date is invalid
+    }
+    return null; // Default to null if no endDate
+  });
   const [highlightedDates, setHighlightedDates] = useState([]);
 
   useEffect(() => {
-    if (selectedStartDate && selectedEndDate && repaymentFrequency) {
-      calculateHighlightedDates();
+    if (selectedStartDate && repaymentFrequency && daysToComplete) {
+      calculateEndDateAndHighlights();
+    } else if (!selectedStartDate) {
+      // If selectedStartDate becomes null, clear calculatedEndDate and highlightedDates
+      setCalculatedEndDate(null);
+      setHighlightedDates([]);
     }
-  }, [selectedStartDate, selectedEndDate, repaymentFrequency, daysToComplete]);
+  }, [selectedStartDate, repaymentFrequency, daysToComplete, startDate, endDate]);
 
-  const calculateHighlightedDates = () => {
-    if (!selectedStartDate || !selectedEndDate) return;
+  const calculateEndDateAndHighlights = () => {
+    if (!selectedStartDate || !repaymentFrequency || !daysToComplete) {
+      setCalculatedEndDate(null);
+      setHighlightedDates([]);
+      return;
+    }
 
-    const dates = [];
     const start = new Date(selectedStartDate);
-    const end = new Date(selectedEndDate);
+    let endDate = new Date(start);
     
+    // Calculate end date based on frequency and daysToComplete
     switch (repaymentFrequency) {
       case 'daily':
-        const dayInterval = parseInt(daysToComplete) || 1;
-        let currentDate = new Date(start);
-        while (currentDate <= end) {
-          dates.push(new Date(currentDate));
-          currentDate.setDate(currentDate.getDate() + dayInterval);
-        }
+        endDate.setDate(start.getDate() + parseInt(daysToComplete));
         break;
-        
       case 'weekly':
-        let weeklyDate = new Date(start);
-        // Ensure we start from the exact start date
-        weeklyDate.setHours(0, 0, 0, 0);
-        const endDate = new Date(end);
-        endDate.setHours(23, 59, 59, 999);
-        
-        while (weeklyDate <= endDate) {
-          dates.push(new Date(weeklyDate));
-          // Add exactly 7 days for weekly frequency
-          weeklyDate = new Date(weeklyDate.getTime() + (7 * 24 * 60 * 60 * 1000));
-        }
+        endDate.setDate(start.getDate() + (parseInt(daysToComplete) * 7));
         break;
-        
       case 'monthly':
-        let monthlyDate = new Date(start);
-        while (monthlyDate <= end) {
-          dates.push(new Date(monthlyDate));
-          monthlyDate.setMonth(monthlyDate.getMonth() + 1);
-        }
+        endDate.setMonth(start.getMonth() + parseInt(daysToComplete));
         break;
-        
       case 'yearly':
-        let yearlyDate = new Date(start);
-        while (yearlyDate <= end) {
-          dates.push(new Date(yearlyDate));
-          yearlyDate.setFullYear(yearlyDate.getFullYear() + 1);
-        }
+        endDate.setFullYear(start.getFullYear() + parseInt(daysToComplete));
         break;
     }
     
+    setCalculatedEndDate(endDate);
+    calculateHighlightedDates(start, endDate);
+  };
+
+  const calculateHighlightedDates = (start, end) => {
+    if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+      setHighlightedDates([]);
+      return;
+    }
+
+    const dates = [];
+    const periodsNum = parseInt(daysToComplete);
+    const normalizedStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+
+    // Always add the start date as a highlighted date
+    dates.push(new Date(normalizedStart));
+
+    for (let i = 1; i < periodsNum; i++) { // Start from 1 because the first date is already added
+      let nextDate = new Date(normalizedStart);
+      switch (repaymentFrequency) {
+        case 'daily':
+          nextDate.setDate(normalizedStart.getDate() + i);
+          break;
+        case 'weekly':
+          nextDate.setDate(normalizedStart.getDate() + (i * 7));
+          break;
+        case 'monthly':
+          nextDate.setMonth(normalizedStart.getMonth() + i);
+          break;
+        case 'yearly':
+          nextDate.setFullYear(normalizedStart.getFullYear() + i);
+          break;
+      }
+      // Ensure the calculated date is within the overall repayment range (start to calculatedEndDate)
+      // This check is important if daysToComplete is large and calculatedEndDate is limited by some other factor
+      if (nextDate <= end) {
+        dates.push(new Date(nextDate));
+      } else {
+        // If the next calculated repayment date exceeds the overall end date, stop.
+        break;
+      }
+    }
     setHighlightedDates(dates);
   };
 
@@ -83,6 +122,8 @@ const EnhancedDatePicker = ({
   };
 
   const isDateHighlighted = (date) => {
+    // Ensure the selected start date is not also marked as a general highlighted date
+    if (isDateSelected(date)) return false;
     return highlightedDates.some(highlightedDate => 
       highlightedDate.toDateString() === date.toDateString()
     );
@@ -90,25 +131,23 @@ const EnhancedDatePicker = ({
 
   const isDateSelected = (date) => {
     const dateStr = date.toDateString();
-    return (selectedStartDate && selectedStartDate.toDateString() === dateStr) ||
-           (selectedEndDate && selectedEndDate.toDateString() === dateStr);
+    return selectedStartDate && selectedStartDate.toDateString() === dateStr;
   };
 
   const isDateInRange = (date) => {
-    if (!selectedStartDate || !selectedEndDate) return false;
-    return date >= selectedStartDate && date <= selectedEndDate;
+    if (!selectedStartDate || !calculatedEndDate) return false;
+    return date >= selectedStartDate && date <= calculatedEndDate;
   };
 
   const handleDatePress = (date) => {
-    if (!selectedStartDate || (selectedStartDate && selectedEndDate)) {
-      setSelectedStartDate(date);
-      setSelectedEndDate(null);
-    } else if (date >= selectedStartDate) {
-      setSelectedEndDate(date);
-    } else {
-      setSelectedStartDate(date);
-      setSelectedEndDate(null);
+    const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if (date < todayNormalized) {
+      // Optionally, show an alert or do nothing
+      Alert.alert('Invalid Date', 'Cannot select a past date.');
+      return;
     }
+    setSelectedStartDate(date);
+    // End date will be calculated automatically in useEffect
   };
 
   const renderCalendar = () => {
@@ -127,22 +166,25 @@ const EnhancedDatePicker = ({
       const isHighlighted = isDateHighlighted(date);
       const isSelected = isDateSelected(date);
       const isInRange = isDateInRange(date);
+      const isToday = date.toDateString() === today.toDateString();
 
       days.push(
         <TouchableOpacity
           key={day}
           style={[
             styles.dayCell,
-            isSelected && styles.selectedDay,
             isHighlighted && styles.highlightedDay,
-            isInRange && !isHighlighted && styles.rangeDay
+            isInRange && !isHighlighted && styles.rangeDay,
+            isToday && styles.todayCircle,
+            isSelected && styles.selectedDay,
           ]}
           onPress={() => handleDatePress(date)}
         >
           <Text style={[
             styles.dayText,
+            isHighlighted && styles.highlightedDayText,
+            isToday && styles.todayText,
             isSelected && styles.selectedDayText,
-            isHighlighted && styles.highlightedDayText
           ]}>
             {day}
           </Text>
@@ -160,10 +202,13 @@ const EnhancedDatePicker = ({
   };
 
   const handleConfirm = () => {
-    if (selectedStartDate && selectedEndDate) {
+    if (selectedStartDate && calculatedEndDate) {
+      // Ensure dates are formatted without timezone issues for display/storage
+      const start = new Date(selectedStartDate.getFullYear(), selectedStartDate.getMonth(), selectedStartDate.getDate());
+      const end = new Date(calculatedEndDate.getFullYear(), calculatedEndDate.getMonth(), calculatedEndDate.getDate());
       onDateSelect({
-        startDate: selectedStartDate.toISOString().split('T')[0],
-        endDate: selectedEndDate.toISOString().split('T')[0]
+        startDate: start.toISOString().split('T')[0],
+        endDate: end.toISOString().split('T')[0]
       });
     }
     onClose();
@@ -217,9 +262,9 @@ const EnhancedDatePicker = ({
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.confirmButton, (!selectedStartDate || !selectedEndDate) && styles.disabledButton]} 
+              style={[styles.confirmButton, (!selectedStartDate || !calculatedEndDate) && styles.disabledButton]} 
               onPress={handleConfirm}
-              disabled={!selectedStartDate || !selectedEndDate}
+              disabled={!selectedStartDate || !calculatedEndDate}
             >
               <Text style={styles.confirmButtonText}>Confirm</Text>
             </TouchableOpacity>
@@ -360,6 +405,15 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: '#ccc',
+  },
+  todayCircle: {
+    borderColor: '#007AFF',
+    borderWidth: 1,
+    borderRadius: 20,
+  },
+  todayText: {
+    color: '#007AFF',
+    fontWeight: 'bold',
   },
 });
 

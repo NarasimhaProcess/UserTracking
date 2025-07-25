@@ -121,6 +121,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
+  iconButton: {
+    padding: 8,
+    borderRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 2,
+  },
   saveButton: {
     backgroundColor: '#43A047',
     borderRadius: 8,

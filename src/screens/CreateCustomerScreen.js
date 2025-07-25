@@ -12,6 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import MapView, { Marker } from 'react-native-maps';
 import * as uuid from 'uuid';
 import EnhancedDatePicker from '../components/EnhancedDatePicker';
+import { MaterialIcons } from '@expo/vector-icons';
 
 function LocationSearchBar({ onLocationFound }) {
   const [query, setQuery] = useState('');
@@ -90,9 +91,21 @@ function LocationSearchBar({ onLocationFound }) {
 }
 
 const CUSTOMER_TYPES = ['food', 'others', 'grocery', 'cloth', 'metals', 'fashion'];
-const REPAYMENT_FREQUENCIES = ['daily', 'weekly', 'monthly', 'yearly'];
 
 export default function CreateCustomerScreen({ user, userProfile }) {
+  // Validate user prop
+  useEffect(() => {
+    if (!user?.id) {
+      console.error('CreateCustomerScreen: User ID is missing', { user });
+    }
+  }, [user]);
+  
+  // Reset selected customer when modal closes
+  useEffect(() => {
+    if (!showCustomerFormModal) {
+      setSelectedCustomer(null);
+    }
+  }, [showCustomerFormModal]);
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
@@ -156,6 +169,11 @@ export default function CreateCustomerScreen({ user, userProfile }) {
         start.setDate(start.getDate() + periodsNum);
         break;
       case 'weekly':
+        switch (frequency) {
+      case 'daily':
+        start.setDate(start.getDate() + periodsNum);
+        break;
+      case 'weekly':
         start.setDate(start.getDate() + (periodsNum * 7));
         break;
       case 'monthly':
@@ -164,6 +182,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
       case 'yearly':
         start.setFullYear(start.getFullYear() + periodsNum);
         break;
+    }
       default:
         start.setDate(start.getDate() + periodsNum);
     }
@@ -197,6 +216,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
 
   // Add state for repayment plans
   const [repaymentPlans, setRepaymentPlans] = useState([]);
+  const [availableFrequencies, setAvailableFrequencies] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [planOptions, setPlanOptions] = useState([]);
   
@@ -262,14 +282,18 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     if (user?.id) fetchCustomers();
   }, [user, search, areaSearch, page, areas]);
 
-  // Fetch repayment plans on mount
+  // Fetch repayment plans on mount and extract unique frequencies
   useEffect(() => {
     async function fetchPlans() {
       const { data, error } = await supabase
         .from('repayment_plans')
         .select('*')
         .order('name', { ascending: true });
-      if (!error) setRepaymentPlans(data || []);
+      if (!error) {
+        setRepaymentPlans(data || []);
+        const uniqueFrequencies = [...new Set((data || []).map(plan => plan.frequency))];
+        setAvailableFrequencies(uniqueFrequencies);
+      }
     }
     fetchPlans();
   }, []);
@@ -284,11 +308,11 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     setSelectedPlanId('');
   }, [repaymentFrequency, repaymentPlans]);
 
-  // Auto-calculate repayment/advance/days/late fee when plan or amount changes
-  useEffect(() => {
-    const plan = planOptions.find(p => p.id === selectedPlanId);
-    if (plan && amountGiven) {
-      const scale = parseFloat(amountGiven) / parseFloat(plan.base_amount);
+  // Helper function to calculate repayment details
+  const calculateRepaymentDetails = (planId, givenAmount, freq) => {
+    const plan = repaymentPlans.find(p => p.id === planId);
+    if (plan && givenAmount) {
+      const scale = parseFloat(givenAmount) / parseFloat(plan.base_amount);
       setRepaymentAmount((scale * plan.repayment_per_period).toFixed(2));
       setAdvanceAmount(plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0');
       setDaysToComplete(plan.periods.toString());
@@ -299,8 +323,14 @@ export default function CreateCustomerScreen({ user, userProfile }) {
       setAdvanceAmount('');
       setDaysToComplete('');
       setLateFee('');
+      if (!planId) setRepaymentFrequency(freq || ''); // Only reset frequency if no plan is selected
     }
-  }, [selectedPlanId, amountGiven, planOptions]);
+  };
+
+  // Auto-calculate repayment/advance/days/late fee when plan or amount changes (for Add Customer)
+  useEffect(() => {
+    calculateRepaymentDetails(selectedPlanId, amountGiven, repaymentFrequency);
+  }, [selectedPlanId, amountGiven, repaymentPlans]);
 
   // Auto-calculate end date when start date or days to complete changes
   useEffect(() => {
@@ -425,6 +455,31 @@ export default function CreateCustomerScreen({ user, userProfile }) {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const handleCloneCustomer = (customer) => {
+    setIsEditMode(false); // Cloning means creating a new customer
+    setSelectedCustomer(null);
+    setName(customer.name || '');
+    setMobile(customer.mobile || '');
+    setEmail(customer.email || '');
+    setBookNo(''); // Clear book number for new customer
+    setCustomerType(customer.customer_type || '');
+    setAreaId(customer.area_id || null);
+    setLatitude(customer.latitude || null);
+    setLongitude(customer.longitude || null);
+    setRemarks(customer.remarks || '');
+    setAmountGiven(customer.amount_given ? String(customer.amount_given) : '');
+    setRepaymentFrequency(customer.repayment_frequency || '');
+    setRepaymentAmount(customer.repayment_amount ? String(customer.repayment_amount) : '');
+    setDaysToComplete(customer.days_to_complete ? String(customer.days_to_complete) : '');
+    setAdvanceAmount(customer.advance_amount ? String(customer.advance_amount) : '0');
+    setLateFee(customer.late_fee_per_day ? String(customer.late_fee_per_day) : '');
+    setSelectedPlanId(customer.repayment_plan_id ? String(customer.repayment_plan_id) : '');
+    setStartDate(customer.start_date ? customer.start_date.split('T')[0] : '');
+    setEndDate(customer.end_date ? customer.end_date.split('T')[0] : '');
+    setMissingFields([]);
+    setShowCustomerFormModal(true);
   };
 
   // --- END handleCreate unified definition ---
@@ -635,60 +690,90 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     }
   };
 
+  
 
-
-  const renderCustomerItem = ({ item }) => {
-    return (
-      <View style={{ borderBottomWidth: 1, borderColor: '#eee', paddingVertical: 12, backgroundColor: '#fff' }}>
-        {/* Customer Info Row */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-          <Text style={[styles.cell, { flex: 1.5 }]}>{item.book_no || 'N/A'}</Text>
-          <Text style={[styles.cell, { flex: 2 }]}>{item.name}</Text>
-          <Text style={[styles.cell, { flex: 2 }]}>{item.mobile}</Text>
-          <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'center' }}>
-            <TouchableOpacity style={styles.editButton} onPress={() => {
-              setIsEditMode(true);
-              setSelectedCustomer(item);
-              setName(item.name);
-              setMobile(item.mobile);
-              setEmail(item.email);
-              setBookNo(item.book_no);
-              setCustomerType(item.customer_type);
-              setAreaId(item.area_id);
-              setLatitude(item.latitude);
-              setLongitude(item.longitude);
-              setRemarks(item.remarks);
-              setAmountGiven(item.amount_given ? String(item.amount_given) : '');
-              setRepaymentFrequency(item.repayment_frequency || '');
-              setRepaymentAmount(item.repayment_amount ? String(item.repayment_amount) : '');
-              setDaysToComplete(item.days_to_complete ? String(item.days_to_complete) : '');
-              setAdvanceAmount(item.advance_amount ? String(item.advance_amount) : '0');
-              setLateFee(item.late_fee_per_day ? String(item.late_fee_per_day) : '');
-              fetchCustomerDocs(item.id);
-              setShowCustomerFormModal(true);
-            }}>
-              <Text style={styles.editButtonText}>Edit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.transactionButton} onPress={() => openTransactionModal(item)}>
-              <Text style={styles.transactionButtonText}>Tx</Text>
-            </TouchableOpacity>
-          </View>
+  const renderCustomerItem = ({ item }) => (
+    <View style={{ borderBottomWidth: 1, borderColor: '#eee', paddingVertical: 12, backgroundColor: '#fff' }}>
+      {/* Customer Info Row */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+        <Text style={[styles.cell, { flex: 1.5 }]}>{item.book_no || 'N/A'}</Text>
+        <Text style={[styles.cell, { flex: 2 }]}>{item.name}</Text>
+        <Text style={[styles.cell, { flex: 2 }]}>{item.mobile}</Text>
+        <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'space-around' }}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => {
+            // Set all the form fields for editing
+            setIsEditMode(true);
+            setSelectedCustomer(item);
+            setName(item.name || '');
+            setMobile(item.mobile || '');
+            setEmail(item.email || '');
+            setBookNo(item.book_no || '');
+            setCustomerType(item.customer_type || '');
+            setAreaId(item.area_id || null);
+            setLatitude(item.latitude || null);
+            setLongitude(item.longitude || null);
+            setRemarks(item.remarks || '');
+            setAmountGiven(item.amount_given ? String(item.amount_given) : '');
+            setRepaymentFrequency(item.repayment_frequency || '');
+            setRepaymentAmount(item.repayment_amount ? String(item.repayment_amount) : '');
+            setDaysToComplete(item.days_to_complete ? String(item.days_to_complete) : '');
+            setAdvanceAmount(item.advance_amount ? String(item.advance_amount) : '0');
+            setLateFee(item.late_fee_per_day ? String(item.late_fee_per_day) : '');
+            setSelectedPlanId(item.repayment_plan_id ? String(item.repayment_plan_id) : '');
+            setStartDate(item.start_date ? item.start_date.split('T')[0] : '');
+            setEndDate(item.end_date ? item.end_date.split('T')[0] : '');
+            calculateRepaymentDetails(
+              item.repayment_plan_id,
+              item.amount_given ? String(item.amount_given) : '',
+              item.repayment_frequency || ''
+            );
+            fetchCustomerDocs(item.id);
+            setShowCustomerFormModal(true);
+          }}>
+            <MaterialIcons name="edit" size={24} color="#007AFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => openTransactionModal(item)}>
+            <MaterialIcons name="receipt" size={24} color="#4CAF50" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => handleCloneCustomer(item)}>
+            <MaterialIcons name="content-copy" size={24} color="#FFA500" />
+          </TouchableOpacity>
         </View>
       </View>
-    );
-  };
+    </View>
+  );
 
   const openCreateCustomerModal = () => {
     if (!repaymentPlans || repaymentPlans.length === 0) {
       Alert.alert('No Repayment Plans', 'No repayment plans are configured. Please contact the administrator to configure repayment plans.');
       return;
     }
+    
+    // Clear all form data
     setIsEditMode(false);
     setSelectedCustomer(null);
-    setName(''); setMobile(''); setEmail(''); setBookNo(''); setCustomerType(''); setAreaId(null);
-    setLatitude(null); setLongitude(null); setRemarks(''); setAmountGiven(''); setDaysToComplete(''); setAdvanceAmount(''); setLateFee('');
+    setName('');
+    setMobile('');
+    setEmail('');
+    setBookNo('');
+    setCustomerType('');
+    setAreaId(null);
+    setLatitude(null);
+    setLongitude(null);
+    setRemarks('');
+    setAmountGiven('');
+    setDaysToComplete('');
+    setAdvanceAmount('');
+    setLateFee('');
     setRepaymentFrequency('');
     setRepaymentAmount('');
+    setStartDate('');
+    setEndDate('');
+    
+    // Reset any error states
+    setMissingFields([]);
+    
+    // Show the modal
     setShowCustomerFormModal(true);
   };
 
@@ -1100,25 +1185,54 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   };
 
   const handleCreate = async () => {
-  // Check for missing required fields
-  const missingFields = [];
-  if (!name) missingFields.push('name');
-  if (!customerType) missingFields.push('customerType');
-  if (!areaId) missingFields.push('areaId');
-  if (!amountGiven) missingFields.push('amountGiven');
-  if (!daysToComplete) missingFields.push('daysToComplete');
-  if (!repaymentFrequency) missingFields.push('repaymentFrequency');
-  if (!repaymentAmount) missingFields.push('repaymentAmount');
-  if (!advanceAmount) missingFields.push('advanceAmount');
+    console.log('Create customer started with user:', user);
+    
+    if (!user?.id) {
+      console.error('User ID is missing');
+      Alert.alert('Error', 'Please log in again to continue.');
+      return;
+    }
 
-  if (missingFields.length > 0) {
-    setMissingFields(missingFields);
-    Alert.alert('Error', 'Please fill in all required fields');
-    return;
-  }
+    try {
+      // Check for missing required fields
+      const missingFields = [];
+      if (!name) missingFields.push('Name');
+      if (!customerType) missingFields.push('Customer Type');
+      if (!areaId) missingFields.push('Area');
+      if (!amountGiven) missingFields.push('Amount Given');
+      if (!daysToComplete) missingFields.push('Days to Complete');
+      if (!repaymentFrequency) missingFields.push('Repayment Frequency');
+      if (!repaymentAmount) missingFields.push('Repayment Amount');
+      if (!selectedPlanId) missingFields.push('Repayment Plan');
+      if (!startDate) missingFields.push('Start Date');
 
-  // Clear missing fields if validation passes
-  setMissingFields([]);
+      // Log all field values for debugging
+      console.log('Field values:', {
+        name,
+        customerType,
+        areaId,
+        amountGiven,
+        daysToComplete,
+        repaymentFrequency,
+        repaymentAmount,
+        selectedPlanId,
+        startDate,
+        endDate
+      });
+
+      if (missingFields.length > 0) {
+        console.error('Missing required fields:', missingFields);
+        setMissingFields(missingFields);
+        Alert.alert(
+          'Required Fields Missing',
+          'Please fill in the following fields:\n\n' + missingFields.join('\n'),
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Clear missing fields if validation passes
+      setMissingFields([]);
 
   let lat = latitude;
   let lon = longitude;
@@ -1135,50 +1249,186 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     setLongitude(lon);
   }
   const lateFeeValue = lateFee === '' ? '0' : lateFee;
+  // Prepare customer data with proper type conversions
   const customerData = {
-    name,
-    mobile,
-    email,
-    book_no: bookNo,
+    name: (name || '').trim(),
+    mobile: mobile ? mobile.trim() : null,
+    email: email ? email.trim().toLowerCase() : null,
+    book_no: bookNo ? bookNo.trim() : null,
     customer_type: customerType,
-    area_id: areaId,
-    latitude: lat,
-    longitude: lon,
-    remarks,
-    amount_given: Number(amountGiven),
+    area_id: Number(areaId),
+    latitude: typeof lat === 'number' ? lat : null,
+    longitude: typeof lon === 'number' ? lon : null,
+    remarks: remarks ? remarks.trim() : null,
+    amount_given: parseFloat(amountGiven) || 0,
     repayment_frequency: repaymentFrequency,
-    repayment_plan_id: selectedPlanId,
-    repayment_amount: Number(repaymentAmount),
-    days_to_complete: Number(daysToComplete),
-    advance_amount: Number(advanceAmount),
-    late_fee_per_day: Number(lateFee),
-    start_date: startDate || null,
-    end_date: endDate || null,
-    user_id: user.id,
+    repayment_plan_id: Number(selectedPlanId),
+    repayment_amount: parseFloat(repaymentAmount) || 0,
+    days_to_complete: parseInt(daysToComplete) || 0,
+    advance_amount: parseFloat(advanceAmount) || 0,
+    late_fee_per_day: parseFloat(lateFee) || 0,
+    start_date: startDate ? new Date(startDate).toISOString() : null,
+    end_date: endDate ? new Date(endDate).toISOString() : null,
+    user_id: user?.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   };
 
-  try {
-    const { error } = await supabase.from('customers').insert([customerData]);
-    if (error) {
-      Alert.alert('Error', 'Failed to create customer: ' + error.message);
-    } else {
+      // Validate numeric fields
+      if (isNaN(Number(amountGiven)) || Number(amountGiven) <= 0) {
+        Alert.alert('Invalid Amount', 'Please enter a valid amount greater than 0');
+        return;
+      }
+
+      if (isNaN(Number(daysToComplete)) || Number(daysToComplete) <= 0) {
+        Alert.alert('Invalid Days', 'Please enter a valid number of days greater than 0');
+        return;
+      }
+
+      // Log the prepared data for debugging
+      console.log('Attempting to insert customer with prepared data:', JSON.stringify(customerData, null, 2));
+      
+      // First, validate the repayment plan exists
+      const { data: planData, error: planError } = await supabase
+        .from('repayment_plans')
+        .select('id')
+        .eq('id', customerData.repayment_plan_id)
+        .single();
+        
+      if (planError || !planData) {
+        console.error('Invalid repayment plan:', planError || 'Plan not found');
+        Alert.alert('Error', 'Selected repayment plan is invalid or no longer exists');
+        return;
+      }
+
+      // Insert the customer with validated data
+      const { data: insertedData, error: insertError } = await supabase
+        .from('customers')
+        .insert([customerData])
+        .select('*')
+        .single();
+      
+      if (insertError) {
+        console.error('Database error creating customer:', insertError);
+        
+        // Check for specific error types
+        if (insertError.code === '23505') {
+          Alert.alert('Error', 'A customer with this mobile number or book number already exists');
+        } else if (insertError.code === '23503') {
+          Alert.alert('Error', 'Invalid area or repayment plan selected');
+        } else {
+          Alert.alert(
+            'Error Creating Customer',
+            'Database Error: ' + insertError.message + '\n\nPlease try again or contact support if the problem persists.'
+          );
+        }
+        return;
+      }
+      
+      if (!insertedData?.id) {
+        console.error('No customer ID returned after creation');
+        Alert.alert('Error', 'Failed to create customer: No ID returned');
+        return;
+      }
+      
+      // Set the newly created customer as the selected customer
+      setSelectedCustomer(insertedData);
+      
+      console.log('Customer created successfully:', insertedData);
+      
+      // Reset form fields
+      setName('');
+      setMobile('');
+      setEmail('');
+      setBookNo('');
+      setCustomerType('');
+      setAreaId(null);
+      setLatitude(null);
+      setLongitude(null);
+      setRemarks('');
+      setAmountGiven('');
+      setRepaymentFrequency('');
+      setRepaymentAmount('');
+      setDaysToComplete('');
+      setAdvanceAmount('');
+      setLateFee('');
+      setSelectedPlanId('');
+      setStartDate('');
+      setEndDate('');
+      
       Alert.alert('Success', 'Customer created successfully!');
       setShowCustomerFormModal(false);
+      
       // Refresh customer list
-      const { data } = await supabase
+      const { data: customerList, error: listError } = await supabase
         .from('customers')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
-      setCustomers(data || []);
+        
+      if (listError) {
+        console.error('Error fetching updated customer list:', listError);
+      } else {
+        setCustomers(customerList || []);
+      }
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      Alert.alert(
+        'Error',
+        'An unexpected error occurred while creating the customer. Please try again.\n\nDetails: ' + error.message
+      );
+    } finally {
+      // Clean up any resources if needed
     }
-  } catch (error) {
-    console.error('Error creating customer:', error);
-    Alert.alert('Error', 'Failed to create customer');
-  }
-};
+  };
 
   const handleSaveCustomer = async () => {
+    console.log('handleSaveCustomer called with:', {
+      isEditMode,
+      selectedCustomer,
+      name,
+      customerType,
+      areaId,
+      selectedPlanId
+    });
+    
+    // Validate user and selected customer
+    if (!user?.id) {
+      console.error('User ID is missing');
+      Alert.alert('Error', 'Please log in again to continue.');
+      return;
+    }
+
+    if (!selectedCustomer?.id) {
+      console.error('No customer selected for update. Current state:', { 
+        selectedCustomer,
+        isEditMode,
+        showCustomerFormModal 
+      });
+      Alert.alert('Error', 'No customer selected for update');
+      return;
+    }
+
+    // Validate required fields
+    const missingFields = [];
+    if (!name) missingFields.push('name');
+    if (!customerType) missingFields.push('customerType');
+    if (!areaId) missingFields.push('areaId');
+    if (!amountGiven) missingFields.push('amountGiven');
+    if (!daysToComplete) missingFields.push('daysToComplete');
+    if (!repaymentFrequency) missingFields.push('repaymentFrequency');
+    if (!repaymentAmount) missingFields.push('repaymentAmount');
+    if (!selectedPlanId) missingFields.push('repaymentPlan');
+
+    if (missingFields.length > 0) {
+      setMissingFields(missingFields);
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    // Clear missing fields if validation passes
+    setMissingFields([]);
+
     const customerData = {
       name,
       mobile,
@@ -1201,26 +1451,46 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     };
 
     try {
-      const { error } = await supabase
+      console.log('Updating customer with ID:', selectedCustomer.id, 'Data:', customerData);
+      
+      const { data, error } = await supabase
         .from('customers')
         .update(customerData)
-        .eq('id', selectedCustomer.id);
+        .eq('id', selectedCustomer.id)
+        .select()
+        .single();
+
       if (error) {
+        console.error('Supabase error updating customer:', error);
         Alert.alert('Error', 'Failed to update customer: ' + error.message);
+        return;
+      }
+
+      if (!data) {
+        console.error('No data returned after update');
+        Alert.alert('Error', 'Failed to update customer: No data returned');
+        return;
+      }
+
+      console.log('Customer updated successfully:', data);
+      Alert.alert('Success', 'Customer updated successfully!');
+      setShowCustomerFormModal(false);
+
+      // Refresh customer list
+      const { data: refreshedData, error: refreshError } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (refreshError) {
+        console.error('Error refreshing customer list:', refreshError);
       } else {
-        Alert.alert('Success', 'Customer updated successfully!');
-        setShowCustomerFormModal(false);
-        // Refresh customer list
-        const { data } = await supabase
-          .from('customers')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-        setCustomers(data || []);
+        setCustomers(refreshedData || []);
       }
     } catch (error) {
       console.error('Error updating customer:', error);
-      Alert.alert('Error', 'Failed to update customer');
+      Alert.alert('Error', 'An unexpected error occurred while updating the customer');
     }
   };
 
@@ -1243,13 +1513,22 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     const searchTerms = search.split(',').map(term => term.trim().toLowerCase()).filter(term => term);
     
     // Check if any search term matches any customer field
-    return searchTerms.some(term => 
-      customer.name?.toLowerCase().includes(term) ||
-      customer.mobile?.toLowerCase().includes(term) ||
-      customer.email?.toLowerCase().includes(term) ||
-      customer.book_no?.toLowerCase().includes(term) ||
-      customer.area_name?.toLowerCase().includes(term)
-    );
+    return searchTerms.some(term => {
+      // Convert all searchable fields to lowercase strings, handling null/undefined values
+      const customerName = (customer.name || '').toLowerCase();
+      const customerMobile = (customer.mobile || '').toLowerCase();
+      const customerEmail = (customer.email || '').toLowerCase();
+      const customerBookNo = (customer.book_no || '').toString().toLowerCase();
+      const customerArea = (customer.area_name || '').toLowerCase();
+
+      
+
+      return customerName.includes(term) ||
+             customerMobile.includes(term) ||
+             customerEmail.includes(term) ||
+             customerBookNo.includes(term) ||
+             customerArea.includes(term);
+    });
   });
 
   return (
@@ -1351,17 +1630,50 @@ export default function CreateCustomerScreen({ user, userProfile }) {
               <Text style={styles.formLabel}>Amount Given</Text>
               <TextInput value={amountGiven} onChangeText={setAmountGiven} style={[styles.input, isMissing('amountGiven') && { borderColor: 'red', borderWidth: 2 }]} keyboardType="numeric" />
               <Text style={styles.formLabel}>Repayment Frequency</Text>
-              <Picker selectedValue={repaymentFrequency} onValueChange={setRepaymentFrequency} style={styles.formPicker}>
+              <Picker 
+                selectedValue={repaymentFrequency} 
+                onValueChange={(val) => {
+                  setRepaymentFrequency(val);
+                  setSelectedPlanId(''); // Reset selected plan
+                  // Update plan options based on frequency
+                  if (val) {
+                    setPlanOptions(repaymentPlans.filter(p => p.frequency === val));
+                  } else {
+                    setPlanOptions([]);
+                  }
+                }} 
+                style={styles.formPicker}
+              >
                 <Picker.Item label="Select Frequency" value="" />
-                {REPAYMENT_FREQUENCIES.map(freq => <Picker.Item key={freq} label={freq.charAt(0).toUpperCase() + freq.slice(1)} value={freq} />)}
+                {availableFrequencies.map(freq => (
+                  <Picker.Item 
+                    key={freq} 
+                    label={freq.charAt(0).toUpperCase() + freq.slice(1)} 
+                    value={freq} 
+                  />
+                ))}
               </Picker>
               <Text style={styles.formLabel}>Repayment Plan</Text>
-              <Picker selectedValue={selectedPlanId} onValueChange={setSelectedPlanId} style={styles.formPicker} enabled={!!repaymentFrequency}>
+              <Picker 
+                selectedValue={selectedPlanId} 
+                onValueChange={(val) => {
+                  setSelectedPlanId(val);
+                  const plan = repaymentPlans.find(p => p.id === val);
+                  if (plan && amountGiven) {
+                    const amount = parseFloat(amountGiven);
+                    const interestAmount = amount * (plan.interest_rate / 100);
+                    setRepaymentAmount(String(amount + interestAmount));
+                    setDaysToComplete(String(plan.duration));
+                    setAdvanceAmount(String(amount * (plan.advance_percentage / 100)));
+                    setLateFee(String(plan.late_fee));
+                  }
+                }} 
+                style={styles.formPicker} 
+                enabled={!!repaymentFrequency}
+              >
                 <Picker.Item label="Select Plan" value="" />
                 {planOptions.map(plan => <Picker.Item key={plan.id} label={plan.name} value={plan.id} />)}
               </Picker>
-              <Text style={styles.formLabel}>Amount Given</Text>
-              <TextInput value={amountGiven} onChangeText={setAmountGiven} style={styles.input} keyboardType="numeric" />
               <Text style={styles.formLabel}>Repayment Amount (auto-calculated)</Text>
               <TextInput value={repaymentAmount} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
               <Text style={styles.formLabel}>Advance Amount (auto-calculated)</Text>
@@ -1388,9 +1700,9 @@ export default function CreateCustomerScreen({ user, userProfile }) {
               <EnhancedDatePicker
                 visible={showEnhancedDatePicker}
                 onClose={() => setShowEnhancedDatePicker(false)}
-                onDateSelect={(start, end) => {
-                  setStartDate(start);
-                  setEndDate(end);
+                onDateSelect={(dates) => {
+                  setStartDate(dates.startDate);
+                  setEndDate(dates.endDate);
                   setShowEnhancedDatePicker(false);
                 }}
                 startDate={startDate}
@@ -1413,7 +1725,23 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                 <TouchableOpacity style={{ flex: 1, backgroundColor: '#ccc', borderRadius: 8, paddingVertical: 12, marginRight: 8, alignItems: 'center' }} onPress={() => setShowCustomerFormModal(false)}>
                   <Text style={{ color: '#333', fontWeight: 'bold', fontSize: 16 }}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={{ flex: 1, backgroundColor: '#4A90E2', borderRadius: 8, paddingVertical: 12, marginLeft: 8, alignItems: 'center' }} onPress={handleSaveCustomer}>
+                <TouchableOpacity 
+                  style={{ 
+                    flex: 1, 
+                    backgroundColor: '#4A90E2', 
+                    borderRadius: 8, 
+                    paddingVertical: 12, 
+                    marginLeft: 8, 
+                    alignItems: 'center' 
+                  }} 
+                  onPress={() => {
+                    console.log('Save button pressed, isEditMode:', isEditMode);
+                    if (isEditMode) {
+                      handleSaveCustomer();
+                    } else {
+                      handleCreate();
+                    }
+                  }}>
                   <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{isEditMode ? 'Save' : 'Create'}</Text>
                 </TouchableOpacity>
               </View>
@@ -1554,6 +1882,11 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                   <Picker.Item label="Select Type" value="" />
                   {CUSTOMER_TYPES.map(type => <Picker.Item key={type} label={type} value={type} />)}
                 </Picker>
+                <Text style={styles.formLabel}>Customer Type</Text>
+                <Picker selectedValue={selectedCustomer.customer_type} onValueChange={val => setSelectedCustomer({ ...selectedCustomer, customer_type: val })} style={styles.formPicker}>
+                  <Picker.Item label="Select Type" value="" />
+                  {CUSTOMER_TYPES.map(type => <Picker.Item key={type} label={type} value={type} />)}
+                </Picker>
                 <Text style={styles.formLabel}>Area ID</Text>
                 <Picker selectedValue={selectedCustomer.area_id} onValueChange={val => setSelectedCustomer({ ...selectedCustomer, area_id: val })} style={styles.formPicker}>
                   <Picker.Item label="Select Area" value={null} />
@@ -1647,49 +1980,60 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                 />
                 <Text style={styles.formLabel}>Repayment Frequency</Text>
                 <Picker selectedValue={selectedCustomer.repayment_frequency} onValueChange={val => {
-                  setSelectedCustomer({ ...selectedCustomer, repayment_frequency: val });
-                  // Reset plan and calculated fields
-                  setSelectedCustomer({ ...selectedCustomer, repayment_frequency: val, repayment_plan_id: '', repayment_amount: '', advance_amount: '', days_to_complete: '', late_fee_per_day: '' });
+                  setSelectedCustomer({
+                    ...selectedCustomer,
+                    repayment_frequency: val,
+                    repayment_plan_id: '',
+                    repayment_amount: '',
+                    advance_amount: '',
+                    days_to_complete: '',
+                    late_fee_per_day: ''
+                  });
+                  // Update plan options based on frequency
+                  if (val) {
+                    setPlanOptions(repaymentPlans.filter(p => p.frequency === val));
+                  } else {
+                    setPlanOptions([]);
+                  }
                 }} style={styles.formPicker}>
                   <Picker.Item label="Select Frequency" value="" />
-                  {['daily','weekly','monthly','yearly'].map(freq => <Picker.Item key={freq} label={freq.charAt(0).toUpperCase()+freq.slice(1)} value={freq} />)}
+                  {availableFrequencies.map(freq => <Picker.Item key={freq} label={freq.charAt(0).toUpperCase() + freq.slice(1)} value={freq} />)}
                 </Picker>
                 <Text style={styles.formLabel}>Repayment Plan</Text>
                 <Picker selectedValue={selectedCustomer.repayment_plan_id} onValueChange={val => {
                   setSelectedCustomer({ ...selectedCustomer, repayment_plan_id: val });
-                  // Recalculate fields below
-                  const plan = repaymentPlans.find(p => p.id === val);
-                  if (plan && selectedCustomer.amount_given) {
-                    const scale = parseFloat(selectedCustomer.amount_given) / parseFloat(plan.base_amount);
-                    setSelectedCustomer({
-                      ...selectedCustomer,
-                      repayment_plan_id: val,
-                      repayment_frequency: plan.frequency,
-                      repayment_amount: (scale * plan.repayment_per_period).toFixed(2),
-                      advance_amount: plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0',
-                      days_to_complete: plan.periods.toString(),
-                      late_fee_per_day: plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0',
-                    });
-                  }
+                  calculateRepaymentDetails(
+                    val,
+                    selectedCustomer.amount_given ? String(selectedCustomer.amount_given) : '',
+                    selectedCustomer.repayment_frequency || ''
+                  );
                 }} style={styles.formPicker} enabled={!!selectedCustomer.repayment_frequency}>
                   <Picker.Item label="Select Plan" value="" />
                   {repaymentPlans.filter(p => p.frequency === selectedCustomer.repayment_frequency).map(plan => <Picker.Item key={plan.id} label={plan.name} value={plan.id} />)}
                 </Picker>
                 <Text style={styles.formLabel}>Amount Given</Text>
                 <TextInput value={selectedCustomer.amount_given} onChangeText={val => {
-                  setSelectedCustomer({ ...selectedCustomer, amount_given: val });
+                  const newAmount = val;
+                  setSelectedCustomer({ ...selectedCustomer, amount_given: newAmount });
                   // Recalculate if plan is selected
                   const plan = repaymentPlans.find(p => p.id === selectedCustomer.repayment_plan_id);
-                  if (plan && val) {
-                    const scale = parseFloat(val) / parseFloat(plan.base_amount);
-                    setSelectedCustomer({
-                      ...selectedCustomer,
-                      amount_given: val,
+                  if (plan && newAmount) {
+                    const scale = parseFloat(newAmount) / parseFloat(plan.base_amount);
+                    setSelectedCustomer(prev => ({
+                      ...prev,
                       repayment_amount: (scale * plan.repayment_per_period).toFixed(2),
                       advance_amount: plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0',
                       days_to_complete: plan.periods.toString(),
-                      late_fee_per_day: plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0',
-                    });
+                      late_fee_per_period: plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0',
+                    }));
+                  } else if (!newAmount) {
+                    setSelectedCustomer(prev => ({
+                      ...prev,
+                      repayment_amount: '',
+                      advance_amount: '',
+                      days_to_complete: '',
+                      late_fee_per_perio: '',
+                    }));
                   }
                 }} style={styles.input} keyboardType="numeric" />
                 <Text style={styles.formLabel}>Repayment Amount (auto-calculated)</Text>
