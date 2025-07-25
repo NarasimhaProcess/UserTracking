@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, ScrollView, Dimensions, Alert } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -32,6 +32,25 @@ const EnhancedDatePicker = ({
   });
   const [highlightedDates, setHighlightedDates] = useState([]);
 
+  // Update selectedStartDate and calculatedEndDate when props change
+  useEffect(() => {
+    if (startDate) {
+      const [year, month, day] = startDate.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      if (!isNaN(date.getTime())) {
+        setSelectedStartDate(date);
+      }
+    }
+    
+    if (endDate) {
+      const [year, month, day] = endDate.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      if (!isNaN(date.getTime())) {
+        setCalculatedEndDate(date);
+      }
+    }
+  }, [startDate, endDate]);
+
   useEffect(() => {
     if (selectedStartDate && repaymentFrequency && daysToComplete) {
       calculateEndDateAndHighlights();
@@ -40,7 +59,7 @@ const EnhancedDatePicker = ({
       setCalculatedEndDate(null);
       setHighlightedDates([]);
     }
-  }, [selectedStartDate, repaymentFrequency, daysToComplete, startDate, endDate]);
+  }, [selectedStartDate, repaymentFrequency, daysToComplete]);
 
   const calculateEndDateAndHighlights = () => {
     if (!selectedStartDate || !repaymentFrequency || !daysToComplete) {
@@ -141,13 +160,41 @@ const EnhancedDatePicker = ({
 
   const handleDatePress = (date) => {
     const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    if (date < todayNormalized) {
-      // Optionally, show an alert or do nothing
-      Alert.alert('Invalid Date', 'Cannot select a past date.');
+    const lastWeek = new Date(todayNormalized);
+    lastWeek.setDate(lastWeek.getDate() - 7); // Allow dates from last week
+    
+    if (date < lastWeek) {
+      Alert.alert('Invalid Date', 'Cannot select a date more than a week ago.');
       return;
     }
+    
+    // Set the selected start date
     setSelectedStartDate(date);
-    // End date will be calculated automatically in useEffect
+    
+    // Immediately calculate the end date based on the new start date
+    if (repaymentFrequency && daysToComplete) {
+      const start = new Date(date);
+      let end = new Date(start);
+      
+      // Calculate end date based on frequency and daysToComplete
+      switch (repaymentFrequency) {
+        case 'daily':
+          end.setDate(start.getDate() + parseInt(daysToComplete));
+          break;
+        case 'weekly':
+          end.setDate(start.getDate() + (parseInt(daysToComplete) * 7));
+          break;
+        case 'monthly':
+          end.setMonth(start.getMonth() + parseInt(daysToComplete));
+          break;
+        case 'yearly':
+          end.setFullYear(start.getFullYear() + parseInt(daysToComplete));
+          break;
+      }
+      
+      setCalculatedEndDate(end);
+      calculateHighlightedDates(start, end);
+    }
   };
 
   const renderCalendar = () => {
@@ -206,9 +253,16 @@ const EnhancedDatePicker = ({
       // Ensure dates are formatted without timezone issues for display/storage
       const start = new Date(selectedStartDate.getFullYear(), selectedStartDate.getMonth(), selectedStartDate.getDate());
       const end = new Date(calculatedEndDate.getFullYear(), calculatedEndDate.getMonth(), calculatedEndDate.getDate());
+      
+      // Format dates as YYYY-MM-DD
+      const formattedStartDate = start.toISOString().split('T')[0];
+      const formattedEndDate = end.toISOString().split('T')[0];
+      
+      console.log('Selected dates:', { startDate: formattedStartDate, endDate: formattedEndDate });
+      
       onDateSelect({
-        startDate: start.toISOString().split('T')[0],
-        endDate: end.toISOString().split('T')[0]
+        startDate: formattedStartDate,
+        endDate: formattedEndDate
       });
     }
     onClose();

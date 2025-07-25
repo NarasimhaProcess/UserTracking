@@ -301,16 +301,35 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   // Filter plans by frequency if selected
   useEffect(() => {
     if (repaymentFrequency) {
-      setPlanOptions(repaymentPlans.filter(p => p.frequency === repaymentFrequency));
+      const filteredPlans = repaymentPlans.filter(p => p.frequency === repaymentFrequency);
+      setPlanOptions(filteredPlans);
+      
+      // If we have a selectedPlanId, check if it exists in the filtered plans
+      if (selectedPlanId) {
+        const planExists = filteredPlans.some(p => String(p.id) === String(selectedPlanId));
+        if (!planExists) {
+          // If the selected plan doesn't match the current frequency, find its frequency
+          const selectedPlan = repaymentPlans.find(p => String(p.id) === String(selectedPlanId));
+          if (selectedPlan) {
+            // Update the frequency to match the selected plan's frequency
+            setRepaymentFrequency(selectedPlan.frequency);
+          }
+        }
+      }
     } else {
       setPlanOptions(repaymentPlans);
     }
-    setSelectedPlanId('');
-  }, [repaymentFrequency, repaymentPlans]);
+    // Only reset selectedPlanId if we're not in edit mode and no plan is currently selected
+    // This prevents clearing the plan when editing an existing customer
+    if (!isEditMode && !selectedCustomer) {
+      setSelectedPlanId('');
+    }
+  }, [repaymentFrequency, repaymentPlans, isEditMode, selectedCustomer, selectedPlanId]);
+
 
   // Helper function to calculate repayment details
   const calculateRepaymentDetails = (planId, givenAmount, freq) => {
-    const plan = repaymentPlans.find(p => p.id === planId);
+    const plan = repaymentPlans.find(p => String(p.id) === String(planId));
     if (plan && givenAmount) {
       const scale = parseFloat(givenAmount) / parseFloat(plan.base_amount);
       setRepaymentAmount((scale * plan.repayment_per_period).toFixed(2));
@@ -1441,7 +1460,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
       remarks,
       amount_given: Number(amountGiven),
       repayment_frequency: repaymentFrequency,
-      repayment_plan_id: selectedPlanId,
+      repayment_plan_id: Number(selectedPlanId),
       repayment_amount: Number(repaymentAmount),
       days_to_complete: Number(daysToComplete),
       advance_amount: Number(advanceAmount),
@@ -1658,14 +1677,13 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                 selectedValue={selectedPlanId} 
                 onValueChange={(val) => {
                   setSelectedPlanId(val);
-                  const plan = repaymentPlans.find(p => p.id === val);
+                  const plan = repaymentPlans.find(p => String(p.id) === String(val));
                   if (plan && amountGiven) {
-                    const amount = parseFloat(amountGiven);
-                    const interestAmount = amount * (plan.interest_rate / 100);
-                    setRepaymentAmount(String(amount + interestAmount));
-                    setDaysToComplete(String(plan.duration));
-                    setAdvanceAmount(String(amount * (plan.advance_percentage / 100)));
-                    setLateFee(String(plan.late_fee));
+                    const scale = parseFloat(amountGiven) / parseFloat(plan.base_amount);
+                    setRepaymentAmount((scale * plan.repayment_per_period).toFixed(2));
+                    setAdvanceAmount(plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0');
+                    setDaysToComplete(plan.periods.toString());
+                    setLateFee(plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0');
                   }
                 }} 
                 style={styles.formPicker} 
@@ -2016,7 +2034,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                   const newAmount = val;
                   setSelectedCustomer({ ...selectedCustomer, amount_given: newAmount });
                   // Recalculate if plan is selected
-                  const plan = repaymentPlans.find(p => p.id === selectedCustomer.repayment_plan_id);
+                  const plan = repaymentPlans.find(p => String(p.id) === String(selectedCustomer.repayment_plan_id));
                   if (plan && newAmount) {
                     const scale = parseFloat(newAmount) / parseFloat(plan.base_amount);
                     setSelectedCustomer(prev => ({
@@ -2497,4 +2515,4 @@ export default function CreateCustomerScreen({ user, userProfile }) {
       )}
     </View>
   );
-} 
+}
