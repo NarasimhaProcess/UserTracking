@@ -297,7 +297,7 @@ const EnhancedDatePicker = ({
               {day}
             </Text>
             {isSelected && selectionMode === 'single' && (
-              <MaterialIcons name="check-circle" size={16} color="white" style={styles.checkIcon} />
+              <MaterialIcons name="check-circle" size={20} color="#333" style={styles.checkIcon} />
             )}
           </View>
         </TouchableOpacity>
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   dayCell: {
-    width: (width * 0.9 - 40) / 7,
+    flexBasis: '14.28%', // Approximately 100% / 7
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',

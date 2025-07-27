@@ -13,6 +13,7 @@ import MapView, { Marker } from 'react-native-maps';
 import * as uuid from 'uuid';
 import EnhancedDatePicker from '../components/EnhancedDatePicker';
 import { MaterialIcons } from '@expo/vector-icons';
+import AreaSearchBar from '../components/AreaSearchBar';
 
 function LocationSearchBar({ onLocationFound }) {
   const [query, setQuery] = useState('');
@@ -113,7 +114,8 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   const [customerType, setCustomerType] = useState('');
   const [areaId, setAreaId] = useState(null);
   const [areas, setAreas] = useState([]);
-  const [areaSearch, setAreaSearch] = useState(''); // <-- new state
+  const [areaSearch, setAreaSearch] = useState(''); // For filtering customer list
+  const [selectedAreaName, setSelectedAreaName] = useState(''); // For AreaSearchBar display
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
   const [remarks, setRemarks] = useState('');
@@ -268,9 +270,8 @@ export default function CreateCustomerScreen({ user, userProfile }) {
       const { data, error } = await query;
       let filtered = data || [];
       // Area filter
-      if (areaSearch) {
-        const areaMatches = areas.filter(a => a.area_name.toLowerCase().includes(areaSearch.toLowerCase())).map(a => a.id);
-        filtered = filtered.filter(c => areaMatches.includes(c.area_id));
+      if (areaId) {
+        filtered = filtered.filter(c => c.area_id === areaId);
       }
       // Customer search filter
       if (search) {
@@ -500,6 +501,8 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     setBookNo(''); // Clear book number for new customer
     setCustomerType(customer.customer_type || '');
     setAreaId(customer.area_id || null);
+    const selectedArea = areas.find(a => a.id === customer.area_id);
+    setSelectedAreaName(selectedArea ? selectedArea.area_name : '');
     setLatitude(customer.latitude || null);
     setLongitude(customer.longitude || null);
     setRemarks(customer.remarks || '');
@@ -744,6 +747,8 @@ export default function CreateCustomerScreen({ user, userProfile }) {
             setBookNo(item.book_no || '');
             setCustomerType(item.customer_type || '');
             setAreaId(item.area_id || null);
+            const selectedArea = areas.find(a => a.id === item.area_id);
+            setSelectedAreaName(selectedArea ? selectedArea.area_name : '');
             setLatitude(item.latitude || null);
             setLongitude(item.longitude || null);
             setRemarks(item.remarks || '');
@@ -796,6 +801,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     setBookNo('');
     setCustomerType('');
     setAreaId(null);
+    setSelectedAreaName('');
     setLatitude(null);
     setLongitude(null);
     setRemarks('');
@@ -1203,6 +1209,8 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     setBookNo(item.book_no);
     setCustomerType(item.customer_type || '');
     setAreaId(item.area_id || null);
+    const selectedArea = areas.find(a => a.id === item.area_id);
+    setSelectedAreaName(selectedArea ? selectedArea.area_name : '');
     setLatitude(item.latitude);
     setLongitude(item.longitude);
     setRemarks(item.remarks);
@@ -1599,10 +1607,18 @@ export default function CreateCustomerScreen({ user, userProfile }) {
         keyExtractor={item => item.id.toString()}
         ListHeaderComponent={
           <View>
+            <AreaSearchBar
+              areas={areas}
+              onAreaSelect={(id, name) => {
+                setAreaId(id);
+                setSelectedAreaName(name);
+              }}
+              selectedAreaName={selectedAreaName}
+            />
             <TextInput
               value={search}
               onChangeText={setSearch}
-              placeholder="Search by name, mobile, email, card no, area (use comma to search multiple)"
+              placeholder="Search by Card No, Name, Mobile, Email, Area (use comma to search multiple)"
               style={styles.searchInput}
             />
             <View style={{ flexDirection: 'row', backgroundColor: '#E3E6F0', borderTopLeftRadius: 8, borderTopRightRadius: 8, paddingVertical: 8 }}>
