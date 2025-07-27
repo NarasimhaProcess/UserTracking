@@ -147,8 +147,11 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   const [missingFields, setMissingFields] = useState([]);
   const isMissing = field => missingFields.includes(field);
   // Add transaction date state
+  
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
   const [showTransactionDatePicker, setShowTransactionDatePicker] = useState(false);
+  const [transactionStartDate, setTransactionStartDate] = useState('');
+  const [transactionEndDate, setTransactionEndDate] = useState('');
 
   // Auto-populate repayment amount when transaction type changes
   useEffect(() => {
@@ -219,6 +222,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   const [availableFrequencies, setAvailableFrequencies] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [planOptions, setPlanOptions] = useState([]);
+  const [selectedPlanName, setSelectedPlanName] = useState('');
   
   // Add state for start/end dates
   const [startDate, setStartDate] = useState('');
@@ -273,7 +277,8 @@ export default function CreateCustomerScreen({ user, userProfile }) {
         filtered = filtered.filter(c =>
           (c.name && c.name.toLowerCase().includes(search.toLowerCase())) ||
           (c.mobile && c.mobile.includes(search)) ||
-          (c.email && c.email.toLowerCase().includes(search.toLowerCase()))
+          (c.email && c.email.toLowerCase().includes(search.toLowerCase())) ||
+          (c.book_no && c.book_no.toString().toLowerCase().includes(search.toLowerCase()))
         );
       }
       setCustomers(filtered);
@@ -298,58 +303,80 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     fetchPlans();
   }, []);
 
-  // Filter plans by frequency if selected
   useEffect(() => {
     if (repaymentFrequency) {
       const filteredPlans = repaymentPlans.filter(p => p.frequency === repaymentFrequency);
       setPlanOptions(filteredPlans);
-      
-      // If we have a selectedPlanId, check if it exists in the filtered plans
-      if (selectedPlanId) {
-        const planExists = filteredPlans.some(p => String(p.id) === String(selectedPlanId));
-        if (!planExists) {
-          // If the selected plan doesn't match the current frequency, find its frequency
-          const selectedPlan = repaymentPlans.find(p => String(p.id) === String(selectedPlanId));
-          if (selectedPlan) {
-            // Update the frequency to match the selected plan's frequency
-            setRepaymentFrequency(selectedPlan.frequency);
-          }
+
+      // Only set selectedPlanId if in edit mode and a plan exists for the selected customer
+      if (isEditMode && selectedCustomer && selectedCustomer.repayment_plan_id) {
+        const planExists = filteredPlans.some(p => String(p.id) === String(selectedCustomer.repayment_plan_id));
+        if (planExists) {
+          setSelectedPlanId(String(selectedCustomer.repayment_plan_id));
+        } else {
+          // If the existing plan doesn't match the new frequency, clear selection
+          setSelectedPlanId('');
         }
       }
     } else {
       setPlanOptions(repaymentPlans);
+      // Only clear selectedPlanId if not in edit mode or no customer is selected
+      if (!isEditMode || !selectedCustomer) {
+        setSelectedPlanId('');
+      }
     }
-    // Only reset selectedPlanId if we're not in edit mode and no plan is currently selected
-    // This prevents clearing the plan when editing an existing customer
-    if (!isEditMode && !selectedCustomer) {
-      setSelectedPlanId('');
-    }
-  }, [repaymentFrequency, repaymentPlans, isEditMode, selectedCustomer, selectedPlanId]);
+  }, [repaymentFrequency, repaymentPlans, isEditMode, selectedCustomer?.repayment_plan_id]);
 
 
   // Helper function to calculate repayment details
   const calculateRepaymentDetails = (planId, givenAmount, freq) => {
+    console.log('calculateRepaymentDetails called:', { planId, givenAmount, freq });
     const plan = repaymentPlans.find(p => String(p.id) === String(planId));
-    if (plan && givenAmount) {
+    console.log('Found plan:', plan);
+    
+    if (plan && givenAmount && parseFloat(givenAmount) > 0) {
       const scale = parseFloat(givenAmount) / parseFloat(plan.base_amount);
-      setRepaymentAmount((scale * plan.repayment_per_period).toFixed(2));
-      setAdvanceAmount(plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0');
-      setDaysToComplete(plan.periods.toString());
-      setLateFee(plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0');
-      setRepaymentFrequency(plan.frequency);
+      console.log('Calculation scale:', scale);
+      
+      const calculatedRepaymentAmount = (scale * plan.repayment_per_period).toFixed(2);
+      const calculatedAdvanceAmount = plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0';
+      const calculatedDaysToComplete = plan.periods.toString();
+      const calculatedLateFee = plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0';
+      
+      console.log('Setting calculated values:', {
+        repaymentAmount: calculatedRepaymentAmount,
+        advanceAmount: calculatedAdvanceAmount,
+        daysToComplete: calculatedDaysToComplete,
+        lateFee: calculatedLateFee
+      });
+      
+      setRepaymentAmount(calculatedRepaymentAmount);
+      setAdvanceAmount(calculatedAdvanceAmount);
+      setDaysToComplete(calculatedDaysToComplete);
+      setLateFee(calculatedLateFee);
+      
+      // Only update frequency if it doesn't match the plan's frequency
+      if (plan.frequency !== freq) {
+        setRepaymentFrequency(plan.frequency);
+      }
     } else {
-      setRepaymentAmount('');
-      setAdvanceAmount('');
-      setDaysToComplete('');
-      setLateFee('');
+      console.log('Clearing calculated values - no plan or amount');
+      // Only clear if we're not in edit mode or if planId is explicitly empty
+      if (!isEditMode || !planId) {
+        setRepaymentAmount('');
+        setAdvanceAmount('');
+        setDaysToComplete('');
+        setLateFee('');
+      }
       if (!planId) setRepaymentFrequency(freq || ''); // Only reset frequency if no plan is selected
     }
   };
 
   // Auto-calculate repayment/advance/days/late fee when plan or amount changes (for Add Customer)
   useEffect(() => {
+    console.log('Auto-calculation useEffect triggered:', { selectedPlanId, amountGiven, repaymentPlans: repaymentPlans.length });
     calculateRepaymentDetails(selectedPlanId, amountGiven, repaymentFrequency);
-  }, [selectedPlanId, amountGiven, repaymentPlans]);
+  }, [selectedPlanId, amountGiven, repaymentPlans, repaymentFrequency]);
 
   // Auto-calculate end date when start date or days to complete changes
   useEffect(() => {
@@ -438,29 +465,17 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     setShowEnhancedDatePicker(false);
   };
 
-  // Transaction date change alert function
-  const handleTransactionDateChange = (selectedDate) => {
-    const today = new Date().toISOString().split('T')[0];
-    if (selectedDate !== today) {
-      Alert.alert(
-        "Date Selection",
-        "You have selected a different date than current date. Do you want to proceed?",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "OK", onPress: () => setTransactionDate(selectedDate) }
-        ]
-      );
-    } else {
-      setTransactionDate(selectedDate);
-    }
-  };
+  
 
   // Open transaction modal with auto-populated repayment amount
   const openTransactionModal = (customer) => {
     console.log('openTransactionModal called with customer:', customer);
     setTransactionCustomer(customer);
-    setNewTransactionAmount(customer.repaymentAmount || ''); // Auto-populate
-    setTransactionDate(new Date().toISOString().split('T')[0]); // Reset to current date
+    setNewTransactionAmount(customer.repayment_amount ? String(customer.repayment_amount) : ''); // Auto-populate from repayment_amount
+    setTransactionStartDate(customer.start_date || '');
+    setTransactionEndDate(customer.end_date || '');
+    // Initialize transactionDate to customer's start_date if available, otherwise current date
+    setTransactionDate(customer.start_date ? customer.start_date.split('T')[0] : new Date().toISOString().split('T')[0]);
     setShowTransactionModal(true);
     fetchTransactions(customer.id);
     fetchCustomerDocs(customer.id);
@@ -734,6 +749,10 @@ export default function CreateCustomerScreen({ user, userProfile }) {
             setRemarks(item.remarks || '');
             setAmountGiven(item.amount_given ? String(item.amount_given) : '');
             setRepaymentFrequency(item.repayment_frequency || '');
+            // Filter plan options based on the customer's repayment frequency
+            const filteredPlans = repaymentPlans.filter(p => p.frequency === (item.repayment_frequency || ''));
+            setPlanOptions(filteredPlans);
+            
             setRepaymentAmount(item.repayment_amount ? String(item.repayment_amount) : '');
             setDaysToComplete(item.days_to_complete ? String(item.days_to_complete) : '');
             setAdvanceAmount(item.advance_amount ? String(item.advance_amount) : '0');
@@ -1182,22 +1201,44 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     setMobile(item.mobile);
     setEmail(item.email);
     setBookNo(item.book_no);
-    setCustomerType(item.customer_type);
-    setAreaId(item.area_id);
+    setCustomerType(item.customer_type || '');
+    setAreaId(item.area_id || null);
     setLatitude(item.latitude);
     setLongitude(item.longitude);
     setRemarks(item.remarks);
     setAmountGiven(item.amount_given ? String(item.amount_given) : '');
     setRepaymentFrequency(item.repayment_frequency || '');
+    // Filter plan options based on the customer's repayment frequency
+    const filteredPlans = repaymentPlans.filter(p => p.frequency === (item.repayment_frequency || ''));
+    setPlanOptions(filteredPlans);
+    
     setRepaymentAmount(item.repayment_amount ? String(item.repayment_amount) : '');
     setDaysToComplete(item.days_to_complete ? String(item.days_to_complete) : '');
     setAdvanceAmount(item.advance_amount ? String(item.advance_amount) : '0');
     setLateFee(item.late_fee_per_day ? String(item.late_fee_per_day) : '');
     setSelectedPlanId(item.repayment_plan_id ? String(item.repayment_plan_id) : '');
     
+    // Set the repayment plan name for display
+    if (item.repayment_plan_id) {
+      const plan = filteredPlans.find(p => String(p.id) === String(item.repayment_plan_id));
+      if (plan) {
+        setSelectedPlanName(plan.name);
+        console.log('Found plan name:', plan.name);
+      } else {
+        setSelectedPlanName('');
+        console.log('Plan not found for ID:', item.repayment_plan_id);
+      }
+    } else {
+      setSelectedPlanName('');
+      console.log('No repayment_plan_id for item.');
+    }
+
     // Set start and end dates if they exist
     setStartDate(item.start_date || '');
     setEndDate(item.end_date || '');
+    console.log('handleEditCustomer - selectedCustomer.repayment_plan_id:', item.repayment_plan_id);
+    console.log('handleEditCustomer - selectedPlanId:', (item.repayment_plan_id ? String(item.repayment_plan_id) : ''));
+    console.log('handleEditCustomer - selectedPlanName:', (item.repayment_plan_id ? (repaymentPlans.find(p => String(p.id) === String(item.repayment_plan_id))?.name || '') : ''));
     
     fetchCustomerDocs(item.id);
     setShowCustomerFormModal(true);
@@ -1649,18 +1690,17 @@ export default function CreateCustomerScreen({ user, userProfile }) {
               <Text style={styles.formLabel}>Amount Given</Text>
               <TextInput value={amountGiven} onChangeText={setAmountGiven} style={[styles.input, isMissing('amountGiven') && { borderColor: 'red', borderWidth: 2 }]} keyboardType="numeric" />
               <Text style={styles.formLabel}>Repayment Frequency</Text>
-              <Picker 
-                selectedValue={repaymentFrequency} 
+              <Picker
+                selectedValue={repaymentFrequency}
                 onValueChange={(val) => {
                   setRepaymentFrequency(val);
-                  setSelectedPlanId(''); // Reset selected plan
-                  // Update plan options based on frequency
-                  if (val) {
-                    setPlanOptions(repaymentPlans.filter(p => p.frequency === val));
-                  } else {
-                    setPlanOptions([]);
-                  }
-                }} 
+                  setSelectedPlanId('');
+                  setPlanOptions(val ? repaymentPlans.filter(p => p.frequency === val) : []);
+                  setRepaymentAmount('');
+                  setAdvanceAmount('');
+                  setDaysToComplete('');
+                  setLateFee('');
+                }}
                 style={styles.formPicker}
               >
                 <Picker.Item label="Select Frequency" value="" />
@@ -1676,21 +1716,21 @@ export default function CreateCustomerScreen({ user, userProfile }) {
               <Picker 
                 selectedValue={selectedPlanId} 
                 onValueChange={(val) => {
+                  console.log('Create Customer - Picker onValueChange - selectedPlanId before:', selectedPlanId, 'new val:', val);
                   setSelectedPlanId(val);
-                  const plan = repaymentPlans.find(p => String(p.id) === String(val));
-                  if (plan && amountGiven) {
-                    const scale = parseFloat(amountGiven) / parseFloat(plan.base_amount);
-                    setRepaymentAmount((scale * plan.repayment_per_period).toFixed(2));
-                    setAdvanceAmount(plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0');
-                    setDaysToComplete(plan.periods.toString());
-                    setLateFee(plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0');
+                  // Trigger auto-calculation immediately when plan is selected
+                  if (val && amountGiven) {
+                    calculateRepaymentDetails(val, amountGiven, repaymentFrequency);
                   }
                 }} 
                 style={styles.formPicker} 
-                enabled={!!repaymentFrequency}
+                enabled={!!repaymentFrequency && planOptions.length > 0}
               >
                 <Picker.Item label="Select Plan" value="" />
-                {planOptions.map(plan => <Picker.Item key={plan.id} label={plan.name} value={plan.id} />)}
+                {planOptions.map(plan => {
+                  console.log('Create Customer - Picker Item - plan.id:', plan.id, 'plan.name:', plan.name, 'selectedPlanId:', selectedPlanId);
+                  return <Picker.Item key={plan.id} label={plan.name} value={String(plan.id)} />;
+                })}
               </Picker>
               <Text style={styles.formLabel}>Repayment Amount (auto-calculated)</Text>
               <TextInput value={repaymentAmount} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
@@ -1718,16 +1758,13 @@ export default function CreateCustomerScreen({ user, userProfile }) {
               <EnhancedDatePicker
                 visible={showEnhancedDatePicker}
                 onClose={() => setShowEnhancedDatePicker(false)}
-                onDateSelect={(dates) => {
-                  setStartDate(dates.startDate);
-                  setEndDate(dates.endDate);
-                  setShowEnhancedDatePicker(false);
-                }}
+                onDateSelect={onEnhancedDateSelect}
                 startDate={startDate}
                 endDate={endDate}
                 repaymentFrequency={repaymentFrequency}
                 daysToComplete={daysToComplete}
               />
+
               <Text style={styles.sectionHeader}>Other</Text>
               <Text style={styles.formLabel}>Area</Text>
               <Picker selectedValue={areaId} onValueChange={setAreaId} style={styles.formPicker}>
@@ -2018,40 +2055,120 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                   {availableFrequencies.map(freq => <Picker.Item key={freq} label={freq.charAt(0).toUpperCase() + freq.slice(1)} value={freq} />)}
                 </Picker>
                 <Text style={styles.formLabel}>Repayment Plan</Text>
-                <Picker selectedValue={selectedCustomer.repayment_plan_id} onValueChange={val => {
-                  setSelectedCustomer({ ...selectedCustomer, repayment_plan_id: val });
-                  calculateRepaymentDetails(
-                    val,
-                    selectedCustomer.amount_given ? String(selectedCustomer.amount_given) : '',
-                    selectedCustomer.repayment_frequency || ''
-                  );
-                }} style={styles.formPicker} enabled={!!selectedCustomer.repayment_frequency}>
-                  <Picker.Item label="Select Plan" value="" />
-                  {repaymentPlans.filter(p => p.frequency === selectedCustomer.repayment_frequency).map(plan => <Picker.Item key={plan.id} label={plan.name} value={plan.id} />)}
+                <Picker 
+                  selectedValue={selectedPlanId} 
+                  onValueChange={val => {
+                    console.log('Edit Customer - Plan selected:', val);
+                    const plan = repaymentPlans.find(p => String(p.id) === String(val));
+                    
+                    if (plan && selectedCustomer.amount_given) {
+                      const scale = parseFloat(selectedCustomer.amount_given) / parseFloat(plan.base_amount);
+                      const calculatedRepaymentAmount = (scale * plan.repayment_per_period).toFixed(2);
+                      const calculatedAdvanceAmount = plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0';
+                      const calculatedDaysToComplete = plan.periods.toString();
+                      const calculatedLateFee = plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0';
+                      
+                      console.log('Edit Customer - Calculated values:', {
+                        repaymentAmount: calculatedRepaymentAmount,
+                        advanceAmount: calculatedAdvanceAmount,
+                        daysToComplete: calculatedDaysToComplete,
+                        lateFee: calculatedLateFee
+                      });
+                      
+                      setSelectedCustomer(prev => ({
+                        ...prev,
+                        repayment_plan_id: val,
+                        repayment_amount: calculatedRepaymentAmount,
+                        advance_amount: calculatedAdvanceAmount,
+                        days_to_complete: calculatedDaysToComplete,
+                        late_fee_per_day: calculatedLateFee,
+                        repayment_frequency: plan.frequency
+                      }));
+                      
+                      // Also update the form state variables for consistency
+                      setRepaymentAmount(calculatedRepaymentAmount);
+                      setAdvanceAmount(calculatedAdvanceAmount);
+                      setDaysToComplete(calculatedDaysToComplete);
+                      setLateFee(calculatedLateFee);
+                      setRepaymentFrequency(plan.frequency);
+                      setSelectedPlanId(String(val));
+                      
+                      // Removed setSelectedPlanName(plan.name) from here
+                    } else {
+                      console.log('Edit Customer - Clearing calculated values');
+                      setSelectedCustomer(prev => ({
+                        ...prev,
+                        repayment_plan_id: val,
+                        repayment_amount: '',
+                        advance_amount: '',
+                        days_to_complete: '',
+                        late_fee_per_day: ''
+                      }));
+                      setSelectedPlanName('');
+                    }
+                  }} 
+                  style={styles.formPicker}
+                >
+                  <Picker.Item label="Select Plan" value="" /> 
+                  {planOptions.map(plan => (
+                    <Picker.Item key={plan.id} label={plan.name} value={String(plan.id)} />
+                  ))}
                 </Picker>
                 <Text style={styles.formLabel}>Amount Given</Text>
                 <TextInput value={selectedCustomer.amount_given} onChangeText={val => {
+                  console.log('Edit Customer - Amount changed:', val);
                   const newAmount = val;
-                  setSelectedCustomer({ ...selectedCustomer, amount_given: newAmount });
+                  
                   // Recalculate if plan is selected
                   const plan = repaymentPlans.find(p => String(p.id) === String(selectedCustomer.repayment_plan_id));
-                  if (plan && newAmount) {
+                  
+                  if (plan && newAmount && parseFloat(newAmount) > 0) {
                     const scale = parseFloat(newAmount) / parseFloat(plan.base_amount);
+                    const calculatedRepaymentAmount = (scale * plan.repayment_per_period).toFixed(2);
+                    const calculatedAdvanceAmount = plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0';
+                    const calculatedDaysToComplete = plan.periods.toString();
+                    const calculatedLateFee = plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0';
+                    
+                    console.log('Edit Customer - Recalculated from amount change:', {
+                      scale,
+                      repaymentAmount: calculatedRepaymentAmount,
+                      advanceAmount: calculatedAdvanceAmount,
+                      daysToComplete: calculatedDaysToComplete,
+                      lateFee: calculatedLateFee
+                    });
+                    
                     setSelectedCustomer(prev => ({
                       ...prev,
-                      repayment_amount: (scale * plan.repayment_per_period).toFixed(2),
-                      advance_amount: plan.advance_amount ? (scale * plan.advance_amount).toFixed(2) : '0',
-                      days_to_complete: plan.periods.toString(),
-                      late_fee_per_period: plan.late_fee_per_period ? plan.late_fee_per_period.toString() : '0',
+                      amount_given: newAmount,
+                      repayment_amount: calculatedRepaymentAmount,
+                      advance_amount: calculatedAdvanceAmount,
+                      days_to_complete: calculatedDaysToComplete,
+                      late_fee_per_day: calculatedLateFee,
                     }));
-                  } else if (!newAmount) {
+                    
+                    // Also update form state for consistency
+                    setAmountGiven(newAmount);
+                    setRepaymentAmount(calculatedRepaymentAmount);
+                    setAdvanceAmount(calculatedAdvanceAmount);
+                    setDaysToComplete(calculatedDaysToComplete);
+                    setLateFee(calculatedLateFee);
+                  } else {
+                    console.log('Edit Customer - Clearing calculated values (no plan or amount)');
                     setSelectedCustomer(prev => ({
                       ...prev,
+                      amount_given: newAmount,
                       repayment_amount: '',
                       advance_amount: '',
                       days_to_complete: '',
-                      late_fee_per_perio: '',
+                      late_fee_per_day: '',
                     }));
+                    
+                    // Also update form state
+                    setAmountGiven(newAmount);
+                    setRepaymentAmount('');
+                    setAdvanceAmount('');
+                    setDaysToComplete('');
+                    setLateFee('');
                   }
                 }} style={styles.input} keyboardType="numeric" />
                 <Text style={styles.formLabel}>Repayment Amount (auto-calculated)</Text>
@@ -2258,14 +2375,17 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                       {/* Customer Info and Date Range Display */}
                       <View style={{ backgroundColor: '#E8F4FD', borderRadius: 8, padding: 12, marginBottom: 12 }}>
                         <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#2E5BBA', marginBottom: 6 }}>Customer: {transactionCustomer.name}</Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <Text style={{ fontSize: 14, color: '#666', fontWeight: '500' }}>📅 Start Date:</Text>
-                          <Text style={{ fontSize: 14, color: '#333', fontWeight: 'bold' }}>{formatDate(transactionCustomer.start_date)}</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <Text style={{ fontSize: 14, color: '#666', fontWeight: '500' }}>📅 End Date:</Text>
-                          <Text style={{ fontSize: 14, color: '#333', fontWeight: 'bold' }}>{formatDate(transactionCustomer.end_date)}</Text>
-                        </View>
+                        <TouchableOpacity 
+                          style={[styles.input, { justifyContent: 'center', paddingVertical: 12, backgroundColor: transactionCustomer?.start_date && transactionCustomer?.end_date ? '#e8f5e8' : '#f8f9fa' }]} 
+                          onPress={() => setShowEnhancedDatePicker(true)}
+                        >
+                          <Text style={{ color: transactionCustomer?.start_date && transactionCustomer?.end_date ? '#2e7d32' : '#666', textAlign: 'center', fontSize: 16 }}>
+                            {transactionCustomer?.start_date && transactionCustomer?.end_date 
+                              ? `${formatDate(transactionCustomer.start_date)} 📅 ${formatDate(transactionCustomer.end_date)}`
+                              : 'View Repayment Dates'
+                            }
+                          </Text>
+                        </TouchableOpacity>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                           <Text style={{ fontSize: 14, color: '#666', fontWeight: '500' }}>💰 Repayment:</Text>
                           <Text style={{ fontSize: 14, color: '#333', fontWeight: 'bold' }}>₹{transactionCustomer.repayment_amount} ({transactionCustomer.repayment_frequency})</Text>
@@ -2280,7 +2400,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                           <Text style={{ fontWeight: 'bold', color: '#DC3545', fontSize: 15 }}>₹{getPendingAmount()}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <Text style={{ fontWeight: 'bold', color: '#FD7E14', fontSize: 15 }}>📅 Pending Days:</Text>
+                          <Text style={{ fontWeight: 'bold', color: '#FD7E14', fontSize: 15 }}>📅 Pending Periods:</Text>
                           <Text style={{ fontWeight: 'bold', color: '#FD7E14', fontSize: 15 }}>{getPendingDays()}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -2298,25 +2418,51 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                         <Text style={styles.modalTitle}>Add Transaction</Text>
                         
                         {/* Transaction Date Picker */}
-                        <Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: '#333' }}>Transaction Date:</Text>
+                        <Text style={styles.formLabel}>Select Transaction Date</Text>
+                        {transactionCustomer?.start_date && transactionCustomer?.end_date && (
+                          <Text style={{ fontSize: 14, color: '#666', marginBottom: 8 }}>
+                            Customer Repayment Range: {formatDate(transactionCustomer.start_date)} - {formatDate(transactionCustomer.end_date)}
+                          </Text>
+                        )}
                         <TouchableOpacity 
                           style={[
                             styles.formInput, 
                             { 
-                              justifyContent: 'center', 
+                              justifyContent: 'space-between', 
+                              flexDirection: 'row', 
+                              alignItems: 'center', 
                               backgroundColor: transactionDate !== new Date().toISOString().split('T')[0] ? '#FFF3CD' : '#fff',
-                              borderColor: transactionDate !== new Date().toISOString().split('T')[0] ? '#856404' : '#ccc'
+                              borderColor: transactionDate !== new Date().toISOString().split('T')[0] ? '#856404' : '#ccc',
+                              paddingRight: 10 
                             }
                           ]}
                           onPress={() => setShowTransactionDatePicker(true)}
                         >
-                          <Text style={{ 
-                            color: transactionDate !== new Date().toISOString().split('T')[0] ? '#856404' : '#333',
-                            fontWeight: transactionDate !== new Date().toISOString().split('T')[0] ? 'bold' : 'normal'
-                          }}>
-                            {formatDate(transactionDate)} {transactionDate === new Date().toISOString().split('T')[0] ? '(Today)' : '(Custom Date)'}
-                          </Text>
+                          <View>
+                            <Text style={{ 
+                              color: transactionDate !== new Date().toISOString().split('T')[0] ? '#856404' : '#333',
+                              fontWeight: transactionDate !== new Date().toISOString().split('T')[0] ? 'bold' : 'normal'
+                            }}>
+                              {formatDate(transactionDate)} {transactionDate === new Date().toISOString().split('T')[0] ? '(Today)' : '(Custom Date)'}
+                            </Text>
+                          </View>
+                          <MaterialIcons name="calendar-today" size={24} color="#007AFF" />
                         </TouchableOpacity>
+                        {showTransactionDatePicker && (
+                          <EnhancedDatePicker
+                            visible={showTransactionDatePicker}
+                            onClose={() => setShowTransactionDatePicker(false)}
+                            onDateSelect={(date) => {
+                              setTransactionDate(date.startDate); // In single mode, startDate holds the selected date
+                              setShowTransactionDatePicker(false);
+                            }}
+                            startDate={transactionDate} // Pass the current transactionDate as startDate
+                            endDate={transactionCustomer?.end_date}
+                            repaymentFrequency={transactionCustomer?.repayment_frequency}
+                            daysToComplete={transactionCustomer?.days_to_complete}
+                            selectionMode="single"
+                          />
+                        )}
                         <TextInput value={newTransactionAmount} onChangeText={setNewTransactionAmount} placeholder="Amount" keyboardType="numeric" style={styles.formInput} />
                         <Picker selectedValue={newTransactionType} onValueChange={setNewTransactionType} style={styles.formPicker}>
                           <Picker.Item label="Repayment" value="repayment" />
@@ -2339,22 +2485,10 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                           <TouchableOpacity onPress={() => setShowTransactionModal(false)} style={{ flex: 1, backgroundColor: '#ccc', borderRadius: 8, paddingVertical: 12, marginRight: 8, alignItems: 'center' }}>
                             <Text style={{ color: '#333', fontWeight: 'bold', fontSize: 16 }}>Close</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity 
-                            onPress={handleAddTransaction} 
-                            disabled={isTransactionSaving}
-                            style={{ 
-                              flex: 1, 
-                              backgroundColor: isTransactionSaving ? '#ccc' : '#4A90E2', 
-                              borderRadius: 8, 
-                              paddingVertical: 12, 
-                              marginLeft: 8, 
-                              alignItems: 'center' 
-                            }}
-                          >
-                            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
-                              {isTransactionSaving ? 'Saving...' : 'Add Transaction'}
-                            </Text>
-                          </TouchableOpacity>
+                          <TouchableOpacity style={[styles.iconButton, { backgroundColor: '#007AFF', borderRadius: 8, padding: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }]} onPress={handleAddTransaction}>
+              <MaterialIcons name="add" size={24} color="white" />
+              <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold', marginLeft: 5 }}>Add Transaction</Text>
+            </TouchableOpacity>
                         </View>
                       </View>
 
@@ -2483,36 +2617,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
         daysToComplete={daysToComplete}
       />
 
-      {/* Transaction Date Picker Modal */}
-      {showTransactionDatePicker && (
-        <DateTimePicker
-          value={new Date(transactionDate)}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          minimumDate={transactionCustomer?.start_date ? new Date(transactionCustomer.start_date) : undefined}
-          maximumDate={transactionCustomer?.end_date ? new Date(transactionCustomer.end_date) : undefined}
-          onChange={(event, selectedDate) => {
-            setShowTransactionDatePicker(Platform.OS === 'ios');
-            if (event.type === 'set' && selectedDate) {
-              const dateString = selectedDate.toISOString().split('T')[0];
-              // Check if selected date is within customer range
-              const customerStart = transactionCustomer?.start_date;
-              const customerEnd = transactionCustomer?.end_date;
-              
-              if (customerStart && dateString < customerStart) {
-                Alert.alert('Invalid Date', 'Selected date is before customer start date.');
-                return;
-              }
-              if (customerEnd && dateString > customerEnd) {
-                Alert.alert('Invalid Date', 'Selected date is after customer end date.');
-                return;
-              }
-              
-              handleTransactionDateChange(dateString);
-            }
-          }}
-        />
-      )}
+      
     </View>
   );
 }

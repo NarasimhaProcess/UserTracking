@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, ScrollView, Dimensions, Alert } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, ScrollView, Dimensions, Alert, FlatList } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -8,60 +9,107 @@ const EnhancedDatePicker = ({
   onClose, 
   onDateSelect, 
   startDate, 
-  endDate, // Add endDate prop
+  endDate, 
   repaymentFrequency, 
-  daysToComplete 
+  daysToComplete,
+  selectionMode = 'range' // 'range' or 'single'
 }) => {
   const today = new Date();
   const [currentMonth, setCurrentMonth] = useState(today);
-  const [selectedStartDate, setSelectedStartDate] = useState(() => {
-    if (startDate) {
-      const [year, month, day] = startDate.split('-').map(Number);
-      const date = new Date(year, month - 1, day);
-      return isNaN(date.getTime()) ? null : date; // Return null if date is invalid
-    }
-    return null; // Default to null if no startDate
-  });
-  const [calculatedEndDate, setCalculatedEndDate] = useState(() => {
-    if (endDate) {
-      const [year, month, day] = endDate.split('-').map(Number);
-      const date = new Date(year, month - 1, day);
-      return isNaN(date.getTime()) ? null : date; // Return null if date is invalid
-    }
-    return null; // Default to null if no endDate
-  });
+  const [selectedStartDate, setSelectedStartDate] = useState(null);
+  const [calculatedEndDate, setCalculatedEndDate] = useState(null);
   const [highlightedDates, setHighlightedDates] = useState([]);
+  const [months, setMonths] = useState([]);
+  const flatListRef = useRef(null);
+  const [initialScrollIndex, setInitialScrollIndex] = useState(0);
 
-  // Update selectedStartDate and calculatedEndDate when props change
-  useEffect(() => {
-    if (startDate) {
-      const [year, month, day] = startDate.split('-').map(Number);
-      const date = new Date(year, month - 1, day);
-      if (!isNaN(date.getTime())) {
-        setSelectedStartDate(date);
-      }
+  // Helper function to parse dates safely without timezone issues
+  const parseDate = useCallback((dateString) => {
+    if (!dateString) return null;
+    // If it's already a Date object, return it
+    if (dateString instanceof Date) return dateString;
+    // Parse YYYY-MM-DD format manually to avoid timezone issues
+    if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateString.split('-').map(Number);
+      return new Date(year, month - 1, day); // month is 0-indexed
     }
+    // Fallback to standard Date parsing
+    return new Date(dateString);
+  }, []);
+
+  // Generate months for virtual scrolling - memoized to prevent recreation
+  const generateMonths = useCallback(() => {
+    const monthsList = [];
+    const currentYear = today.getFullYear();
+    const startYear = currentYear - 2; // 2 years back
+    const endYear = currentYear + 3; // 3 years forward
     
-    if (endDate) {
-      const [year, month, day] = endDate.split('-').map(Number);
-      const date = new Date(year, month - 1, day);
-      if (!isNaN(date.getTime())) {
-        setCalculatedEndDate(date);
+    for (let year = startYear; year <= endYear; year++) {
+      for (let month = 0; month < 12; month++) {
+        const monthDate = new Date(year, month, 1);
+        monthsList.push({
+          id: `${year}-${month}`,
+          date: monthDate,
+          year,
+          month
+        });
       }
     }
-  }, [startDate, endDate]);
+    return monthsList;
+  }, [today.getFullYear()]); // Only depend on year, not the entire today object
 
+  // Initialize months only once when component mounts
   useEffect(() => {
-    if (selectedStartDate && repaymentFrequency && daysToComplete) {
-      calculateEndDateAndHighlights();
-    } else if (!selectedStartDate) {
-      // If selectedStartDate becomes null, clear calculatedEndDate and highlightedDates
-      setCalculatedEndDate(null);
-      setHighlightedDates([]);
-    }
-  }, [selectedStartDate, repaymentFrequency, daysToComplete]);
+    const monthsList = generateMonths();
+    setMonths(monthsList);
+    
+    // Find initial scroll index based on current month or start date
+    const targetDate = parseDate(startDate) || today;
+    const targetIndex = monthsList.findIndex(m => 
+      m.year === targetDate.getFullYear() && m.month === targetDate.getMonth()
+    );
+    setInitialScrollIndex(Math.max(0, targetIndex));
+  }, [generateMonths]); // Remove startDate and today from dependencies
 
-  const calculateEndDateAndHighlights = () => {
+  // Memoized calculation functions to prevent recreation on every render
+  const calculateHighlightedDates = useCallback((start, end) => {
+    if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime()) || !daysToComplete) {
+      return [];
+    }
+
+    const dates = [];
+    const periodsNum = parseInt(daysToComplete);
+    const normalizedStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+
+    // Always add the start date as a highlighted date
+    dates.push(new Date(normalizedStart));
+
+    for (let i = 1; i < periodsNum; i++) {
+      let nextDate = new Date(normalizedStart);
+      switch (repaymentFrequency) {
+        case 'daily':
+          nextDate.setDate(normalizedStart.getDate() + i);
+          break;
+        case 'weekly':
+          nextDate.setDate(normalizedStart.getDate() + (i * 7));
+          break;
+        case 'monthly':
+          nextDate.setMonth(normalizedStart.getMonth() + i);
+          break;
+        case 'yearly':
+          nextDate.setFullYear(normalizedStart.getFullYear() + i);
+          break;
+      }
+      if (nextDate <= end) {
+        dates.push(new Date(nextDate));
+      } else {
+        break;
+      }
+    }
+    return dates;
+  }, [repaymentFrequency, daysToComplete]);
+
+  const calculateEndDateAndHighlights = useCallback(() => {
     if (!selectedStartDate || !repaymentFrequency || !daysToComplete) {
       setCalculatedEndDate(null);
       setHighlightedDates([]);
@@ -88,118 +136,120 @@ const EnhancedDatePicker = ({
     }
     
     setCalculatedEndDate(endDate);
-    calculateHighlightedDates(start, endDate);
-  };
+    const highlights = calculateHighlightedDates(start, endDate);
+    setHighlightedDates(highlights);
+  }, [selectedStartDate, repaymentFrequency, daysToComplete, calculateHighlightedDates]);
 
-  const calculateHighlightedDates = (start, end) => {
-    if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
-      setHighlightedDates([]);
-      return;
-    }
+  // Reset internal state when modal opens to sync with current props
+  useEffect(() => {
+    if (!visible) return; // Early return if modal is not visible
 
-    const dates = [];
-    const periodsNum = parseInt(daysToComplete);
-    const normalizedStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const propStart = parseDate(startDate);
+    const propEnd = parseDate(endDate);
 
-    // Always add the start date as a highlighted date
-    dates.push(new Date(normalizedStart));
+    if (selectionMode === 'single') {
+      setSelectedStartDate(propStart || today);
+      setCurrentMonth(propStart || today);
 
-    for (let i = 1; i < periodsNum; i++) { // Start from 1 because the first date is already added
-      let nextDate = new Date(normalizedStart);
-      switch (repaymentFrequency) {
-        case 'daily':
-          nextDate.setDate(normalizedStart.getDate() + i);
-          break;
-        case 'weekly':
-          nextDate.setDate(normalizedStart.getDate() + (i * 7));
-          break;
-        case 'monthly':
-          nextDate.setMonth(normalizedStart.getMonth() + i);
-          break;
-        case 'yearly':
-          nextDate.setFullYear(normalizedStart.getFullYear() + i);
-          break;
-      }
-      // Ensure the calculated date is within the overall repayment range (start to calculatedEndDate)
-      // This check is important if daysToComplete is large and calculatedEndDate is limited by some other factor
-      if (nextDate <= end) {
-        dates.push(new Date(nextDate));
+      if (propStart && propEnd && repaymentFrequency && daysToComplete) {
+        const highlights = calculateHighlightedDates(propStart, propEnd);
+        setHighlightedDates(highlights);
       } else {
-        // If the next calculated repayment date exceeds the overall end date, stop.
-        break;
+        setHighlightedDates([]);
+      }
+    } else { // Range selection mode
+      setSelectedStartDate(propStart);
+      setCalculatedEndDate(propEnd);
+      setCurrentMonth(propStart || today);
+
+      if (propStart && propEnd && repaymentFrequency && daysToComplete) {
+        const highlights = calculateHighlightedDates(propStart, propEnd);
+        setHighlightedDates(highlights);
+      } else {
+        setHighlightedDates([]);
       }
     }
-    setHighlightedDates(dates);
-  };
+  }, [visible, startDate, endDate, selectionMode, repaymentFrequency, daysToComplete, parseDate, calculateHighlightedDates]);
 
-  const getDaysInMonth = (date) => {
+  // Handle range mode calculations when selectedStartDate changes
+  useEffect(() => {
+    if (selectionMode === 'range' && selectedStartDate && repaymentFrequency && daysToComplete) {
+      calculateEndDateAndHighlights();
+    } else if (selectionMode === 'range' && !selectedStartDate) {
+      setCalculatedEndDate(null);
+      setHighlightedDates([]);
+    }
+  }, [selectionMode, calculateEndDateAndHighlights]); // Remove selectedStartDate from dependencies since it's in calculateEndDateAndHighlights
+
+  const getDaysInMonth = useCallback((date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  };
+  }, []);
 
-  const getFirstDayOfMonth = (date) => {
+  const getFirstDayOfMonth = useCallback((date) => {
     return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-  };
+  }, []);
 
-  const isDateHighlighted = (date) => {
-    // Ensure the selected start date is not also marked as a general highlighted date
-    if (isDateSelected(date)) return false;
+  const isDateHighlighted = useCallback((date) => {
     return highlightedDates.some(highlightedDate => 
       highlightedDate.toDateString() === date.toDateString()
     );
-  };
+  }, [highlightedDates]);
 
-  const isDateSelected = (date) => {
+  const isDateSelected = useCallback((date) => {
     const dateStr = date.toDateString();
     return selectedStartDate && selectedStartDate.toDateString() === dateStr;
-  };
+  }, [selectedStartDate]);
 
-  const isDateInRange = (date) => {
-    if (!selectedStartDate || !calculatedEndDate) return false;
-    return date >= selectedStartDate && date <= calculatedEndDate;
-  };
+  const isDateEndDate = useCallback((date) => {
+    const dateStr = date.toDateString();
+    return calculatedEndDate && calculatedEndDate.toDateString() === dateStr && selectionMode === 'range';
+  }, [calculatedEndDate, selectionMode]);
 
-  const handleDatePress = (date) => {
+  const isDateInRange = useCallback((date) => {
+    // Use internal state for range mode, props for single mode
+    const rangeStart = selectionMode === 'range' ? selectedStartDate : (startDate ? parseDate(startDate) : null);
+    const rangeEnd = selectionMode === 'range' ? calculatedEndDate : (endDate ? parseDate(endDate) : null);
+    
+    if (!rangeStart || !rangeEnd) return false;
+    
+    // Normalize dates for comparison
+    const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const normalizedStart = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate());
+    const normalizedEnd = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate());
+    
+    return normalizedDate >= normalizedStart && normalizedDate <= normalizedEnd;
+  }, [selectionMode, selectedStartDate, calculatedEndDate, startDate, endDate, parseDate]);
+
+  const handleDatePress = useCallback((date) => {
     const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const lastWeek = new Date(todayNormalized);
-    lastWeek.setDate(lastWeek.getDate() - 7); // Allow dates from last week
+    lastWeek.setDate(lastWeek.getDate() - 7);
     
     if (date < lastWeek) {
       Alert.alert('Invalid Date', 'Cannot select a date more than a week ago.');
       return;
     }
-    
-    // Set the selected start date
-    setSelectedStartDate(date);
-    
-    // Immediately calculate the end date based on the new start date
-    if (repaymentFrequency && daysToComplete) {
-      const start = new Date(date);
-      let end = new Date(start);
-      
-      // Calculate end date based on frequency and daysToComplete
-      switch (repaymentFrequency) {
-        case 'daily':
-          end.setDate(start.getDate() + parseInt(daysToComplete));
-          break;
-        case 'weekly':
-          end.setDate(start.getDate() + (parseInt(daysToComplete) * 7));
-          break;
-        case 'monthly':
-          end.setMonth(start.getMonth() + parseInt(daysToComplete));
-          break;
-        case 'yearly':
-          end.setFullYear(start.getFullYear() + parseInt(daysToComplete));
-          break;
-      }
-      
-      setCalculatedEndDate(end);
-      calculateHighlightedDates(start, end);
-    }
-  };
 
-  const renderCalendar = () => {
-    const daysInMonth = getDaysInMonth(currentMonth);
-    const firstDay = getFirstDayOfMonth(currentMonth);
+    if (selectionMode === 'single') {
+      const allowedStart = startDate ? parseDate(startDate) : null;
+      const allowedEnd = endDate ? parseDate(endDate) : null;
+
+      if (allowedStart && allowedEnd && (date < allowedStart || date > allowedEnd)) {
+        Alert.alert('Invalid Date', 'Selected date is outside the allowed repayment range.');
+        return;
+      }
+      setSelectedStartDate(date);
+    } else { // Range selection mode
+      setSelectedStartDate(date);
+      // The useEffect will handle the calculation of end date and highlights
+    }
+  }, [selectionMode, startDate, endDate, parseDate, today]);
+
+  // Render individual month for FlatList
+  const renderMonth = useCallback(({ item: monthData }) => {
+    const monthDate = monthData.date;
+    const daysInMonth = getDaysInMonth(monthDate);
+    const firstDay = getFirstDayOfMonth(monthDate);
     const days = [];
 
     // Add empty cells for days before the first day of the month
@@ -209,64 +259,119 @@ const EnhancedDatePicker = ({
 
     // Add days of the month
     for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+      const date = new Date(monthDate.getFullYear(), monthDate.getMonth(), day);
       const isHighlighted = isDateHighlighted(date);
       const isSelected = isDateSelected(date);
       const isInRange = isDateInRange(date);
       const isToday = date.toDateString() === today.toDateString();
+      const isEndDate = isDateEndDate(date);
 
       days.push(
         <TouchableOpacity
           key={day}
           style={[
             styles.dayCell,
-            isHighlighted && styles.highlightedDay,
-            isInRange && !isHighlighted && styles.rangeDay,
             isToday && styles.todayCircle,
-            isSelected && styles.selectedDay,
+            // Styles for range selection mode (customer repayment range picker)
+            selectionMode === 'range' && isHighlighted && styles.highlightedDay,
+            selectionMode === 'range' && isInRange && !isHighlighted && !isSelected && !isEndDate && styles.rangeDay,
+            selectionMode === 'range' && (isSelected || isEndDate) && styles.selectedDay,
+            // Styles for single selection mode (transaction date picker)
+            selectionMode === 'single' && isInRange && !isHighlighted && !isSelected && styles.customerRepaymentPeriodDay,
+            selectionMode === 'single' && isHighlighted && styles.highlightedDay,
+            selectionMode === 'single' && isSelected && styles.selectedDay,
           ]}
           onPress={() => handleDatePress(date)}
         >
-          <Text style={[
-            styles.dayText,
-            isHighlighted && styles.highlightedDayText,
-            isToday && styles.todayText,
-            isSelected && styles.selectedDayText,
-          ]}>
-            {day}
-          </Text>
+          <View style={styles.dayContent}>
+            <Text style={[
+              styles.dayText,
+              isToday && !isHighlighted && !isSelected && !isEndDate && styles.todayText,
+              selectionMode === 'range' && (isSelected || isEndDate) && styles.selectedDayText,
+              selectionMode === 'range' && isHighlighted && styles.highlightedDayText,
+              selectionMode === 'range' && isInRange && !isHighlighted && !isSelected && !isEndDate && styles.rangeDayText,
+              selectionMode === 'single' && isSelected && styles.selectedDayText,
+              selectionMode === 'single' && isHighlighted && styles.highlightedDayText,
+              selectionMode === 'single' && isInRange && !isHighlighted && !isSelected && styles.customerRepaymentPeriodDayText,
+            ]}>
+              {day}
+            </Text>
+            {isSelected && selectionMode === 'single' && (
+              <MaterialIcons name="check-circle" size={16} color="white" style={styles.checkIcon} />
+            )}
+          </View>
         </TouchableOpacity>
       );
     }
 
-    return days;
-  };
+    return (
+      <View style={styles.monthContainer}>
+        <Text style={styles.monthHeader}>
+          {monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+        </Text>
+        <View style={styles.calendar}>
+          {days}
+        </View>
+      </View>
+    );
+  }, [getDaysInMonth, getFirstDayOfMonth, isDateHighlighted, isDateSelected, isDateInRange, isDateEndDate, selectionMode, today, handleDatePress]);
 
-  const navigateMonth = (direction) => {
+  // Handle scroll to update current month display
+  const onViewableItemsChanged = useCallback(({ viewableItems }) => {
+    if (viewableItems.length > 0) {
+      const visibleMonth = viewableItems[0].item.date;
+      setCurrentMonth(visibleMonth);
+    }
+  }, []);
+
+  const viewabilityConfig = useRef({
+    viewAreaCoveragePercentThreshold: 50,
+  }).current;
+
+  const navigateMonth = useCallback((direction) => {
     const newMonth = new Date(currentMonth);
     newMonth.setMonth(newMonth.getMonth() + direction);
     setCurrentMonth(newMonth);
-  };
+  }, [currentMonth]);
 
-  const handleConfirm = () => {
-    if (selectedStartDate && calculatedEndDate) {
-      // Ensure dates are formatted without timezone issues for display/storage
-      const start = new Date(selectedStartDate.getFullYear(), selectedStartDate.getMonth(), selectedStartDate.getDate());
-      const end = new Date(calculatedEndDate.getFullYear(), calculatedEndDate.getMonth(), calculatedEndDate.getDate());
-      
-      // Format dates as YYYY-MM-DD
-      const formattedStartDate = start.toISOString().split('T')[0];
-      const formattedEndDate = end.toISOString().split('T')[0];
-      
-      console.log('Selected dates:', { startDate: formattedStartDate, endDate: formattedEndDate });
-      
-      onDateSelect({
-        startDate: formattedStartDate,
-        endDate: formattedEndDate
-      });
+  const handleConfirm = useCallback(() => {
+    if (selectionMode === 'single') {
+      if (selectedStartDate) {
+        const year = selectedStartDate.getFullYear();
+        const month = (selectedStartDate.getMonth() + 1).toString().padStart(2, '0');
+        const day = selectedStartDate.getDate().toString().padStart(2, '0');
+        const formattedDate = `${year}-${month}-${day}`;
+        console.log('Single mode - Selected date:', { original: selectedStartDate, formatted: formattedDate });
+        onDateSelect({ startDate: formattedDate });
+      }
+    } else { // Range selection mode
+      if (selectedStartDate && calculatedEndDate) {
+        // Format dates manually to avoid timezone issues
+        const formatDateManually = (date) => {
+          const year = date.getFullYear();
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const day = date.getDate().toString().padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+        
+        const formattedStartDate = formatDateManually(selectedStartDate);
+        const formattedEndDate = formatDateManually(calculatedEndDate);
+        
+        console.log('Range mode - Selected dates:', {
+          startOriginal: selectedStartDate,
+          endOriginal: calculatedEndDate,
+          startFormatted: formattedStartDate,
+          endFormatted: formattedEndDate
+        });
+        
+        onDateSelect({
+          startDate: formattedStartDate,
+          endDate: formattedEndDate
+        });
+      }
     }
     onClose();
-  };
+  }, [selectionMode, selectedStartDate, calculatedEndDate, onDateSelect, onClose]);
 
   return (
     <Modal visible={visible} transparent animationType="slide">
@@ -290,24 +395,37 @@ const EnhancedDatePicker = ({
             ))}
           </View>
 
-          <ScrollView style={styles.calendarContainer}>
-            <View style={styles.calendar}>
-              {renderCalendar()}
-            </View>
-          </ScrollView>
+          <FlatList
+            ref={flatListRef}
+            data={months}
+            renderItem={renderMonth}
+            keyExtractor={(item) => item.id}
+            initialScrollIndex={initialScrollIndex}
+            getItemLayout={(data, index) => (
+              { length: 320, offset: 320 * index, index }
+            )}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            showsVerticalScrollIndicator={false}
+            style={styles.calendarContainer}
+            maxToRenderPerBatch={2}
+            windowSize={5}
+            initialNumToRender={1}
+            removeClippedSubviews={true}
+          />
 
           <View style={styles.legend}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendColor, styles.selectedDay]} />
-              <Text style={styles.legendText}>Selected</Text>
+              <View style={[styles.legendColor, selectionMode === 'single' ? styles.rangeDay : styles.selectedDay]} />
+              <Text style={styles.legendText}>Selected Date</Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendColor, styles.highlightedDay]} />
               <Text style={styles.legendText}>Repayment Dates</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendColor, styles.rangeDay]} />
-              <Text style={styles.legendText}>Date Range</Text>
+              <View style={[styles.legendColor, styles.customerRepaymentPeriodDay]} />
+              <Text style={styles.legendText}>Repayment Period</Text>
             </View>
           </View>
 
@@ -316,9 +434,9 @@ const EnhancedDatePicker = ({
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.confirmButton, (!selectedStartDate || !calculatedEndDate) && styles.disabledButton]} 
+              style={[styles.confirmButton, (selectionMode === 'single' ? !selectedStartDate : (!selectedStartDate || !calculatedEndDate)) && styles.disabledButton]} 
               onPress={handleConfirm}
-              disabled={!selectedStartDate || !calculatedEndDate}
+              disabled={selectionMode === 'single' ? !selectedStartDate : (!selectedStartDate || !calculatedEndDate)}
             >
               <Text style={styles.confirmButtonText}>Confirm</Text>
             </TouchableOpacity>
@@ -368,7 +486,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: '#666',
-    width: 40,
+    flex: 1,
     textAlign: 'center',
   },
   calendarContainer: {
@@ -379,11 +497,21 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   dayCell: {
-    width: 40,
+    width: (width * 0.9 - 40) / 7,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    margin: 1,
+  },
+  dayContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  checkIcon: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
   },
   dayText: {
     fontSize: 16,
@@ -407,6 +535,21 @@ const styles = StyleSheet.create({
   rangeDay: {
     backgroundColor: '#E3F2FD',
     borderRadius: 20,
+  },
+  rangeDayText: {
+    color: '#333',
+    fontWeight: 'bold',
+  },
+  customerRepaymentPeriodDay: {
+    backgroundColor: 'transparent',
+    borderColor: '#007AFF',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 20,
+  },
+  customerRepaymentPeriodDayText: {
+    color: '#007AFF',
+    fontWeight: 'bold',
   },
   legend: {
     flexDirection: 'row',
@@ -468,6 +611,18 @@ const styles = StyleSheet.create({
   todayText: {
     color: '#007AFF',
     fontWeight: 'bold',
+  },
+  monthContainer: {
+    paddingVertical: 20,
+    paddingHorizontal: 10,
+    minHeight: 320,
+  },
+  monthHeader: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 15,
+    color: '#333',
   },
 });
 
