@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, Button, Alert, TouchableOpacity, ScrollView, Modal, FlatList, Image, ActivityIndicator, Platform } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
@@ -9,11 +10,12 @@ import * as FileSystem from 'expo-file-system';
 import { Linking } from 'react-native';
 import styles from './CustomerStyles';
 import * as ImagePicker from 'expo-image-picker';
-import MapView, { Marker } from 'react-native-maps';
+
 import * as uuid from 'uuid';
 import EnhancedDatePicker from '../components/EnhancedDatePicker';
 import { MaterialIcons } from '@expo/vector-icons';
 import AreaSearchBar from '../components/AreaSearchBar';
+import CustomerItemActions from '../components/CustomerItemActions';
 
 function LocationSearchBar({ onLocationFound }) {
   const [query, setQuery] = useState('');
@@ -143,11 +145,13 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   const [showCustomerFormModal, setShowCustomerFormModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [repaymentFrequency, setRepaymentFrequency] = useState('');
-  const [newTransactionPaymentType, setNewTransactionPaymentType] = useState('');
+  const [newTransactionPaymentType, setNewTransactionPaymentType] = useState('cash');
   const [newTransactionUPIImageUrl, setNewTransactionUPIImageUrl] = useState('');
   const [repaymentAmount, setRepaymentAmount] = useState('');
   const [missingFields, setMissingFields] = useState([]);
   const isMissing = field => missingFields.includes(field);
+  const [accessibleUserIds, setAccessibleUserIds] = useState([]);
+  const [accessibleAreaIds, setAccessibleAreaIds] = useState([]);
   // Add transaction date state
   
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
@@ -206,14 +210,6 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   const [expandedTransactionId, setExpandedTransactionId] = useState(null);
   // Add state for location selection
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState(null);
-  const [mapRegion, setMapRegion] = useState({
-    latitude: 37.78825,
-    longitude: -122.4324,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
-  });
-  // Add loading state for transaction save
   const [isTransactionSaving, setIsTransactionSaving] = useState(false);
   const [loadingImages, setLoadingImages] = useState(false);
   // Add state for enhanced date picker
@@ -258,18 +254,90 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     if (user?.id) fetchAreas();
   }, [user]);
 
+  // Fetch accessible user IDs and area IDs based on group memberships
+  useEffect(() => {
+    async function fetchAccessibleIds() {
+      if (!user?.id) return;
+
+      const { data: userGroups, error: userGroupsError } = await supabase
+        .from('user_groups')
+        .select('group_id')
+        .eq('user_id', user.id);
+
+      if (userGroupsError) {
+        console.error('Error fetching user groups:', userGroupsError);
+        return;
+      }
+
+      const groupIds = userGroups.map(ug => ug.group_id);
+
+      if (groupIds.length === 0) {
+        setAccessibleUserIds([user.id]); // Only current user if no groups
+        setAccessibleAreaIds([]);
+        return;
+      }
+
+      // Fetch all users in these groups
+      const { data: groupUsers, error: groupUsersError } = await supabase
+        .from('user_groups')
+        .select('user_id')
+        .in('group_id', groupIds);
+
+      if (groupUsersError) {
+        console.error('Error fetching group users:', groupUsersError);
+        return;
+      }
+
+      const uniqueUserIds = [...new Set(groupUsers.map(gu => gu.user_id))];
+      setAccessibleUserIds(uniqueUserIds);
+
+      // Fetch all areas associated with these groups
+      const { data: groupAreas, error: groupAreasError } = await supabase
+        .from('group_areas')
+        .select('area_id')
+        .in('group_id', groupIds);
+
+      if (groupAreasError) {
+        console.error('Error fetching group areas:', groupAreasError);
+        return;
+      }
+
+      const uniqueAreaIds = [...new Set(groupAreas.map(ga => ga.area_id))];
+      setAccessibleAreaIds(uniqueAreaIds);
+
+    }
+    fetchAccessibleIds();
+  }, [user]);
+
   // Update fetchCustomers to support search and pagination
   useEffect(() => {
     async function fetchCustomers() {
+      if (accessibleUserIds.length === 0 && accessibleAreaIds.length === 0) {
+        setCustomers([]);
+        setHasMore(false);
+        return;
+      }
+
       let query = supabase
         .from('customers')
-        .select('*')
-        .eq('user_id', user.id)
+        .select('*');
+
+      // Apply group-based access control
+      if (accessibleUserIds.length > 0 && accessibleAreaIds.length > 0) {
+        query = query.or(`user_id.in.(${accessibleUserIds.join(',')}),area_id.in.(${accessibleAreaIds.join(',')})`);
+      } else if (accessibleUserIds.length > 0) {
+        query = query.in('user_id', accessibleUserIds);
+      } else if (accessibleAreaIds.length > 0) {
+        query = query.in('area_id', accessibleAreaIds);
+      }
+
+      query = query
         .order('created_at', { ascending: false })
         .range(0, PAGE_SIZE * page - 1);
+
       const { data, error } = await query;
       let filtered = data || [];
-      // Area filter
+      // Area filter (if a specific area is selected in the UI)
       if (areaId) {
         filtered = filtered.filter(c => c.area_id === areaId);
       }
@@ -286,7 +354,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
       setHasMore(filtered.length === PAGE_SIZE * page);
     }
     if (user?.id) fetchCustomers();
-  }, [user, search, areaSearch, page, areas]);
+  }, [user, search, areaSearch, page, areas, areaId, accessibleUserIds, accessibleAreaIds]);
 
   // Fetch repayment plans on mount and extract unique frequencies
   useEffect(() => {
@@ -736,52 +804,39 @@ export default function CreateCustomerScreen({ user, userProfile }) {
         <Text style={[styles.cell, { flex: 1.5 }]}>{item.book_no || 'N/A'}</Text>
         <Text style={[styles.cell, { flex: 2 }]}>{item.name}</Text>
         <Text style={[styles.cell, { flex: 2 }]}>{item.mobile}</Text>
-        <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'space-around' }}>
-          <TouchableOpacity style={styles.iconButton} onPress={() => {
-            // Set all the form fields for editing
-            setIsEditMode(true);
-            setSelectedCustomer(item);
-            setName(item.name || '');
-            setMobile(item.mobile || '');
-            setEmail(item.email || '');
-            setBookNo(item.book_no || '');
-            setCustomerType(item.customer_type || '');
-            setAreaId(item.area_id || null);
-            const selectedArea = areas.find(a => a.id === item.area_id);
-            setSelectedAreaName(selectedArea ? selectedArea.area_name : '');
-            setLatitude(item.latitude || null);
-            setLongitude(item.longitude || null);
-            setRemarks(item.remarks || '');
-            setAmountGiven(item.amount_given ? String(item.amount_given) : '');
-            setRepaymentFrequency(item.repayment_frequency || '');
-            // Filter plan options based on the customer's repayment frequency
-            const filteredPlans = repaymentPlans.filter(p => p.frequency === (item.repayment_frequency || ''));
-            setPlanOptions(filteredPlans);
-            
-            setRepaymentAmount(item.repayment_amount ? String(item.repayment_amount) : '');
-            setDaysToComplete(item.days_to_complete ? String(item.days_to_complete) : '');
-            setAdvanceAmount(item.advance_amount ? String(item.advance_amount) : '0');
-            setLateFee(item.late_fee_per_day ? String(item.late_fee_per_day) : '');
-            setSelectedPlanId(item.repayment_plan_id ? String(item.repayment_plan_id) : '');
-            setStartDate(item.start_date ? item.start_date.split('T')[0] : '');
-            setEndDate(item.end_date ? item.end_date.split('T')[0] : '');
-            calculateRepaymentDetails(
-              item.repayment_plan_id,
-              item.amount_given ? String(item.amount_given) : '',
-              item.repayment_frequency || ''
-            );
-            fetchCustomerDocs(item.id);
-            setShowCustomerFormModal(true);
-          }}>
-            <MaterialIcons name="edit" size={24} color="#007AFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => openTransactionModal(item)}>
-            <MaterialIcons name="receipt" size={24} color="#4CAF50" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => handleCloneCustomer(item)}>
-            <MaterialIcons name="content-copy" size={24} color="#FFA500" />
-          </TouchableOpacity>
-        </View>
+        <CustomerItemActions
+          item={item}
+          setIsEditMode={setIsEditMode}
+          setSelectedCustomer={setSelectedCustomer}
+          setName={setName}
+          setMobile={setMobile}
+          setEmail={setEmail}
+          setBookNo={setBookNo}
+          setCustomerType={setCustomerType}
+          setAreaId={setAreaId}
+          areas={areas}
+          setSelectedAreaName={setSelectedAreaName}
+          setLatitude={setLatitude}
+          setLongitude={setLongitude}
+          setRemarks={setRemarks}
+          setAmountGiven={setAmountGiven}
+          setRepaymentFrequency={setRepaymentFrequency}
+          repaymentPlans={repaymentPlans}
+          setPlanOptions={setPlanOptions}
+          setRepaymentAmount={setRepaymentAmount}
+          setDaysToComplete={setDaysToComplete}
+          setAdvanceAmount={setAdvanceAmount}
+          setLateFee={setLateFee}
+          setSelectedPlanId={setSelectedPlanId}
+          setStartDate={setStartDate}
+          setEndDate={setEndDate}
+          calculateRepaymentDetails={calculateRepaymentDetails}
+          fetchCustomerDocs={fetchCustomerDocs}
+          setShowCustomerFormModal={setShowCustomerFormModal}
+          openTransactionModal={openTransactionModal}
+          openLocationPicker={openLocationPicker}
+          handleCloneCustomer={handleCloneCustomer}
+        />
       </View>
     </View>
   );
@@ -2501,7 +2556,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                           <TouchableOpacity onPress={() => setShowTransactionModal(false)} style={{ flex: 1, backgroundColor: '#ccc', borderRadius: 8, paddingVertical: 12, marginRight: 8, alignItems: 'center' }}>
                             <Text style={{ color: '#333', fontWeight: 'bold', fontSize: 16 }}>Close</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={[styles.iconButton, { backgroundColor: '#007AFF', borderRadius: 8, padding: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }]} onPress={handleAddTransaction}>
+                          <TouchableOpacity style={[styles.iconButton, { backgroundColor: '#007AFF', borderRadius: 8, padding: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }, isTransactionSaving && { opacity: 0.5 }]} onPress={handleAddTransaction} disabled={isTransactionSaving}>
               <MaterialIcons name="add" size={24} color="white" />
               <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold', marginLeft: 5 }}>Add Transaction</Text>
             </TouchableOpacity>
@@ -2533,84 +2588,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
           </View>
         </TouchableOpacity>
       </Modal>
-      <Modal
-        visible={showLocationPicker}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowLocationPicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.locationPickerContainer}>
-            <Text style={styles.modalTitle}>Select Location</Text>
-            <Text style={{ fontSize: 14, color: '#666', marginBottom: 16, textAlign: 'center' }}>
-              Tap on the map to select a location, or use your current location
-            </Text>
-            
-            <LocationSearchBar onLocationFound={(coords) => {
-              setSelectedLocation(coords);
-              setMapRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 });
-            }} />
-
-            <View style={styles.locationPickerMap}>
-              {MapView && (
-                <MapView
-                  style={{ width: '100%', height: '100%' }}
-                  region={mapRegion}
-                  onPress={handleMapPress}
-                  showsUserLocation={true}
-                  showsMyLocationButton={true}
-                >
-                  {selectedLocation && (
-                    <Marker
-                      coordinate={selectedLocation}
-                      title="Selected Location"
-                      description="Tap to select this location"
-                      pinColor="red"
-                    />
-                  )}
-                </MapView>
-              )}
-            </View>
-            
-            {selectedLocation && (
-              <View style={{ backgroundColor: '#f0f0f0', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-                <Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 4 }}>Selected Location:</Text>
-                <Text style={{ fontSize: 12, color: '#666' }}>
-                  Latitude: {selectedLocation.latitude.toFixed(6)}
-                </Text>
-                <Text style={{ fontSize: 12, color: '#666' }}>
-                  Longitude: {selectedLocation.longitude.toFixed(6)}
-                </Text>
-              </View>
-            )}
-            
-            <View style={styles.locationPickerActions}>
-              <TouchableOpacity 
-                style={[styles.locationPickerButton, { backgroundColor: '#007AFF' }]} 
-                onPress={getCurrentLocation}
-              >
-                <Text style={[styles.locationPickerButtonText, { color: '#fff' }]}>Use Current Location</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.locationPickerActions}>
-              <TouchableOpacity 
-                style={[styles.locationPickerButton, { backgroundColor: '#ccc' }]} 
-                onPress={() => setShowLocationPicker(false)}
-              >
-                <Text style={[styles.locationPickerButtonText, { color: '#333' }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.locationPickerButton, { backgroundColor: '#4CAF50' }]} 
-                onPress={confirmLocationSelection}
-                disabled={!selectedLocation}
-              >
-                <Text style={[styles.locationPickerButtonText, { color: '#fff' }]}>Confirm Location</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+    
       
       {/* Date Picker Modal */}
       {showDatePicker && (

@@ -1,14 +1,24 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 const AreaSearchBar = ({ areas, onAreaSelect, selectedAreaName }) => {
   const [query, setQuery] = useState(selectedAreaName || '');
   const [suggestions, setSuggestions] = useState([]);
+
+  useEffect(() => {
+    setQuery(selectedAreaName || '');
+    setSuggestions([]);
+  }, [selectedAreaName]);
+
+  useEffect(() => {
+    console.log('AreaSearchBar suggestions:', suggestions);
+  }, [suggestions]);
   const [loading, setLoading] = useState(false);
   const debounceTimeout = useRef(null);
 
   const filterSuggestions = useCallback((text) => {
+    console.log('filterSuggestions received text:', text);
     if (!text) {
       setSuggestions([]);
       return;
@@ -17,11 +27,13 @@ const AreaSearchBar = ({ areas, onAreaSelect, selectedAreaName }) => {
     const filtered = areas.filter(area => 
       area.area_name.toLowerCase().includes(text.toLowerCase())
     );
+    console.log('filterSuggestions filtered results:', filtered);
     setSuggestions(filtered);
     setLoading(false);
   }, [areas]);
 
   const onChangeText = (text) => {
+    console.log('onChangeText query:', text);
     setQuery(text);
     if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
     debounceTimeout.current = setTimeout(() => filterSuggestions(text), 300);
@@ -98,6 +110,8 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
+    height: 40, // Explicitly set height to ensure single line
+    paddingVertical: 0, // Adjust padding to fit height
   },
   activityIndicator: {
     marginLeft: 8,
@@ -115,10 +129,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: '100%',
     zIndex: 1000, // Ensure it's above other elements
-    top: 50, // Adjust based on input height
-    flexGrow: 1, // Allow content to grow and enable scrolling
+    top: '100%', // Position it directly below the input
+    backgroundColor: '#fff', // Ensure it has a background
   },
   suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
