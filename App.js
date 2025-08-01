@@ -24,7 +24,7 @@ import AreaManagementScreen from './src/screens/AreaManagementScreen';
 import CreateCustomerScreen from './src/screens/CreateCustomerScreen';
 import AstrologyWebviewScreen from './src/screens/AstrologyWebviewScreen';
 import NewsPaperScreen from './src/screens/NewsPaperScreen';
-import VideosScreen from './src/screens/VideosScreen';
+import YouTubeScreen from './src/screens/YouTubeScreen';
 
 // Import services
 import { supabase } from './src/services/supabase';
@@ -79,7 +79,7 @@ function NewsTabNavigator() {
       />
       <Tab.Screen
         name="Videos"
-        component={VideosScreen}
+        component={YouTubeScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
             <Text style={{ color, fontSize: size }}>🎥</Text>

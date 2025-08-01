@@ -29,6 +29,7 @@
 
     // Function to handle messages from React Native
     function handleMessage(event) {
+      console.log("Message received in WebView:", event.data);
       const data = JSON.parse(event.data);
 
       if (data.type === 'initialLoad' && data.initialRegion) {

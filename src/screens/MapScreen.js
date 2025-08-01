@@ -29,7 +29,7 @@ export default function MapScreen({ user, userProfile }) {
   useEffect(() => {
     const loadMapHtml = async () => {
       try {
-        const response = await default_api.read_file({ absolute_path: "C:\AIGenarator\DalabHRPORTAL\UserTracking\src\assets\map.html" });
+        const response = await default_api.read_file({ absolute_path: "C:\AIGenarator\DalabHRPORTAL\UserTracking\assets\map.html" });
         if (response.read_file_response && response.read_file_response.output) {
           setMapHtmlContent(response.read_file_response.output);
         } else {
@@ -239,7 +239,7 @@ export default function MapScreen({ user, userProfile }) {
   };
 
   const renderMap = () => {
-    if (!mapHtmlContent) {
+    if (!mapHtmlContent || !currentLocation) {
       return (
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading map content...</Text>

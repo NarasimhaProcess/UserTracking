@@ -4,22 +4,23 @@ import { WebView } from 'react-native-webview';
 import { Platform } from 'react-native';
 
 // Use a direct import for the HTML file
-import mapHTML from '../../assets/map.html';
+
 
 const LeafletMap = ({ onMapPress, initialRegion, markerCoordinate, mapHtmlContent }) => {
   const webViewRef = useRef(null);
 
-  useEffect(() => {
-    if (webViewRef.current && mapHtmlContent) {
-      // Send initial region when the WebView is ready
+  const onWebViewLoadEnd = () => {
+    if (webViewRef.current && mapHtmlContent && initialRegion) {
       const initialLoadMessage = JSON.stringify({ type: 'initialLoad', initialRegion: initialRegion });
+      console.log("Sending initialLoad message to WebView:", initialLoadMessage);
       webViewRef.current.postMessage(initialLoadMessage);
     }
-  }, [initialRegion, mapHtmlContent]); // Depend on initialRegion and mapHtmlContent
+  };
 
   useEffect(() => {
     if (markerCoordinate && webViewRef.current) {
       const markerUpdateMessage = JSON.stringify({ type: 'markerUpdate', markerCoordinate: markerCoordinate });
+      console.log("Sending markerUpdate message to WebView:", markerUpdateMessage);
       webViewRef.current.postMessage(markerUpdateMessage);
     }
   }, [markerCoordinate]);
@@ -39,6 +40,7 @@ const LeafletMap = ({ onMapPress, initialRegion, markerCoordinate, mapHtmlConten
       javaScriptEnabled={true}
       domStorageEnabled={true}
       startInLoadingState={true}
+      onLoadEnd={onWebViewLoadEnd}
       style={{ flex: 1 }}
     />
   );
