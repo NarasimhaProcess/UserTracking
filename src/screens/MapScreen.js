@@ -12,8 +12,6 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { supabase } from '../services/supabase';
-
-// Conditionally import react-native-maps only on native platforms
 import LeafletMap from '../components/LeafletMap';
 
 const { width, height } = Dimensions.get('window');
@@ -23,25 +21,9 @@ export default function MapScreen({ user, userProfile }) {
   const [userLocations, setUserLocations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [mapHtmlContent, setMapHtmlContent] = useState(null);
+  const mapRef = useRef(null);
 
   useEffect(() => {
-    const loadMapHtml = async () => {
-      try {
-        const response = await default_api.read_file({ absolute_path: "C:\AIGenarator\DalabHRPORTAL\UserTracking\assets\map.html" });
-        if (response.read_file_response && response.read_file_response.output) {
-          setMapHtmlContent(response.read_file_response.output);
-        } else {
-          console.error("Error reading map.html:", response);
-        }
-      } catch (error) {
-        console.error("Failed to read map.html:", error);
-      }
-    };
-
-    loadMapHtml();
-
     if (user) {
       getCurrentLocation();
       loadUserLocations();
@@ -53,6 +35,7 @@ export default function MapScreen({ user, userProfile }) {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission denied', 'Location permission is required');
+        setIsLoading(false);
         return;
       }
 
@@ -60,15 +43,14 @@ export default function MapScreen({ user, userProfile }) {
         accuracy: Location.Accuracy.High,
       });
 
-      setCurrentLocation({
+      const newLocation = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
-      });
+      };
 
-      // Center map on current location (only on native)
-      // Removed mapRef.current.animateToRegion as it's not compatible with WebView-based LeafletMap
+      setCurrentLocation(newLocation);
     } catch (error) {
       console.error('Error getting current location:', error);
       Alert.alert('Error', 'Could not get current location');
@@ -86,7 +68,7 @@ export default function MapScreen({ user, userProfile }) {
         .select('*')
         .eq('user_id', user.id)
         .order('timestamp', { ascending: true })
-        .limit(100); // Limit to last 100 locations for performance
+        .limit(100);
 
       if (error) {
         console.error('Error loading locations:', error);
@@ -102,59 +84,72 @@ export default function MapScreen({ user, userProfile }) {
   };
 
   const centerOnCurrentLocation = () => {
-    if (currentLocation && mapRef.current && Platform.OS !== 'web') {
-      mapRef.current.animateToRegion(currentLocation);
+    if (currentLocation && mapRef.current) {
+      mapRef.current.centerOnLocation(currentLocation);
     }
   };
 
   const clearMap = () => {
     setUserLocations([]);
-  };
-
-  const getRouteCoordinates = () => {
-    return userLocations.map(location => ({
-      latitude: location.latitude,
-      longitude: location.longitude,
-    }));
-  };
-
-  const getRegionForCoordinates = (coordinates) => {
-    if (coordinates.length === 0) return null;
-
-    let minLat = coordinates[0].latitude;
-    let maxLat = coordinates[0].latitude;
-    let minLng = coordinates[0].longitude;
-    let maxLng = coordinates[0].longitude;
-
-    coordinates.forEach(coord => {
-      minLat = Math.min(minLat, coord.latitude);
-      maxLat = Math.max(maxLat, coord.latitude);
-      minLng = Math.min(minLng, coord.longitude);
-      maxLng = Math.max(maxLng, coord.longitude);
-    });
-
-    const deltaLat = (maxLat - minLat) * 1.1;
-    const deltaLng = (maxLng - minLng) * 1.1;
-
-    return {
-      latitude: (minLat + maxLat) / 2,
-      longitude: (minLng + maxLng) / 2,
-      latitudeDelta: Math.max(deltaLat, 0.01),
-      longitudeDelta: Math.max(deltaLng, 0.01),
-    };
-  };
-
-  const fitMapToRoute = () => {
-    const coordinates = getRouteCoordinates();
-    if (coordinates.length > 0) {
-      const region = getRegionForCoordinates(coordinates);
-      if (region && mapRef.current && Platform.OS !== 'web') {
-        mapRef.current.animateToRegion(region);
-      }
+    if (mapRef.current) {
+      mapRef.current.clearMap();
     }
   };
 
-  // Web fallback component
+  const fitMapToRoute = () => {
+    if (mapRef.current && userLocations.length > 0) {
+      mapRef.current.fitToRoute();
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      Alert.alert('Error', 'Please enter a search query');
+      return;
+    }
+
+    try {
+      const results = await Location.geocodeAsync(searchQuery);
+      if (results.length > 0) {
+        const { latitude, longitude } = results[0];
+        const searchLocation = {
+          latitude,
+          longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        };
+        
+        setCurrentLocation(searchLocation);
+        
+        if (mapRef.current) {
+          mapRef.current.centerOnLocation(searchLocation);
+        }
+        
+        setSearchQuery('');
+      } else {
+        Alert.alert('Not Found', 'No results found for your search.');
+      }
+    } catch (error) {
+      console.error('Error geocoding location:', error);
+      Alert.alert('Error', 'Could not search for location.');
+    }
+  };
+
+  const handleMapPress = (coordinate) => {
+    console.log('Map pressed at:', coordinate);
+    // You can add functionality here, like adding a new marker
+  };
+
+  const handleMarkerDragEnd = (coordinate) => {
+    console.log('Marker dragged to:', coordinate);
+    setCurrentLocation({
+      ...currentLocation,
+      latitude: coordinate.latitude,
+      longitude: coordinate.longitude,
+    });
+  };
+
+  // Web fallback component (for when maps don't work)
   const WebMapFallback = () => (
     <View style={styles.webFallback}>
       <Text style={styles.webFallbackTitle}>🗺️ Map View</Text>
@@ -176,12 +171,9 @@ export default function MapScreen({ user, userProfile }) {
             Last Update: {new Date(userLocations[userLocations.length - 1].timestamp).toLocaleString()}
           </Text>
         )}
-        {userLocations.length > 0 && (
+        {currentLocation && (
           <Text style={styles.locationHistoryText}>
-            Current Location: {currentLocation ? 
-              `${currentLocation.latitude.toFixed(6)}, ${currentLocation.longitude.toFixed(6)}` : 
-              'Not available'
-            }
+            Current Location: {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
           </Text>
         )}
       </View>
@@ -207,51 +199,20 @@ export default function MapScreen({ user, userProfile }) {
     </View>
   );
 
-  const handleSearch = async () => {
-    if (!searchQuery) return;
-
-    try {
-      const results = await Location.geocodeAsync(searchQuery);
-      if (results.length > 0) {
-        const { latitude, longitude } = results[0];
-        setCurrentLocation({
-          latitude,
-          longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-        // Also update the marker to the searched location
-        if (mapRef.current) {
-          mapRef.current.animateToRegion({
-            latitude,
-            longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          });
-        }
-      } else {
-        Alert.alert('Not Found', 'No results found for your search.');
-      }
-    } catch (error) {
-      console.error('Error geocoding location:', error);
-      Alert.alert('Error', 'Could not search for location.');
-    }
-  };
-
   const renderMap = () => {
-    if (!mapHtmlContent || !currentLocation) {
-      return (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading map content...</Text>
-        </View>
-      );
+    // Show fallback for web or if no location
+    if (Platform.OS === 'web' || !currentLocation) {
+      return <WebMapFallback />;
     }
+
     return (
       <LeafletMap
+        ref={mapRef}
         initialRegion={currentLocation}
         markerCoordinate={currentLocation}
         userLocations={userLocations}
-        mapHtmlContent={mapHtmlContent}
+        onMapPress={handleMapPress}
+        onMarkerDragEnd={handleMarkerDragEnd}
       />
     );
   };
@@ -266,6 +227,7 @@ export default function MapScreen({ user, userProfile }) {
 
   return (
     <View style={styles.container}>
+      {/* Search Container */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
@@ -273,18 +235,24 @@ export default function MapScreen({ user, userProfile }) {
           value={searchQuery}
           onChangeText={setSearchQuery}
           onSubmitEditing={handleSearch}
+          returnKeyType="search"
         />
         <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
           <Text style={styles.searchButtonText}>Search</Text>
         </TouchableOpacity>
       </View>
-      {renderMap()}
+
+      {/* Map Container */}
+      <View style={styles.mapContainer}>
+        {renderMap()}
+      </View>
 
       {/* Control buttons */}
       <View style={styles.controls}>
         <TouchableOpacity
           style={styles.controlButton}
           onPress={centerOnCurrentLocation}
+          disabled={!currentLocation}
         >
           <Text style={styles.controlButtonText}>📍 Current</Text>
         </TouchableOpacity>
@@ -292,6 +260,7 @@ export default function MapScreen({ user, userProfile }) {
         <TouchableOpacity
           style={styles.controlButton}
           onPress={fitMapToRoute}
+          disabled={userLocations.length === 0}
         >
           <Text style={styles.controlButtonText}>🗺️ Route</Text>
         </TouchableOpacity>
@@ -322,6 +291,11 @@ export default function MapScreen({ user, userProfile }) {
             Last Update: {new Date(userLocations[userLocations.length - 1].timestamp).toLocaleString()}
           </Text>
         )}
+        {currentLocation && (
+          <Text style={styles.infoText}>
+            Current: {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -330,13 +304,14 @@ export default function MapScreen({ user, userProfile }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F2F2F7',
   },
-  map: {
+  mapContainer: {
     flex: 1,
   },
   searchContainer: {
     position: 'absolute',
-    top: 50,
+    top: Platform.OS === 'ios' ? 50 : 30,
     left: 20,
     right: 20,
     backgroundColor: '#FFFFFF',
@@ -352,7 +327,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
-    zIndex: 1, // Ensure search bar is above the map
+    zIndex: 1000,
   },
   searchInput: {
     flex: 1,
@@ -363,6 +338,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginRight: 10,
     fontSize: 16,
+    backgroundColor: '#FFFFFF',
   },
   searchButton: {
     backgroundColor: '#007AFF',
@@ -387,7 +363,7 @@ const styles = StyleSheet.create({
   },
   controls: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 100,
     right: 20,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -400,6 +376,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
+    zIndex: 1000,
   },
   controlButton: {
     backgroundColor: '#007AFF',
@@ -418,7 +395,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 20,
     left: 20,
-    right: 20,
+    right: 140,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
@@ -430,6 +407,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
+    zIndex: 1000,
   },
   infoTitle: {
     fontSize: 18,
@@ -442,6 +420,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     marginBottom: 4,
   },
+  // Web fallback styles
   webFallback: {
     flex: 1,
     justifyContent: 'center',
@@ -466,6 +445,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 15,
+    width: '100%',
+    maxWidth: 400,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -490,6 +471,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
+    width: '100%',
+    maxWidth: 400,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -506,7 +489,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   locationsList: {
-    maxHeight: 150, // Limit height for scrollable list
+    maxHeight: 150,
   },
   locationItem: {
     flexDirection: 'row',
@@ -525,4 +508,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E93',
   },
-}); 
+});
