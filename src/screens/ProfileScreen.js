@@ -18,7 +18,7 @@ import * as FileSystem from 'expo-file-system';
 import { supabase } from '../services/supabase';
 import { locationTracker } from '../services/locationTracker';
 import { Buffer } from 'buffer';
-import MapView, { Marker } from 'react-native-maps';
+import LeafletMap from '../components/LeafletMap';
 
 // Utility function to convert BYTEA hex to base64
 function hexToBase64(hexString) {
@@ -533,21 +533,11 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
               setMapRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 });
             }} />
             <View style={{ width: '100%', height: 200, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-              <MapView
-                style={{ width: '100%', height: '100%' }}
-                region={mapRegion}
-                onPress={handleMapPress}
-                showsUserLocation={true}
-                showsMyLocationButton={true}
-              >
-                {selectedLocation && (
-                  <Marker
-                    coordinate={selectedLocation}
-                    title="Selected Location"
-                    pinColor="red"
-                  />
-                )}
-              </MapView>
+              <LeafletMap
+                onMapPress={handleMapPress}
+                initialRegion={mapRegion}
+                markerCoordinate={selectedLocation}
+              />
             </View>
             {selectedLocation && (
               <View style={{ backgroundColor: '#f0f0f0', padding: 12, borderRadius: 8, marginBottom: 16 }}>

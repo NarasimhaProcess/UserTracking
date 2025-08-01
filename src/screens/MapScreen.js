@@ -8,22 +8,13 @@ import {
   Dimensions,
   Platform,
   ScrollView,
+  TextInput,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { supabase } from '../services/supabase';
 
 // Conditionally import react-native-maps only on native platforms
-let MapView, Marker, Polyline;
-if (Platform.OS !== 'web') {
-  try {
-    const Maps = require('react-native-maps');
-    MapView = Maps.default;
-    Marker = Maps.Marker;
-    Polyline = Maps.Polyline;
-  } catch (error) {
-    console.warn('react-native-maps not available on this platform:', error);
-  }
-}
+import LeafletMap from '../components/LeafletMap';
 
 const { width, height } = Dimensions.get('window');
 
@@ -31,9 +22,26 @@ export default function MapScreen({ user, userProfile }) {
   const [currentLocation, setCurrentLocation] = useState(null);
   const [userLocations, setUserLocations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const mapRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [mapHtmlContent, setMapHtmlContent] = useState(null);
 
   useEffect(() => {
+    const loadMapHtml = async () => {
+      try {
+        const response = await default_api.read_file({ absolute_path: "C:\AIGenarator\DalabHRPORTAL\UserTracking\src\assets\map.html" });
+        if (response.read_file_response && response.read_file_response.output) {
+          setMapHtmlContent(response.read_file_response.output);
+        } else {
+          console.error("Error reading map.html:", response);
+        }
+      } catch (error) {
+        console.error("Failed to read map.html:", error);
+      }
+    };
+
+    loadMapHtml();
+
     if (user) {
       getCurrentLocation();
       loadUserLocations();
@@ -60,14 +68,7 @@ export default function MapScreen({ user, userProfile }) {
       });
 
       // Center map on current location (only on native)
-      if (mapRef.current && Platform.OS !== 'web') {
-        mapRef.current.animateToRegion({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-      }
+      // Removed mapRef.current.animateToRegion as it's not compatible with WebView-based LeafletMap
     } catch (error) {
       console.error('Error getting current location:', error);
       Alert.alert('Error', 'Could not get current location');
@@ -206,61 +207,52 @@ export default function MapScreen({ user, userProfile }) {
     </View>
   );
 
-  // Render map or fallback
-  const renderMap = () => {
-    if (Platform.OS === 'web') {
-      return <WebMapFallback />;
-    }
+  const handleSearch = async () => {
+    if (!searchQuery) return;
 
-    if (!MapView) {
+    try {
+      const results = await Location.geocodeAsync(searchQuery);
+      if (results.length > 0) {
+        const { latitude, longitude } = results[0];
+        setCurrentLocation({
+          latitude,
+          longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        });
+        // Also update the marker to the searched location
+        if (mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude,
+            longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
+        }
+      } else {
+        Alert.alert('Not Found', 'No results found for your search.');
+      }
+    } catch (error) {
+      console.error('Error geocoding location:', error);
+      Alert.alert('Error', 'Could not search for location.');
+    }
+  };
+
+  const renderMap = () => {
+    if (!mapHtmlContent) {
       return (
-        <View style={styles.webFallback}>
-          <Text style={styles.webFallbackTitle}>🗺️ Map View</Text>
-          <Text style={styles.webFallbackText}>
-            Maps are not available on this platform.
-          </Text>
-          <Text style={styles.webFallbackText}>
-            Please use the mobile app for full map functionality.
-          </Text>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading map content...</Text>
         </View>
       );
     }
-
     return (
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        initialRegion={currentLocation || {
-          latitude: 37.78825,
-          longitude: -122.4324,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
-        }}
-        showsUserLocation={true}
-        showsMyLocationButton={true}
-      >
-        {/* Render user location markers */}
-        {userLocations.map((location, index) => (
-          <Marker
-            key={location.id || index}
-            coordinate={{
-              latitude: location.latitude,
-              longitude: location.longitude,
-            }}
-            title={`Location ${index + 1}`}
-            description={new Date(location.timestamp).toLocaleString()}
-          />
-        ))}
-
-        {/* Render route line if there are multiple points */}
-        {userLocations.length > 1 && Polyline && (
-          <Polyline
-            coordinates={getRouteCoordinates()}
-            strokeColor="#FF0000"
-            strokeWidth={3}
-          />
-        )}
-      </MapView>
+      <LeafletMap
+        initialRegion={currentLocation}
+        markerCoordinate={currentLocation}
+        userLocations={userLocations}
+        mapHtmlContent={mapHtmlContent}
+      />
     );
   };
 
@@ -274,6 +266,18 @@ export default function MapScreen({ user, userProfile }) {
 
   return (
     <View style={styles.container}>
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search for a location..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={handleSearch}
+        />
+        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+          <Text style={styles.searchButtonText}>Search</Text>
+        </TouchableOpacity>
+      </View>
       {renderMap()}
 
       {/* Control buttons */}
@@ -330,6 +334,47 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
+  searchContainer: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 1, // Ensure search bar is above the map
+  },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    borderColor: '#E0E0E0',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginRight: 10,
+    fontSize: 16,
+  },
+  searchButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+  },
+  searchButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -342,7 +387,7 @@ const styles = StyleSheet.create({
   },
   controls: {
     position: 'absolute',
-    top: 50,
+    bottom: 20,
     right: 20,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,

@@ -70,10 +70,10 @@ export default {
     },
     "sdkVersion": "53.0.0",
     "extra": {
-      SUPABASE_URL: "https://wtcxhhbigmqrmqdyhzcz.supabase.co",
-      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0Y3hoaGJpZ21xcm1xZHloemN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIxNjE3ODgsImV4cCI6MjA2NzczNzc4OH0.AIViaiRT2odHJM2wQXl3dDZ69YxEj7t_7UiRFqEgZjY",
+      SUPABASE_URL: "https://otmklncbcfbfrvvtdgme.supabase.co",
+      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im90bWtsbmNiY2ZiZnJ2dnRkZ21lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2NTk1MTMsImV4cCI6MjA2OTIzNTUxM30.nbDhERSwKOS2DV6Rk78f5sUB9MZoyZWWVxARDNs4u5E",
       "eas": {
-        "projectId": "e1129aeb-d49c-498a-8a68-9063bb755b96"
+        "projectId": "otmklncbcfbfrvvtdgme"
       }
     }
   }

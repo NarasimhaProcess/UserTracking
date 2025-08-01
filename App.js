@@ -22,6 +22,9 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import AdminScreen from './src/screens/AdminScreen';
 import AreaManagementScreen from './src/screens/AreaManagementScreen';
 import CreateCustomerScreen from './src/screens/CreateCustomerScreen';
+import AstrologyWebviewScreen from './src/screens/AstrologyWebviewScreen';
+import NewsPaperScreen from './src/screens/NewsPaperScreen';
+import VideosScreen from './src/screens/VideosScreen';
 
 // Import services
 import { supabase } from './src/services/supabase';
@@ -42,6 +45,50 @@ if (Platform.OS === 'web') {
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
+function NewsTabNavigator() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: '#007AFF',
+        tabBarInactiveTintColor: '#8E8E93',
+        tabBarStyle: {
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 1,
+          borderTopColor: '#E5E5EA',
+        },
+      }}
+    >
+      <Tab.Screen
+        name="Astrology"
+        component={AstrologyWebviewScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Text style={{ color, fontSize: size }}>🔮</Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="News Paper"
+        component={NewsPaperScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Text style={{ color, fontSize: size }}>📰</Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Videos"
+        component={VideosScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Text style={{ color, fontSize: size }}>🎥</Text>
+          ),
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
 
 function TabNavigator({ route }) {
   // Get user and userProfile from route params or use the state from App.js
@@ -136,6 +183,15 @@ function TabNavigator({ route }) {
       >
         {(props) => <CreateCustomerScreen {...props} user={user} userProfile={userProfile} />}
       </Tab.Screen>
+      <Tab.Screen
+        name="News"
+        component={NewsTabNavigator}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Text style={{ color, fontSize: size }}>📰</Text>
+          ),
+        }}
+      />
       <Tab.Screen 
         name="Profile" 
         options={{

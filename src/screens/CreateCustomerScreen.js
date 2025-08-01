@@ -16,6 +16,7 @@ import EnhancedDatePicker from '../components/EnhancedDatePicker';
 import { MaterialIcons } from '@expo/vector-icons';
 import AreaSearchBar from '../components/AreaSearchBar';
 import CustomerItemActions from '../components/CustomerItemActions';
+import LeafletMap from '../components/LeafletMap';
 
 function LocationSearchBar({ onLocationFound }) {
   const [query, setQuery] = useState('');
@@ -210,6 +211,9 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   const [expandedTransactionId, setExpandedTransactionId] = useState(null);
   // Add state for location selection
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [mapRegion, setMapRegion] = useState(null);
+  const [currentRegion, setCurrentRegion] = useState(null);
   const [isTransactionSaving, setIsTransactionSaving] = useState(false);
   const [loadingImages, setLoadingImages] = useState(false);
   // Add state for enhanced date picker
@@ -1058,20 +1062,20 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   const openLocationPicker = (customer) => {
     setSelectedCustomer(customer);
     setSelectedLocation({
-      latitude: customer.latitude || 37.78825,
-      longitude: customer.longitude || -122.4324,
+      latitude: customer.latitude || 17.3850,
+      longitude: customer.longitude || 78.4867,
     });
     setMapRegion({
-      latitude: customer.latitude || 37.78825,
-      longitude: customer.longitude || -122.4324,
+      latitude: customer.latitude || 17.3850,
+      longitude: customer.longitude || 78.4867,
       latitudeDelta: 0.01,
       longitudeDelta: 0.01,
     });
     setShowLocationPicker(true);
   };
 
-  const handleMapPress = (event) => {
-    const { latitude, longitude } = event.nativeEvent.coordinate;
+  const handleMapPress = (data) => {
+    const { latitude, longitude } = data;
     setSelectedLocation({ latitude, longitude });
   };
 
@@ -1126,7 +1130,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
       };
 
       setSelectedLocation(newLocation);
-      setMapRegion({
+      setCurrentRegion({
         ...newLocation,
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
@@ -1872,6 +1876,23 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={showLocationPicker}
+        animationType="slide"
+        onRequestClose={() => setShowLocationPicker(false)}
+      >
+        <View style={{ flex: 1 }}>
+          <LeafletMap
+            onMapPress={handleMapPress}
+            initialRegion={mapRegion}
+            markerCoordinate={selectedLocation}
+          />
+          <View style={{ position: 'absolute', bottom: 20, left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-around' }}>
+            <Button title="Get Current Location" onPress={getCurrentLocation} />
+            <Button title="Confirm Location" onPress={confirmLocationSelection} />
           </View>
         </View>
       </Modal>
