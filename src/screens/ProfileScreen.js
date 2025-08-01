@@ -115,6 +115,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
   const [showImageModal, setShowImageModal] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  const mapRef = useRef(null);
   const [mapRegion, setMapRegion] = useState({
     latitude: userProfile?.latitude || 37.78825,
     longitude: userProfile?.longitude || -122.4324,
@@ -347,21 +348,21 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     setShowLocationPicker(true);
   };
 
-  const handleMapPress = (event) => {
-    const { latitude, longitude } = event.nativeEvent.coordinate;
+  const handleMapPress = ({ latitude, longitude }) => {
     setSelectedLocation({ latitude, longitude });
   };
 
   const confirmLocationSelection = async () => {
     if (!selectedLocation || !user) return;
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('users')
         .update({
           latitude: selectedLocation.latitude,
           longitude: selectedLocation.longitude,
         })
-        .eq('id', user.id);
+        .eq('id', user.id)
+        .select();
       if (error) {
         Alert.alert('Error', 'Failed to update location: ' + error.message);
       } else {
@@ -531,9 +532,13 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
             <LocationSearchBar onLocationFound={(coords) => {
               setSelectedLocation(coords);
               setMapRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 });
+              if (mapRef.current) {
+                mapRef.current.centerOnLocation(coords);
+              }
             }} />
             <View style={{ width: '100%', height: 200, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
               <LeafletMap
+                ref={mapRef}
                 onMapPress={handleMapPress}
                 initialRegion={mapRegion}
                 markerCoordinate={selectedLocation}

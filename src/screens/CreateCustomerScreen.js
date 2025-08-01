@@ -102,7 +102,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
     if (!user?.id) {
       console.error('CreateCustomerScreen: User ID is missing', { user });
     }
-  }, [user]);
+  }, [user?.id]);
   
   // Reset selected customer when modal closes
   useEffect(() => {
@@ -256,7 +256,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
       setAreas(areaList);
     }
     if (user?.id) fetchAreas();
-  }, [user]);
+  }, [user?.id]);
 
   // Fetch accessible user IDs and area IDs based on group memberships
   useEffect(() => {
@@ -311,7 +311,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
 
     }
     fetchAccessibleIds();
-  }, [user]);
+  }, [user?.id]);
 
   // Update fetchCustomers to support search and pagination
   useEffect(() => {
@@ -449,7 +449,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   useEffect(() => {
     console.log('Auto-calculation useEffect triggered:', { selectedPlanId, amountGiven, repaymentPlans: repaymentPlans.length });
     calculateRepaymentDetails(selectedPlanId, amountGiven, repaymentFrequency);
-  }, [selectedPlanId, amountGiven, repaymentPlans, repaymentFrequency]);
+  }, [selectedPlanId, amountGiven, repaymentPlans]);
 
   // Auto-calculate end date when start date or days to complete changes
   useEffect(() => {

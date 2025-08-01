@@ -135,17 +135,17 @@ export default function MapScreen({ user, userProfile }) {
     }
   };
 
-  const handleMapPress = (coordinate) => {
-    console.log('Map pressed at:', coordinate);
+  const handleMapPress = ({ latitude, longitude }) => {
+    console.log('Map pressed at:', { latitude, longitude });
     // You can add functionality here, like adding a new marker
   };
 
-  const handleMarkerDragEnd = (coordinate) => {
-    console.log('Marker dragged to:', coordinate);
+  const handleMarkerDragEnd = ({ latitude, longitude }) => {
+    console.log('Marker dragged to:', { latitude, longitude });
     setCurrentLocation({
       ...currentLocation,
-      latitude: coordinate.latitude,
-      longitude: coordinate.longitude,
+      latitude,
+      longitude,
     });
   };
 
