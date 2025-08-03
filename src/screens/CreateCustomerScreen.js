@@ -10,6 +10,7 @@ import * as FileSystem from 'expo-file-system';
 import { Linking } from 'react-native';
 import styles from './CustomerStyles';
 import * as ImagePicker from 'expo-image-picker';
+import { useNavigation } from '@react-navigation/native';
 
 import * as uuid from 'uuid';
 import EnhancedDatePicker from '../components/EnhancedDatePicker';
@@ -96,7 +97,9 @@ function LocationSearchBar({ onLocationFound }) {
 
 const CUSTOMER_TYPES = ['food', 'others', 'grocery', 'cloth', 'metals', 'fashion'];
 
-export default function CreateCustomerScreen({ user, userProfile }) {
+export default function CreateCustomerScreen({ user, userProfile, route = {} }) {
+  const navigation = useNavigation();
+  const [isReadOnly, setIsReadOnly] = useState(false);
   // Validate user prop
   useEffect(() => {
     if (!user?.id) {
@@ -108,8 +111,61 @@ export default function CreateCustomerScreen({ user, userProfile }) {
   useEffect(() => {
     if (!showCustomerFormModal) {
       setSelectedCustomer(null);
+      setIsEditMode(false); // Ensure edit mode is off when modal closes
+      setIsReadOnly(false); // Ensure read-only mode is off when modal closes
     }
   }, [showCustomerFormModal]);
+
+  // Handle navigation from map to view customer details
+  useEffect(() => {
+    if (route?.params?.customerId) { // Added nullish coalescing operator for route
+      const customerId = route.params.customerId;
+      const readOnlyMode = route.params.readOnly || false;
+      
+      async function fetchAndDisplayCustomer() {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('id', customerId)
+          .single();
+
+        if (error) {
+          console.error('Error fetching customer for view:', error);
+          Alert.alert('Error', 'Failed to load customer details.');
+          return;
+        }
+
+        if (data) {
+          setSelectedCustomer(data);
+          setName(data.name || '');
+          setMobile(data.mobile || '');
+          setEmail(data.email || '');
+          setBookNo(data.book_no || '');
+          setCustomerType(data.customer_type || '');
+          setAreaId(data.area_id || null);
+          const selectedArea = areas.find(a => a.id === data.area_id);
+          setSelectedAreaName(selectedArea ? selectedArea.area_name : '');
+          setLatitude(data.latitude || null);
+          setLongitude(data.longitude || null);
+          setRemarks(data.remarks || '');
+          setAmountGiven(data.amount_given ? String(data.amount_given) : '');
+          setRepaymentFrequency(data.repayment_frequency || '');
+          setRepaymentAmount(data.repayment_amount ? String(data.repayment_amount) : '');
+          setDaysToComplete(data.days_to_complete ? String(data.days_to_complete) : '');
+          setAdvanceAmount(data.advance_amount ? String(data.advance_amount) : '0');
+          setLateFee(data.late_fee_per_day ? String(data.late_fee_per_day) : '');
+          setSelectedPlanId(data.repayment_plan_id ? String(data.repayment_plan_id) : '');
+          setStartDate(data.start_date ? data.start_date.split('T')[0] : '');
+          setEndDate(data.end_date ? data.end_date.split('T')[0] : '');
+          setMissingFields([]);
+          setIsEditMode(false); // Ensure not in edit mode
+          setIsReadOnly(readOnlyMode); // Set read-only mode
+          setShowCustomerFormModal(true); // Open the modal
+        }
+      }
+      fetchAndDisplayCustomer();
+    }
+  }, [route?.params?.customerId, route?.params?.readOnly, areas]);
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
@@ -1660,34 +1716,31 @@ export default function CreateCustomerScreen({ user, userProfile }) {
 
   return (
     <View style={styles.container}>
+      <AreaSearchBar
+        areas={areas}
+        onAreaSelect={(id, name) => {
+          console.log('Area selected:', { id, name });
+          setAreaId(id);
+          setSelectedAreaName(name);
+        }}
+        selectedAreaName={selectedAreaName}
+      />
+      <TextInput
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search by Card No, Name, Mobile, Email, Area (use comma to search multiple)"
+        style={styles.searchInput}
+      />
+      <View style={{ flexDirection: 'row', backgroundColor: '#E3E6F0', borderTopLeftRadius: 8, borderTopRightRadius: 8, paddingVertical: 8 }}>
+        <Text style={[styles.headerCell, { flex: 1.5 }]}>Card No</Text>
+        <Text style={[styles.headerCell, { flex: 2 }]}>Name</Text>
+        <Text style={[styles.headerCell, { flex: 2 }]}>Mobile</Text>
+        <Text style={[styles.headerCell, { flex: 2 }]}>Actions</Text>
+      </View>
       <FlatList
         data={filteredCustomers}
         renderItem={renderCustomerItem}
         keyExtractor={item => item.id.toString()}
-        ListHeaderComponent={
-          <View>
-            <AreaSearchBar
-              areas={areas}
-              onAreaSelect={(id, name) => {
-                setAreaId(id);
-                setSelectedAreaName(name);
-              }}
-              selectedAreaName={selectedAreaName}
-            />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search by Card No, Name, Mobile, Email, Area (use comma to search multiple)"
-              style={styles.searchInput}
-            />
-            <View style={{ flexDirection: 'row', backgroundColor: '#E3E6F0', borderTopLeftRadius: 8, borderTopRightRadius: 8, paddingVertical: 8 }}>
-              <Text style={[styles.headerCell, { flex: 1.5 }]}>Card No</Text>
-              <Text style={[styles.headerCell, { flex: 2 }]}>Name</Text>
-              <Text style={[styles.headerCell, { flex: 2 }]}>Mobile</Text>
-              <Text style={[styles.headerCell, { flex: 2 }]}>Actions</Text>
-            </View>
-          </View>
-        }
         style={styles.customerList}
         ListEmptyComponent={<Text style={styles.emptyListText}>No customers found.</Text>}
       />
@@ -1697,6 +1750,25 @@ export default function CreateCustomerScreen({ user, userProfile }) {
         </TouchableOpacity>
       )}
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginVertical: 12 }}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('CustomerMap', { areaId: areaId })}
+          style={{
+            backgroundColor: areaId ? '#28a745' : '#999999',
+            borderRadius: 8,
+            paddingVertical: 12,
+            paddingHorizontal: 20,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.2,
+            shadowRadius: 4,
+            elevation: 3,
+            alignSelf: 'flex-end',
+            marginRight: 10,
+          }}
+          disabled={!areaId}
+        >
+          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>View Customers on Map</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={openCreateCustomerModal} style={{ backgroundColor: '#4A90E2', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3, alignSelf: 'flex-end' }}>
           <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>+ Add Customer</Text>
         </TouchableOpacity>
@@ -1919,31 +1991,33 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                 <Text style={styles.modalDetail}>Days to Complete: {selectedCustomer.days_to_complete}</Text>
                 <Text style={styles.modalDetail}>Advance Amount: {selectedCustomer.advance_amount}</Text>
                 <Text style={styles.modalDetail}>Late Fee Per Day: {selectedCustomer.late_fee_per_day}</Text>
-                <View style={styles.modalActions}>
-                  <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.editButton}>
-                    <Text style={styles.editButtonText}>Edit</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={async () => {
-                    Alert.alert('Delete Customer', 'Are you sure you want to delete this customer?', [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Delete', style: 'destructive', onPress: async () => {
-                        await supabase.from('customers').delete().eq('id', selectedCustomer.id);
-                        setShowCustomerModal(false);
-                        setIsEditing(false);
-                        setSelectedCustomer(null);
-                        // Refresh customer list
-                        const { data } = await supabase
-                          .from('customers')
-                          .select('*')
-                          .eq('user_id', user.id)
-                          .order('created_at', { ascending: false });
-                        setCustomers(data || []);
-                      }}
-                    ]);
-                  }} style={styles.deleteButton}>
-                    <Text style={styles.deleteButtonText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
+                {!isReadOnly && (
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.editButton}>
+                      <Text style={styles.editButtonText}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={async () => {
+                      Alert.alert('Delete Customer', 'Are you sure you want to delete this customer?', [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Delete', style: 'destructive', onPress: async () => {
+                          await supabase.from('customers').delete().eq('id', selectedCustomer.id);
+                          setShowCustomerModal(false);
+                          setIsEditing(false);
+                          setSelectedCustomer(null);
+                          // Refresh customer list
+                          const { data } = await supabase
+                            .from('customers')
+                            .select('*')
+                            .eq('user_id', user.id)
+                            .order('created_at', { ascending: false });
+                          setCustomers(data || []);
+                        }}
+                      ]);
+                    }} style={styles.deleteButton}>
+                      <Text style={styles.deleteButtonText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
                 <TouchableOpacity onPress={() => { setShowCustomerModal(false); setIsEditing(false); }} style={styles.closeButton}>
                   <Text style={styles.closeButtonText}>Close</Text>
                 </TouchableOpacity>
@@ -1965,12 +2039,14 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                     <Text style={styles.documentName}>{doc.file_name}</Text>
                   </View>
                 ))}
-                <TouchableOpacity onPress={handleAddCustomerDoc} style={styles.addDocumentButton}>
-                  <Text style={styles.addDocumentButtonText}>Add Document</Text>
-                </TouchableOpacity>
+                {!isReadOnly && (
+                  <TouchableOpacity onPress={handleAddCustomerDoc} style={styles.addDocumentButton}>
+                    <Text style={styles.addDocumentButtonText}>Add Document</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
-            {selectedCustomer && isEditing && (
+            {selectedCustomer && isEditing && !isReadOnly && (
               <ScrollView>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                   <Text style={styles.modalTitle}>Edit Customer</Text>
@@ -2422,7 +2498,7 @@ export default function CreateCustomerScreen({ user, userProfile }) {
                           borderBottomWidth: 1, 
                           borderColor: '#eee', 
                           paddingVertical: 6,
-                          backgroundColor: item.payment_mode === 'upi' && item.upi_image ? '#F0F8FF' : 'transparent'
+                                      backgroundColor: areaId ? '#28a745' : '#999999',
                         }}>
                           <Text style={[styles.cell, { flex: 1 }]}>{item.transaction_type}</Text>
                           <Text style={[styles.cell, { flex: 1 }]}>₹{item.amount}</Text>

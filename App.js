@@ -25,6 +25,9 @@ import CreateCustomerScreen from './src/screens/CreateCustomerScreen';
 import AstrologyWebviewScreen from './src/screens/AstrologyWebviewScreen';
 import NewsPaperScreen from './src/screens/NewsPaperScreen';
 import YouTubeScreen from './src/screens/YouTubeScreen';
+import CustomerMapScreen from './src/screens/CustomerMapScreen';
+import BirthdayScreen from './src/screens/BirthdayScreen';
+import MarriageScreen from './src/screens/MarriageScreen';
 
 // Import services
 import { supabase } from './src/services/supabase';
@@ -47,6 +50,43 @@ const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function NewsTabNavigator() {
+  const WishesTab = createBottomTabNavigator();
+
+  function WishesTabNavigator() {
+    return (
+      <WishesTab.Navigator
+        screenOptions={{
+          tabBarActiveTintColor: '#007AFF',
+          tabBarInactiveTintColor: '#8E8E93',
+          tabBarStyle: {
+            backgroundColor: '#FFFFFF',
+            borderTopWidth: 1,
+            borderTopColor: '#E5E5EA',
+          },
+        }}
+      >
+        <WishesTab.Screen
+          name="Birthday"
+          component={BirthdayScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <Text style={{ color, fontSize: size }}>🎂</Text>
+            ),
+          }}
+        />
+        <WishesTab.Screen
+          name="Marriage"
+          component={MarriageScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <Text style={{ color, fontSize: size }}>💍</Text>
+            ),
+          }}
+        />
+      </WishesTab.Navigator>
+    );
+  }
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -83,6 +123,15 @@ function NewsTabNavigator() {
         options={{
           tabBarIcon: ({ color, size }) => (
             <Text style={{ color, fontSize: size }}>🎥</Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Wishes"
+        component={WishesTabNavigator}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Text style={{ color, fontSize: size }}>✨</Text>
           ),
         }}
       />
@@ -181,7 +230,7 @@ function TabNavigator({ route }) {
           ),
         }}
       >
-        {(props) => <CreateCustomerScreen {...props} user={user} userProfile={userProfile} />}
+        {(props) => <CreateCustomerScreen {...props} user={user} userProfile={userProfile} route={props.route} />}
       </Tab.Screen>
       <Tab.Screen
         name="News"
@@ -402,11 +451,17 @@ export default function App() {
       <StatusBar style="auto" />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
-          <Stack.Screen 
-            name="Main" 
-            component={TabNavigator} 
-            initialParams={{ user, userProfile }}
-          />
+          <>
+            <Stack.Screen 
+              name="Main" 
+              component={TabNavigator} 
+              initialParams={{ user, userProfile }}
+            />
+            <Stack.Screen 
+              name="CustomerMap" 
+              component={CustomerMapScreen}
+            />
+          </>
         ) : (
           <>
             <Stack.Screen 
