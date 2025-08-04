@@ -37,10 +37,28 @@ export default function DashboardScreen({ user, userProfile }) {
   const [paidTodayCustomers, setPaidTodayCustomers] = useState([]);
   const [notPaidTodayCustomers, setNotPaidTodayCustomers] = useState([]);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [showLargeChartModal, setShowLargeChartModal] = useState(false);
   const [largeChartType, setLargeChartType] = useState('');
   const [largeChartData, setLargeChartData] = useState(null);
   const [largeChartTitle, setLargeChartTitle] = useState('');
+
+  const debounceTimeout = useRef(null);
+
+  const handleSearchChange = useCallback((text) => {
+    setCustomerSearchQuery(text);
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+    debounceTimeout.current = setTimeout(() => {
+      const filtered = customerList.filter(customer => 
+        customer.name.toLowerCase().includes(text.toLowerCase()) ||
+        customer.mobile.includes(text) ||
+        (customer.book_no && customer.book_no.toLowerCase().includes(text.toLowerCase()))
+      );
+      setDisplayedCustomerList(filtered);
+    }, 500); // 500ms debounce delay
+  }, [customerList]);
 
   useEffect(() => {
     // Check tracking status on initial load
@@ -194,6 +212,7 @@ export default function DashboardScreen({ user, userProfile }) {
     setCustomerList(customers); // Store the full list
     setDisplayedCustomerList(customers); // Initially display the full list
     setCustomerSearchQuery(''); // Clear search query on new selection
+    
 
     if (customers.length > 0) {
         const newBarChartData = {
@@ -211,9 +230,8 @@ export default function DashboardScreen({ user, userProfile }) {
   
 
   const renderHeader = () => {
-    console.log('Rendering header, customer list length:', customerList.length);
     return (
-      <>
+      <View>
         <View style={styles.header}>
           {userProfile?.profile_photo_data ? (
             <TouchableOpacity onPress={() => setShowProfileModal(true)}>
@@ -313,7 +331,13 @@ export default function DashboardScreen({ user, userProfile }) {
         )}
 
         
-      </>
+      <TextInput
+          style={[styles.customerSearchInput, { marginHorizontal: 16, marginBottom: 16 }]} // Apply margin here
+          placeholder="Search customers by card no., name, or mobile."
+          value={customerSearchQuery}
+          onChangeText={handleSearchChange}
+        />
+      </View>
     );
   };
 
