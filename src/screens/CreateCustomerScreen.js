@@ -203,6 +203,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   const [docModalUri, setDocModalUri] = useState('');
   const [showCustomerFormModal, setShowCustomerFormModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [repaymentFrequency, setRepaymentFrequency] = useState('');
   const [newTransactionPaymentType, setNewTransactionPaymentType] = useState('cash');
   const [newTransactionUPIImageUrl, setNewTransactionUPIImageUrl] = useState('');
@@ -1422,11 +1423,15 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   };
 
   const handleCreate = async () => {
+    if (isSubmitting) return; // Prevent double submission
+    setIsSubmitting(true);
+
     console.log('Create customer started with user:', user);
     
     if (!user?.id) {
       console.error('User ID is missing');
       Alert.alert('Error', 'Please log in again to continue.');
+      setIsSubmitting(false);
       return;
     }
 
@@ -1615,7 +1620,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
         'An unexpected error occurred while creating the customer. Please try again.\n\nDetails: ' + error.message
       );
     } finally {
-      // Clean up any resources if needed
+      setIsSubmitting(false);
     }
   };
 
@@ -2562,9 +2567,9 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
         onRequestClose={() => setShowTransactionModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingTop: 20, paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#fff' }]}> 
+          <View style={[styles.modalContent, { paddingTop: 30, paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#fff' }]}> 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <Text style={styles.modalTitle}>{selectedCustomer?.name} Transactions</Text>
+              <Text style={[styles.modalTitle, { flex: 1 }]}>{selectedCustomer?.name} Transactions</Text>
               <View style={{ flexDirection: 'row' }}>
                 <TouchableOpacity onPress={handleDownloadTransactions} style={{ paddingHorizontal: 8 }}>
                   <MaterialIcons name="download" size={24} color="#4A90E2" />
