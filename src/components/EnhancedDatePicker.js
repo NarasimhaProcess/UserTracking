@@ -340,9 +340,9 @@ const EnhancedDatePicker = ({
         const year = selectedStartDate.getFullYear();
         const month = (selectedStartDate.getMonth() + 1).toString().padStart(2, '0');
         const day = selectedStartDate.getDate().toString().padStart(2, '0');
-        const formattedDate = `${year}-${month}-${day}`;
-        console.log('Single mode - Selected date:', { original: selectedStartDate, formatted: formattedDate });
-        onDateSelect({ startDate: formattedDate });
+        console.log('Single mode - Selected date:', { original: selectedStartDate });
+        selectedStartDate.setHours(0, 0, 0, 0);
+        onDateSelect({ startDate: selectedStartDate });
       }
     } else { // Range selection mode
       if (selectedStartDate && calculatedEndDate) {

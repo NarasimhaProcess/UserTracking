@@ -18,6 +18,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AreaSearchBar from '../components/AreaSearchBar';
 import CustomerItemActions from '../components/CustomerItemActions';
 import LeafletMap from '../components/LeafletMap';
+import CalculatorModal from '../components/CalculatorModal';
 
 function LocationSearchBar({ onLocationFound }) {
   const [query, setQuery] = useState('');
@@ -207,6 +208,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   const [repaymentAmount, setRepaymentAmount] = useState('');
   const [missingFields, setMissingFields] = useState([]);
   const isMissing = field => missingFields.includes(field);
+  const [showCalculatorModal, setShowCalculatorModal] = useState(false);
+  const [calculatorTarget, setCalculatorTarget] = useState(null); // To know which field to update
   const [accessibleUserIds, setAccessibleUserIds] = useState([]);
   const [accessibleAreaIds, setAccessibleAreaIds] = useState([]);
   // Add transaction date state
@@ -800,7 +803,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
     const totalRepaid = transactions
       .filter(t => t.transaction_type === 'repayment')
       .reduce((sum, t) => sum + Number(t.amount), 0);
-    return Number(transactionCustomer.amount_given || 0) - totalRepaid;
+    const expectedTotalRepayment = (Number(transactionCustomer.repayment_amount || 0) * Number(transactionCustomer.days_to_complete || 0));
+    return expectedTotalRepayment - totalRepaid;
   };
   const getPendingDays = () => {
     if (!transactionCustomer || !transactions.length) {
@@ -1835,7 +1839,20 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
               </Picker>
               <Text style={styles.sectionHeader}>Financials</Text>
               <Text style={styles.formLabel}>Amount Given</Text>
-              <TextInput value={amountGiven} onChangeText={setAmountGiven} style={[styles.input, isMissing('amountGiven') && { borderColor: 'red', borderWidth: 2 }]} keyboardType="numeric" />
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TextInput
+                  value={amountGiven}
+                  onChangeText={setAmountGiven}
+                  style={[styles.input, { flex: 1, marginRight: 10 }, isMissing('amountGiven') && { borderColor: 'red', borderWidth: 2 }]} 
+                  keyboardType="numeric" 
+                />
+                <TouchableOpacity
+                  style={{ backgroundColor: '#4A90E2', padding: 10, borderRadius: 8 }}
+                  onPress={() => { setShowCalculatorModal(true); setCalculatorTarget('amountGiven'); }}
+                >
+                  <MaterialIcons name="calculate" size={24} color="white" />
+                </TouchableOpacity>
+              </View>
               <Text style={styles.formLabel}>Repayment Frequency</Text>
               <Picker
                 selectedValue={repaymentFrequency}
@@ -1951,6 +1968,17 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
           </View>
         </View>
       </Modal>
+
+      <CalculatorModal
+        isVisible={showCalculatorModal}
+        onClose={() => setShowCalculatorModal(false)}
+        onResult={(result) => {
+          if (calculatorTarget === 'amountGiven') {
+            setAmountGiven(String(result));
+          }
+          setShowCalculatorModal(false);
+        }}
+      />
       <Modal
         visible={showLocationPicker}
         animationType="slide"
@@ -2508,7 +2536,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
                               <Text style={{ color: '#4A90E2', fontSize: 12, marginLeft: 4 }}>📷</Text>
                             )}
                           </View>
-                          <Text style={[styles.cell, { flex: 1 }]}>{new Date(item.transaction_date).toLocaleString()}</Text>
+                          <Text style={[styles.cell, { flex: 1 }]}>{new Date(item.transaction_date).toLocaleDateString()}</Text>
                         </View>
                       </TouchableOpacity>
                       {expandedTransactionId === item.id && (
@@ -2517,7 +2545,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
                           <Text>Type: {item.transaction_type}</Text>
                           <Text>Amount: ₹{item.amount}</Text>
                           <Text>Payment Mode: {item.payment_mode || 'Cash'}</Text>
-                          <Text>Date: {new Date(item.transaction_date).toLocaleString()}</Text>
+                          <Text>Date: {new Date(item.transaction_date).toLocaleDateString()}</Text>
                           <Text>Remarks: {item.remarks || 'No remarks'}</Text>
                           {item.payment_mode === 'upi' && item.upi_image && (
                             <View style={{ alignItems: 'center', marginTop: 12 }}>

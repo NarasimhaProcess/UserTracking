@@ -48,20 +48,26 @@ export default function DashboardScreen({ user, userProfile, setShowCalculatorMo
 
   const debounceTimeout = useRef(null);
 
+  const customerListRef = useRef(customerList);
+
+  useEffect(() => {
+    customerListRef.current = customerList;
+  }, [customerList]);
+
   const handleSearchChange = useCallback((text) => {
     setCustomerSearchQuery(text);
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
     }
     debounceTimeout.current = setTimeout(() => {
-      const filtered = customerList.filter(customer => 
+      const filtered = customerListRef.current.filter(customer => 
         customer.name.toLowerCase().includes(text.toLowerCase()) ||
         customer.mobile.includes(text) ||
         (customer.book_no && customer.book_no.toLowerCase().includes(text.toLowerCase()))
       );
       setDisplayedCustomerList(filtered);
     }, 500); // 500ms debounce delay
-  }, [customerList]);
+  }, []);
 
   useEffect(() => {
     // Check tracking status on initial load
@@ -215,7 +221,9 @@ export default function DashboardScreen({ user, userProfile, setShowCalculatorMo
     // Set Paid Today customers as default displayed list and bar chart
     setCustomerListTitle('Customers Who Paid Today');
       setCustomerList(paidToday);
-      setDisplayedCustomerList(paidToday);
+    console.log('customerList updated:', paidToday.length, 'customers');
+    setDisplayedCustomerList(paidToday);
+    console.log('displayedCustomerList (initial) updated:', paidToday.length, 'customers');
       if (paidToday.length > 0) {
         setBarChartData({
           labels: paidToday.map(c => c.name.substring(0, 10)),
