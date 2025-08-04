@@ -9,6 +9,7 @@ import {
   FlatList,
   RefreshControl,
   TextInput,
+  Modal,
 } from 'react-native';
 import { supabase } from '../services/supabase';
 import { Buffer } from 'buffer';
@@ -59,9 +60,40 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     description: '',
   });
 
+  // Customer Type management state
+  const [customerTypes, setCustomerTypes] = useState([]);
+  const [loadingCustomerTypes, setLoadingCustomerTypes] = useState(false);
+  const [showCustomerTypeModal, setShowCustomerTypeModal] = useState(false);
+  const [editingCustomerType, setEditingCustomerType] = useState(null);
+  const [customerTypeName, setCustomerTypeName] = useState('');
+  const [customerTypeDescription, setCustomerTypeDescription] = useState('');
+
   useEffect(() => {
     loadUsers();
-  }, [userProfile]);
+    if (activeTab === 'customerTypes') {
+      loadCustomerTypes();
+    }
+  }, [userProfile, activeTab]);
+
+  const loadCustomerTypes = async () => {
+    setLoadingCustomerTypes(true);
+    try {
+      const { data, error } = await supabase
+        .from('customer_types')
+        .select('*')
+        .order('status_name', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+      setCustomerTypes(data || []);
+    } catch (error) {
+      console.error('Error loading customer types:', error);
+      Alert.alert('Error', 'Failed to load customer types');
+    } finally {
+      setLoadingCustomerTypes(false);
+    }
+  };
 
   useEffect(() => {
     // Initialize intervals state when users are loaded
@@ -284,6 +316,102 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     );
   };
 
+  const handleAddCustomerType = () => {
+    setEditingCustomerType(null);
+    setCustomerTypeName('');
+    setCustomerTypeDescription('');
+    setShowCustomerTypeModal(true);
+  };
+
+  const handleEditCustomerType = (type) => {
+    setEditingCustomerType(type);
+    setCustomerTypeName(type.status_name);
+    setCustomerTypeDescription(type.description);
+    setShowCustomerTypeModal(true);
+  };
+
+  const handleDeleteCustomerType = async (id) => {
+    Alert.alert(
+      'Delete Customer Type',
+      'Are you sure you want to delete this customer type?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('customer_types')
+                .delete()
+                .eq('id', id);
+              if (error) throw error;
+              Alert.alert('Success', 'Customer type deleted.');
+              loadCustomerTypes();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete customer type.');
+              console.error('Delete customer type error:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSaveCustomerType = async () => {
+    if (!customerTypeName) {
+      Alert.alert('Error', 'Status Name is required.');
+      return;
+    }
+    try {
+      const newCustomerType = {
+        status_name: customerTypeName,
+        description: customerTypeDescription,
+      };
+      if (editingCustomerType) {
+        const { error } = await supabase
+          .from('customer_types')
+          .update(newCustomerType)
+          .eq('id', editingCustomerType.id);
+        if (error) throw error;
+        Alert.alert('Success', 'Customer type updated.');
+      } else {
+        const { error } = await supabase
+          .from('customer_types')
+          .insert(newCustomerType);
+        if (error) throw error;
+        Alert.alert('Success', 'Customer type added.');
+      }
+      setShowCustomerTypeModal(false);
+      loadCustomerTypes();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save customer type.');
+      console.error('Save customer type error:', error);
+    }
+  };
+
+  const handleCancelCustomerTypeEdit = () => {
+    setShowCustomerTypeModal(false);
+    setEditingCustomerType(null);
+    setCustomerTypeName('');
+    setCustomerTypeDescription('');
+  };
+
+  const renderCustomerTypeItem = ({ item }) => (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>{item.status_name}</Text>
+      <Text style={styles.cardDescription}>{item.description || 'No description'}</Text>
+      <View style={styles.cardActions}>
+        <TouchableOpacity onPress={() => handleEditCustomerType(item)} style={styles.actionButton}>
+          <Text style={styles.actionButtonText}>Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => handleDeleteCustomerType(item.id)} style={styles.deleteButton}>
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   const getRoleColor = (role) => {
     switch (role) {
       case 'superadmin':
@@ -298,21 +426,129 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>User Management</Text>
-        <TouchableOpacity style={styles.refreshButton} onPress={loadUsers}>
-          <Text style={styles.refreshButtonText}>Refresh</Text>
+        <Text style={styles.title}>Admin Panel</Text>
+      </View>
+
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'users' && styles.activeTabButton]}
+          onPress={() => setActiveTab('users')}
+        >
+          <Text style={[styles.tabButtonText, activeTab === 'users' && styles.activeTabButtonText]}>Users</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'areas' && styles.activeTabButton]}
+          onPress={() => setActiveTab('areas')}
+        >
+          <Text style={[styles.tabButtonText, activeTab === 'areas' && styles.activeTabButtonText]}>Areas</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'customerTypes' && styles.activeTabButton]}
+          onPress={() => setActiveTab('customerTypes')}
+        >
+          <Text style={[styles.tabButtonText, activeTab === 'customerTypes' && styles.activeTabButtonText]}>Customer Types</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'groups' && styles.activeTabButton]}
+          onPress={() => setActiveTab('groups')}
+        >
+          <Text style={[styles.tabButtonText, activeTab === 'groups' && styles.activeTabButtonText]}>Groups</Text>
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={users}
-        renderItem={renderUserItem}
-        keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={loadUsers} />
-        }
-        contentContainerStyle={styles.listContainer}
-      />
+      {activeTab === 'users' && (
+        <View style={{ flex: 1 }}>
+          <View style={styles.header}>
+            <Text style={styles.title}>User Management</Text>
+            <TouchableOpacity style={styles.refreshButton} onPress={loadUsers}>
+              <Text style={styles.refreshButtonText}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={users}
+            renderItem={renderUserItem}
+            keyExtractor={(item) => item.id}
+            refreshControl={
+              <RefreshControl refreshing={loading} onRefresh={loadUsers} />
+            }
+            contentContainerStyle={styles.listContainer}
+          />
+        </View>
+      )}
+
+      {/* Placeholder for other tabs */}
+      {activeTab === 'areas' && (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text>Areas Management (Coming Soon)</Text>
+        </View>
+      )}
+      {activeTab === 'groups' && (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text>Groups Management (Coming Soon)</Text>
+        </View>
+      )}
+      {activeTab === 'repaymentPlans' && (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text>Repayment Plans Management (Coming Soon)</Text>
+        </View>
+      )}
+      {activeTab === 'customerTypes' && (
+        <View style={styles.tabContent}>
+          <View style={styles.listHeader}>
+            <Text style={styles.listTitle}>Customer Types</Text>
+            <TouchableOpacity style={styles.addButton} onPress={handleAddCustomerType}>
+              <Text style={styles.addButtonText}>+ Add New</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={customerTypes}
+            renderItem={renderCustomerTypeItem}
+            keyExtractor={(item) => item.id}
+            refreshControl={
+              <RefreshControl refreshing={loadingCustomerTypes} onRefresh={loadCustomerTypes} />
+            }
+            contentContainerStyle={styles.listContainer}
+            ListEmptyComponent={<Text style={styles.emptyListText}>No customer types found.</Text>}
+          />
+
+          <Modal
+            animationType="slide"
+            transparent={true}
+            visible={showCustomerTypeModal}
+            onRequestClose={handleCancelCustomerTypeEdit}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>{editingCustomerType ? 'Edit Customer Type' : 'Add Customer Type'}</Text>
+                <Text style={styles.formLabel}>Status Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={customerTypeName}
+                  onChangeText={setCustomerTypeName}
+                  placeholder="e.g., VIP, Regular, New"
+                />
+                <Text style={styles.formLabel}>Description</Text>
+                <TextInput
+                  style={styles.input}
+                  value={customerTypeDescription}
+                  onChangeText={setCustomerTypeDescription}
+                  placeholder="Optional description"
+                  multiline
+                  numberOfLines={3}
+                />
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelCustomerTypeEdit}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.saveButton} onPress={handleSaveCustomerType}>
+                    <Text style={styles.saveButtonText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+        </View>
+      )}
     </View>
   );
 }
@@ -420,5 +656,145 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  tabButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  activeTabButton: {
+    backgroundColor: '#007AFF',
+  },
+  tabButtonText: {
+    color: '#007AFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  activeTabButtonText: {
+    color: '#FFFFFF',
+  },
+  tabContent: {
+    flex: 1,
+    padding: 16,
+  },
+  listHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  listTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1C1C1E',
+  },
+  addButton: {
+    backgroundColor: '#28a745',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  emptyListText: {
+    textAlign: 'center',
+    marginTop: 20,
+    color: '#8E8E93',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    width: '90%',
+    maxHeight: '80%',
+  },
+  formLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 5,
+    marginTop: 10,
+    color: '#1C1C1E',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 16,
+    color: '#1C1C1E',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 20,
+  },
+  saveButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginLeft: 10,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    backgroundColor: '#E5E5EA',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  cancelButtonText: {
+    color: '#1C1C1E',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  cardDescription: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginBottom: 8,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
 }); 

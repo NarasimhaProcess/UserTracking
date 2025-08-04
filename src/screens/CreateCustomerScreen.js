@@ -213,6 +213,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   const [calculatorTarget, setCalculatorTarget] = useState(null); // To know which field to update
   const [accessibleUserIds, setAccessibleUserIds] = useState([]);
   const [accessibleAreaIds, setAccessibleAreaIds] = useState([]);
+  const [masterCustomerTypes, setMasterCustomerTypes] = useState([]);
   // Add transaction date state
   
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
@@ -226,6 +227,23 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       setNewTransactionAmount(transactionCustomer.repaymentAmount || '');
     }
   }, [newTransactionType, transactionCustomer]);
+
+  // Fetch master customer types
+  useEffect(() => {
+    async function fetchMasterCustomerTypes() {
+      const { data, error } = await supabase
+        .from('customer_types')
+        .select('id, status_name')
+        .order('status_name', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching master customer types:', error);
+      } else {
+        setMasterCustomerTypes(data || []);
+      }
+    }
+    fetchMasterCustomerTypes();
+  }, []);
 
   // Calculate end date based on start date, frequency, and periods
   const calculateEndDate = (startDate, frequency, periods) => {
@@ -1867,7 +1885,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
               <Text style={styles.formLabel}>Customer Type</Text>
               <Picker selectedValue={customerType} onValueChange={setCustomerType} style={styles.formPicker}>
                 <Picker.Item label="Select Type" value="" />
-                {CUSTOMER_TYPES.map(type => <Picker.Item key={type} label={type} value={type} />)}
+                {masterCustomerTypes.map(type => <Picker.Item key={type.id} label={type.status_name} value={type.status_name} />)}
               </Picker>
               <Text style={styles.sectionHeader}>Financials</Text>
               <Text style={styles.formLabel}>Amount Given</Text>
