@@ -1,144 +1,78 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import {
+  View,
+  TextInput,
+  FlatList,
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+} from 'react-native';
 
-const AreaSearchBar = ({ areas, onAreaSelect, selectedAreaName }) => {
+export default function AreaSearchBar({ areas, onAreaSelect, selectedAreaName }) {
   const [query, setQuery] = useState(selectedAreaName || '');
   const [suggestions, setSuggestions] = useState([]);
 
-  useEffect(() => {
-    setQuery(selectedAreaName || '');
-    setSuggestions([]);
-  }, [selectedAreaName]);
-
-  useEffect(() => {
-    console.log('AreaSearchBar suggestions:', suggestions);
-  }, [suggestions]);
-  const [loading, setLoading] = useState(false);
-  const debounceTimeout = useRef(null);
-
-  const filterSuggestions = useCallback((text) => {
-    console.log('filterSuggestions received text:', text);
-    if (!text) {
-      setSuggestions([]);
-      return;
-    }
-    setLoading(true);
-    const filtered = areas.filter(area => 
-      area.area_name.toLowerCase().includes(text.toLowerCase())
-    );
-    console.log('filterSuggestions filtered results:', filtered);
-    setSuggestions(filtered);
-    setLoading(false);
-  }, [areas]);
-
-  const onChangeText = (text) => {
-    console.log('onChangeText query:', text);
+  const handleInputChange = (text) => {
     setQuery(text);
-    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
-    debounceTimeout.current = setTimeout(() => filterSuggestions(text), 300);
+    if (text) {
+      const filteredAreas = areas.filter(area =>
+        area.area_name.toLowerCase().includes(text.toLowerCase())
+      );
+      setSuggestions(filteredAreas);
+    } else {
+      setSuggestions([]);
+    }
   };
 
-  const onSuggestionPress = (item) => {
-    setQuery(item.area_name);
+  const handleSelectArea = (area) => {
+    setQuery(area.area_name);
     setSuggestions([]);
-    onAreaSelect(item.id, item.area_name);
-  };
-
-  const highlightMatch = (text, query) => {
-    if (!query) return <Text>{text}</Text>;
-    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\\]/g, '\\$&')})`, 'i');
-    const parts = text.split(regex);
-    return parts.map((part, i) =>
-      regex.test(part) ? (
-        <Text key={i} style={{ fontWeight: 'bold', color: '#007AFF' }} numberOfLines={1} ellipsizeMode="tail">{part}</Text>
-      ) : (
-        <Text key={i} numberOfLines={1} ellipsizeMode="tail">{part}</Text>
-      )
-    );
+    onAreaSelect(area.id, area.area_name);
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.inputContainer}>
-        <TextInput
-          value={query}
-          onChangeText={onChangeText}
-          placeholder="Search or select area"
-          style={styles.input}
-        />
-        {loading && <ActivityIndicator size="small" style={styles.activityIndicator} />}
-        {query.length > 0 && !loading && suggestions.length === 0 && (
-          <TouchableOpacity onPress={() => {
-            setQuery('');
-            setSuggestions([]);
-            onAreaSelect(null, ''); // Clear selected area
-          }} style={styles.clearButton}>
-            <MaterialIcons name="clear" size={20} color="#666" />
+    <View>
+      <TextInput
+        style={styles.input}
+        placeholder="Search Area..."
+        value={query}
+        onChangeText={handleInputChange}
+      />
+      <FlatList
+        style={[styles.suggestionsList, suggestions.length === 0 && { height: 0 }]} // Hide when no suggestions
+        data={suggestions}
+        keyExtractor={item => item.id.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.suggestionItem}
+            onPress={() => handleSelectArea(item)}
+          >
+            <Text>{item.area_name}</Text>
           </TouchableOpacity>
         )}
-      </View>
-      {suggestions.length > 0 && (
-        <FlatList
-          data={suggestions}
-          keyExtractor={(item) => item.id.toString()}
-          style={styles.suggestionsList}
-          renderItem={({ item }) => (
-            <TouchableOpacity onPress={() => onSuggestionPress(item)} style={styles.suggestionItem}>
-              {highlightMatch(item.area_name, query)}
-            </TouchableOpacity>
-          )}
-        />
-      )}
+        keyboardShouldPersistTaps="always" // Keep keyboard open
+      />
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: 8,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  input: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: '#E5E5EA',
     borderRadius: 8,
     padding: 8,
-    backgroundColor: '#fff',
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    height: 40, // Explicitly set height to ensure single line
-    paddingVertical: 0, // Adjust padding to fit height
-  },
-  activityIndicator: {
-    marginLeft: 8,
-  },
-  clearButton: {
-    marginLeft: 8,
-    padding: 4,
+    marginBottom: 8,
   },
   suggestionsList: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    elevation: 2,
     maxHeight: 150,
-    marginTop: 2,
-    position: 'absolute',
-    width: '100%',
-    zIndex: 1000, // Ensure it's above other elements
-    top: '100%', // Position it directly below the input
-    backgroundColor: '#fff', // Ensure it has a background
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
   },
   suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
+    padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#E5E5EA',
   },
 });
-
-export default AreaSearchBar;
