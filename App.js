@@ -3,9 +3,11 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity, Image } from 'react-native';
+import Icon from 'react-native-vector-icons/FontAwesome';
 import { registerRootComponent } from 'expo';
 import { AppRegistry } from 'react-native';
+import CalculatorModal from './src/components/CalculatorModal';
 import { Buffer } from 'buffer';
 if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer;
@@ -139,7 +141,7 @@ function NewsTabNavigator() {
   );
 }
 
-function TabNavigator({ route }) {
+function TabNavigator({ route, setShowCalculatorModal }) {
   // Get user and userProfile from route params or use the state from App.js
   const { user, userProfile } = route.params || {};
   const isAdmin = userProfile?.user_type === 'admin' || userProfile?.user_type === 'superadmin';
@@ -172,7 +174,7 @@ function TabNavigator({ route }) {
           ),
         }}
       >
-        {(props) => <DashboardScreen {...props} user={user} userProfile={userProfile} />}
+        {(props) => <DashboardScreen {...props} user={user} userProfile={userProfile} setShowCalculatorModal={setShowCalculatorModal} />}
       </Tab.Screen>
       {!isCustomer && !isUser && (
         <Tab.Screen 
@@ -260,6 +262,7 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
+  const [showCalculatorModal, setShowCalculatorModal] = useState(false);
 
   useEffect(() => {
     checkAuthStatus();
@@ -449,14 +452,35 @@ export default function App() {
   return (
     <NavigationContainer>
       <StatusBar style="auto" />
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={({ navigation }) => ({
+        headerShown: isAuthenticated, // Only show header if authenticated
+        headerLeft: () => (
+          userProfile?.profile_photo_data ? (
+            <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+              <Image source={{ uri: userProfile.profile_photo_data }} style={{ width: 30, height: 30, borderRadius: 15, marginLeft: 15 }} />
+            </TouchableOpacity>
+          ) : null
+        ),
+        headerTitle: () => null,
+        headerRight: () => (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15 }}>
+            <TouchableOpacity onPress={handleLogout}>
+              <Text style={{ color: '#FF3B30', fontSize: 16, fontWeight: '600', marginRight: 15 }}>Logout</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowCalculatorModal(true)}>
+              <Icon name="calculator" size={20} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
+        ),
+      })}>
         {isAuthenticated ? (
           <>
             <Stack.Screen 
               name="Main" 
-              component={TabNavigator} 
               initialParams={{ user, userProfile }}
-            />
+            >
+              {(props) => <TabNavigator {...props} setShowCalculatorModal={setShowCalculatorModal} />}
+            </Stack.Screen>
             <Stack.Screen 
               name="CustomerMap" 
               component={CustomerMapScreen}
@@ -477,6 +501,10 @@ export default function App() {
           </>
         )}
       </Stack.Navigator>
+      <CalculatorModal
+        isVisible={showCalculatorModal}
+        onClose={() => setShowCalculatorModal(false)}
+      />
     </NavigationContainer>
   );
 }

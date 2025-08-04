@@ -17,10 +17,12 @@ import {
 import { supabase } from '../services/supabase';
 import { locationTracker } from '../services/locationTracker';
 import { PieChart, BarChart } from 'react-native-chart-kit';
+import Icon from 'react-native-vector-icons/FontAwesome';
 import AreaSearchBar from '../components/AreaSearchBar';
 import LargeChartModal from '../components/LargeChartModal';
+import CalculatorModal from '../components/CalculatorModal';
 
-export default function DashboardScreen({ user, userProfile }) {
+export default function DashboardScreen({ user, userProfile, setShowCalculatorModal }) {
   const [isTracking, setIsTracking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [groupAreas, setGroupAreas] = useState([]);
@@ -42,6 +44,7 @@ export default function DashboardScreen({ user, userProfile }) {
   const [largeChartType, setLargeChartType] = useState('');
   const [largeChartData, setLargeChartData] = useState(null);
   const [largeChartTitle, setLargeChartTitle] = useState('');
+  const [expandedCustomerId, setExpandedCustomerId] = useState(null);
 
   const debounceTimeout = useRef(null);
 
@@ -100,101 +103,140 @@ export default function DashboardScreen({ user, userProfile }) {
   }, [user]);
 
   useEffect(() => {
-    async function fetchPaymentData() {
-      if (!selectedAreaId || !user?.id) {
-        setChartData([]);
-        setBarChartData(null);
-        setCustomerList([]);
-        setCustomerListTitle('');
-        setLoadingChart(false);
-        return;
-      }
+    if (groupAreas.length > 0 && !selectedAreaId) {
+      setSelectedAreaId(groupAreas[0].id);
+      setSelectedAreaName(groupAreas[0].area_name);
+    }
+  }, [groupAreas]);
 
-      setLoadingChart(true);
+  useEffect(() => {
+    if (groupAreas.length > 0 && !selectedAreaId) {
+      setSelectedAreaId(groupAreas[0].id);
+      setSelectedAreaName(groupAreas[0].area_name);
+    }
+  }, [groupAreas]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    // Re-fetch payment data for the currently selected area
+    if (selectedAreaId) {
+      // Creating a temporary function to call the async data fetching logic
+      const refetch = async () => {
+        await fetchPaymentData(selectedAreaId);
+        setRefreshing(false);
+      };
+      refetch();
+    } else {
+      setRefreshing(false);
+    }
+  }, [selectedAreaId]);
+
+  // This function will be passed to the useEffect hook
+  const fetchPaymentData = async (areaId) => {
+    if (!areaId || !user?.id) {
+      setChartData([]);
       setBarChartData(null);
       setCustomerList([]);
       setCustomerListTitle('');
+      setLoadingChart(false);
+      return;
+    }
 
-      const { data: customers, error: customerError } = await supabase
-        .from('customers')
-        .select('id, name, mobile, book_no, amount_given')
-        .eq('area_id', selectedAreaId);
+    setLoadingChart(true);
+    setBarChartData(null);
+    setCustomerList([]);
+    setCustomerListTitle('');
 
-      if (customerError) {
-        console.error('Error fetching customers for chart:', customerError);
-        setLoadingChart(false);
-        return;
-      }
+    const { data: customers, error: customerError } = await supabase
+      .from('customers')
+      .select('id, name, mobile, book_no, amount_given, repayment_amount, days_to_complete, start_date, end_date, repayment_frequency')
+      .eq('area_id', areaId);
 
-      const today = new Date().toISOString().split('T')[0];
-      const { data: transactions, error: transactionError } = await supabase
+    if (customerError) {
+      console.error('Error fetching customers for chart:', customerError);
+      setLoadingChart(false);
+      return;
+    }
+
+    const customerIds = customers.map(c => c.id);
+    let totalTransactionsMap = new Map();
+
+    if (customerIds.length > 0) {
+      const { data: allTransactions, error: transactionsError } = await supabase
         .from('transactions')
-        .select('customer_id')
-        .in('customer_id', customers.map(c => c.id))
-        .eq('transaction_date', today)
-        .eq('transaction_type', 'repayment');
+        .select('customer_id, amount')
+        .in('customer_id', customerIds);
 
-      if (transactionError) {
-        console.error("Error fetching today's transactions:", transactionError);
-        setLoadingChart(false);
-        return;
+      if (transactionsError) {
+        console.error('Error fetching all transactions for customers:', transactionsError);
+      } else {
+        allTransactions.forEach(transaction => {
+          totalTransactionsMap.set(
+            transaction.customer_id,
+            (totalTransactionsMap.get(transaction.customer_id) || 0) + (transaction.amount || 0)
+          );
+        });
       }
+    }
 
-      const paidCustomerIds = new Set(transactions.map(t => t.customer_id));
-      const paidToday = customers.filter(c => paidCustomerIds.has(c.id));
-      const notPaidToday = customers.filter(c => !paidCustomerIds.has(c.id));
+    const customersWithTotalTransactions = customers.map(customer => ({
+      ...customer,
+      totalAmountReceived: (totalTransactionsMap.get(customer.id) || 0).toFixed(2),
+    }));
 
-      console.log("Unique Paid Today Customers:", paidToday.map(c => c.name));
+    const today = new Date().toISOString().split('T')[0];
+    const { data: transactions, error: transactionError } = await supabase
+      .from('transactions')
+      .select('customer_id')
+      .in('customer_id', customers.map(c => c.id))
+      .eq('transaction_date', today)
+      .eq('transaction_type', 'repayment');
 
-      setPaidTodayCustomers(paidToday);
-      setNotPaidTodayCustomers(notPaidToday);
+    if (transactionError) {
+      console.error("Error fetching today's transactions:", transactionError);
+      setLoadingChart(false);
+      return;
+    }
 
-      setChartData([
-        { name: 'Paid Today', population: paidToday.length, color: '#4CAF50', legendFontColor: '#7F7F7F', legendFontSize: 15 },
-        { name: 'Not Paid Today', population: notPaidToday.length, color: '#F44336', legendFontColor: '#7F7F7F', legendFontSize: 15 },
-      ]);
+    const paidCustomerIds = new Set(transactions.map(t => t.customer_id));
+    const paidToday = customersWithTotalTransactions.filter(c => paidCustomerIds.has(c.id));
+    const notPaidToday = customersWithTotalTransactions.filter(c => !paidCustomerIds.has(c.id));
 
-      // Set Not Paid Today customers as default displayed list and bar chart
-      setCustomerListTitle('Customers Who Did Not Pay Today');
-      setCustomerList(notPaidToday);
-      if (notPaidToday.length > 0) {
+    console.log("Unique Paid Today Customers:", paidToday.map(c => c.name));
+
+    setPaidTodayCustomers(paidToday);
+    setNotPaidTodayCustomers(notPaidToday);
+
+    setChartData([
+      { name: 'Paid Today', population: paidToday.length, color: '#4CAF50', legendFontColor: '#7F7F7F', legendFontSize: 15 },
+      { name: 'Not Paid Today', population: notPaidToday.length, color: '#F44336', legendFontColor: '#7F7F7F', legendFontSize: 15 },
+    ]);
+
+    // Set Paid Today customers as default displayed list and bar chart
+    setCustomerListTitle('Customers Who Paid Today');
+      setCustomerList(paidToday);
+      setDisplayedCustomerList(paidToday);
+      if (paidToday.length > 0) {
         setBarChartData({
-          labels: notPaidToday.map(c => c.name.substring(0, 10)),
-          datasets: [{ data: notPaidToday.map(c => c.amount_given || 0) }],
+          labels: paidToday.map(c => c.name.substring(0, 10)),
+          datasets: [{ data: paidToday.map(c => c.repayment_amount || 0) }],
         });
       } else {
         setBarChartData(null);
       }
 
-      setLoadingChart(false);
-    }
+    setLoadingChart(false);
+  };
 
-    fetchPaymentData();
+  useEffect(() => {
+    fetchPaymentData(selectedAreaId);
   }, [selectedAreaId, user]);
 
-  const handleLogout = async () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          await locationTracker.stopTracking();
-          await supabase.auth.signOut();
-        },
-      },
-    ]);
+  const handleCustomerPress = (customerId) => {
+    setExpandedCustomerId(prevId => (prevId === customerId ? null : customerId));
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    if (user?.id) {
-        setSelectedAreaId(prev => prev);
-    }
-    setRefreshing(false);
-  };
-
-  const handlePieSliceClick = (data) => {
+  const handlePieSliceClick = async (data) => {
     console.log('Pie slice clicked:', data);
     const { name } = data;
     let title = '';
@@ -208,16 +250,43 @@ export default function DashboardScreen({ user, userProfile }) {
       customers = notPaidTodayCustomers;
     }
     
+    // Calculate additional details for each customer
+    const customersWithCalculations = customers.map(customer => {
+      const totalAmountToPay = (customer.repayment_amount || 0) * (customer.days_to_complete || 0);
+      const totalAmountReceived = parseFloat(customer.totalAmountReceived) || 0;
+
+      const calculatedRepaymentPeriod = (customer.repayment_amount && customer.repayment_amount !== 0)
+        ? ((totalAmountToPay - totalAmountReceived) / customer.repayment_amount)
+        : 0; // Handle division by zero
+
+      const remainingPeriods = (customer.days_to_complete || 0) - calculatedRepaymentPeriod;
+
+      console.log(`Customer: ${customer.name}`);
+      console.log(`  Total Amount to Pay: ${totalAmountToPay.toFixed(2)}`);
+      console.log(`  Total Amount Received: ${totalAmountReceived.toFixed(2)}`);
+      console.log(`  Calculated Repayment Period: ${calculatedRepaymentPeriod.toFixed(2)}`);
+      console.log(`  Remaining Periods: ${remainingPeriods.toFixed(2)}`);
+
+      return {
+        ...customer,
+        totalAmountToPay: totalAmountToPay.toFixed(2),
+        repaymentPeriod: calculatedRepaymentPeriod.toFixed(2),
+        completionPeriods: customer.days_to_complete || 0,
+        remainingPeriods: remainingPeriods.toFixed(2),
+        totalAmountReceived: totalAmountReceived.toFixed(2),
+      };
+    });
+
     setCustomerListTitle(title);
-    setCustomerList(customers); // Store the full list
-    setDisplayedCustomerList(customers); // Initially display the full list
+    setCustomerList(customersWithCalculations); // Store the full list with calculations
+    setDisplayedCustomerList(customersWithCalculations); // Initially display the full list
     setCustomerSearchQuery(''); // Clear search query on new selection
     
 
-    if (customers.length > 0) {
+    if (customersWithCalculations.length > 0) {
         const newBarChartData = {
-            labels: customers.map(c => c.name.substring(0, 20)),
-            datasets: [{ data: customers.map(c => c.repayment_amount || 0) }],
+            labels: customersWithCalculations.map(c => c.name.substring(0, 20)),
+            datasets: [{ data: customersWithCalculations.map(c => c.repayment_amount || 0) }],
         };
         console.log('Setting bar chart data:', newBarChartData);
         setBarChartData(newBarChartData);
@@ -232,18 +301,7 @@ export default function DashboardScreen({ user, userProfile }) {
   const renderHeader = () => {
     return (
       <View>
-        <View style={styles.header}>
-          {userProfile?.profile_photo_data ? (
-            <TouchableOpacity onPress={() => setShowProfileModal(true)}>
-              <Image source={{ uri: userProfile.profile_photo_data }} style={styles.headerImage} />
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.title}>Dashboard</Text>
-          )}
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
+        
 
         <View style={styles.searchContainer}>
           <AreaSearchBar
@@ -311,6 +369,9 @@ export default function DashboardScreen({ user, userProfile }) {
                     chartConfig={chartConfig}
                     verticalLabelRotation={60}
                     fromZero={true}
+                    showValuesOnTopOfBars={true}
+                    renderValues={(value, index) => {                      const customer = displayedCustomerList[index];                      console.log('Dashboard BarChart - Customer:', customer);                      return `₹${value.toFixed(0)}
+${customer ? customer.book_no : ''}`;                    }}
                     style={{ paddingRight: 30, paddingLeft: 10 }}
                   />
                 </ScrollView>
@@ -360,11 +421,25 @@ export default function DashboardScreen({ user, userProfile }) {
         keyExtractor={item => item.id.toString()}
         renderItem={({ item }) => (
           <View style={styles.customerItemContainer}>
-            <View style={styles.customerItem}>
-              <Text style={[styles.customerBookNo, { flex: 1 }]}>{item.book_no}</Text>
-              <Text style={[styles.customerName, { flex: 2.5 }]}>{item.name}</Text>
-              <Text style={[styles.customerMobile, { flex: 2 }]}>{item.mobile}</Text>
-            </View>
+            <TouchableOpacity onPress={() => handleCustomerPress(item.id)}>
+              <View style={styles.customerItem}>
+                <Text style={[styles.customerBookNo, { flex: 1 }]}>{item.book_no}</Text>
+                <Text style={[styles.customerName, { flex: 2.5 }]}>{item.name}</Text>
+                <Text style={[styles.customerMobile, { flex: 2 }]}>{item.mobile} (₹{item.repayment_amount})</Text>
+              </View>
+            </TouchableOpacity>
+            {expandedCustomerId === item.id && (
+              <View style={styles.customerDetailsContainer}>
+                <Text style={styles.detailText}>Total Amount to Pay: ₹{item.totalAmountToPay}</Text>
+                <Text style={styles.detailText}>Total Periods: {item.completionPeriods}</Text>
+                <Text style={styles.detailText}>Repayment Amount: ₹{item.repayment_amount}</Text>
+                <Text style={[styles.detailText, styles.pendingText]}>Pending Repayment Period: {item.repaymentPeriod}</Text>
+                <Text style={[styles.detailText, { color: 'green' }]}>Paid Repayment Period: {item.remainingPeriods}</Text>
+                <Text style={[styles.detailText, { color: 'blue' }]}>Total Amount Received: ₹{item.totalAmountReceived}</Text>
+                <Text style={styles.detailText}>Start Date: {item.start_date}</Text>
+                <Text style={[styles.detailText, { color: 'blue' }]}>End Date: {item.end_date}</Text>
+              </View>
+            )}
           </View>
         )}
         ListEmptyComponent={() => (
@@ -398,6 +473,7 @@ export default function DashboardScreen({ user, userProfile }) {
         chartType={largeChartType}
         chartData={largeChartData}
         chartTitle={largeChartTitle}
+        customerDataForModal={customerList}
       />
     </View>
   );
@@ -421,8 +497,20 @@ const chartConfig = {
   propsForLabels: {
     fontSize: 10,
   },
-  paddingLeft: 70, // Further increased padding for y-axis labels
+  paddingLeft: 120, // Further increased padding for y-axis labels
   paddingRight: 20, // Added padding to the right
+  formatYLabel: (yLabel) => {
+    const value = parseFloat(yLabel);
+    if (value >= 10000000) { // 1 Crore
+      return `₹${(value / 10000000).toFixed(value % 10000000 === 0 ? 0 : 1)} Cr`;
+    } else if (value >= 100000) { // 1 Lakh
+      return `₹${(value / 100000).toFixed(value % 100000 === 0 ? 0 : 1)} L`;
+    } else if (value >= 1000) { // 1 Thousand
+      return `₹${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} K`;
+    } else {
+      return `₹${value.toFixed(0)}`;
+    }
+  },
 };
 
 const styles = StyleSheet.create({
@@ -456,6 +544,13 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
     fontSize: 16,
     fontWeight: '600',
+  },
+  calculatorButton: {
+    padding: 8,
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   searchContainer: {
     backgroundColor: '#FFFFFF',
@@ -596,5 +691,33 @@ const styles = StyleSheet.create({
   viewLargerButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  customerDetailsContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#F9F9F9',
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+  },
+  detailText: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 4,
+  },
+  pendingText: {
+    color: 'red',
+  },
+  paidText: {
+    color: 'green',
+  },
+  highlightedText: {
+    color: 'blue',
+  },
+  cardNoText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
   },
 });

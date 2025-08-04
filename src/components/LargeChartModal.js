@@ -25,6 +25,18 @@ const chartConfig = {
     strokeWidth: '2',
     stroke: '#ffa726',
   },
+  formatYLabel: (yLabel) => {
+    const value = parseFloat(yLabel);
+    if (value >= 10000000) { // 1 Crore
+      return `₹${(value / 10000000).toFixed(value % 10000000 === 0 ? 0 : 1)} Cr`;
+    } else if (value >= 100000) { // 1 Lakh
+      return `₹${(value / 100000).toFixed(value % 100000 === 0 ? 0 : 1)} L`;
+    } else if (value >= 1000) { // 1 Thousand
+      return `₹${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} K`;
+    } else {
+      return `₹${value.toFixed(0)}`;
+    }
+  },
 };
 
 export default function LargeChartModal({
@@ -33,6 +45,7 @@ export default function LargeChartModal({
   chartType, // 'pie' or 'bar'
   chartData,
   chartTitle,
+  customerDataForModal,
 }) {
   const screenWidth = Dimensions.get('window').width;
 
@@ -66,7 +79,10 @@ export default function LargeChartModal({
                 chartConfig={chartConfig}
                 verticalLabelRotation={60}
                 fromZero={true}
-                style={{ paddingRight: 30 }}
+                showValuesOnTopOfBars={true}
+                renderValues={(value, index) => {                  const customer = customerDataForModal[index];                  console.log('LargeChartModal BarChart - Customer:', customer);                  return `₹${value.toFixed(0)}
+${customer ? customer.book_no : ''}`;                }}
+                style={{ paddingRight: 30, paddingLeft: 40 }}
               />
             ) : (
               <Text>No chart data available.</Text>
