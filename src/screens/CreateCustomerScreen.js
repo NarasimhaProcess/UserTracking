@@ -7,6 +7,7 @@ import * as Location from 'expo-location';
 import { supabase } from '../services/supabase';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { Linking } from 'react-native';
 import styles from './CustomerStyles';
 import * as ImagePicker from 'expo-image-picker';
@@ -657,7 +658,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
     try {
       const { data, error } = await supabase
         .from('transactions')
-        .select('*')
+        .select('*, customers(book_no, name), users(email))')
         .eq('customer_id', customerId)
         .order('transaction_date', { ascending: false });
       if (error) {
@@ -677,6 +678,37 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       .eq('customer_id', customerId)
       .order('uploaded_at', { ascending: false });
     setCustomerDocs(data || []);
+  };
+
+  const handleDownloadTransactions = async () => {
+    if (!transactions || transactions.length === 0) {
+      Alert.alert('No Data', 'No transactions to download.');
+      return;
+    }
+
+    const headers = ['Date', 'Card no', 'Customer Name', 'User Name', 'Payment Mode', 'Amount', 'Remarks'].join(',');
+    const csvRows = transactions.map(t => {
+      const date = new Date(t.transaction_date).toLocaleDateString();
+      const cardNo = t.customers?.book_no || '';
+      const customerName = t.customers?.name || '';
+      const userName = t.users?.email || ''; // Assuming user email is the user name
+      const paymentMode = t.payment_mode || 'Cash';
+      const amount = t.amount || 0;
+      const remarks = t.remarks || '';
+      return `"${date}","${cardNo}","${customerName}","${userName}","${paymentMode}","${amount}","${remarks}"`;
+    });
+
+    const csvString = headers + '\n' + csvRows.join('\n');
+    const fileUri = FileSystem.documentDirectory + 'transactions.csv';
+
+    try {
+      await FileSystem.writeAsStringAsync(fileUri, csvString);
+      await Sharing.shareAsync(fileUri);
+      Alert.alert('Success', 'Transactions file ready to open/share.');
+    } catch (error) {
+      console.error('Error downloading transactions:', error);
+      Alert.alert('Error', 'Failed to download transactions.');
+    }
   };
 
   const handleAddTransaction = async () => {
@@ -2512,7 +2544,18 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
         onRequestClose={() => setShowTransactionModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { padding: 16, borderRadius: 12, backgroundColor: '#fff' }]}> 
+          <View style={[styles.modalContent, { paddingTop: 20, paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#fff' }]}> 
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <Text style={styles.modalTitle}>{selectedCustomer?.name} Transactions</Text>
+              <View style={{ flexDirection: 'row' }}>
+                <TouchableOpacity onPress={handleDownloadTransactions} style={{ paddingHorizontal: 8 }}>
+                  <MaterialIcons name="download" size={24} color="#4A90E2" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleDownloadTransactions} style={{ paddingHorizontal: 8 }}>
+                  <MaterialIcons name="share" size={24} color="#4A90E2" />
+                </TouchableOpacity>
+              </View>
+            </View>
             {transactionCustomer && (
               <>
                 <FlatList
@@ -2679,8 +2722,9 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
                         <TextInput value={newTransactionRemarks} onChangeText={setNewTransactionRemarks} placeholder="Remarks" style={styles.formInput} />
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
                           <TouchableOpacity onPress={() => setShowTransactionModal(false)} style={{ flex: 1, backgroundColor: '#ccc', borderRadius: 8, paddingVertical: 12, marginRight: 8, alignItems: 'center' }}>
-                            <Text style={{ color: '#333', fontWeight: 'bold', fontSize: 16 }}>Close</Text>
+                            <Text style={{ color: '#333', fontWeight: 'bold', fontSize: 16 }}>Cancel</Text>
                           </TouchableOpacity>
+                          
                           <TouchableOpacity style={[styles.iconButton, { backgroundColor: '#007AFF', borderRadius: 8, padding: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }, isTransactionSaving && { opacity: 0.5 }]} onPress={handleAddTransaction} disabled={isTransactionSaving}>
               <MaterialIcons name="add" size={24} color="white" />
               <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold', marginLeft: 5 }}>Add Transaction</Text>
@@ -2689,7 +2733,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
                       </View>
 
                       {/* Transaction grid header row */}
-                      <View style={{ flexDirection: 'row', backgroundColor: '#E3E6F0', borderRadius: 6, paddingVertical: 6, marginBottom: 4 }}>
+                      <View style={{ flexDirection: 'row', backgroundColor: '#E3E6F0', borderRadius: 6, paddingVertical: 6, marginBottom: 4, alignItems: 'center' }}>
                         <Text style={[styles.headerCell, { flex: 1 }]}>Type</Text>
                         <Text style={[styles.headerCell, { flex: 1 }]}>Amount</Text>
                         <Text style={[styles.headerCell, { flex: 1 }]}>Payment</Text>
