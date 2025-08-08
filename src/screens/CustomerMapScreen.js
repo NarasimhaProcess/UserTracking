@@ -1,21 +1,114 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, ActivityIndicator, Text, TextInput, FlatList, TouchableOpacity } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { supabase } from '../services/supabase';
 import { useNavigation } from '@react-navigation/native';
+
+function AreaSearchBar({ onAreaSelected }) {
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const debounceTimeout = useRef(null);
+
+  const fetchSuggestions = async (text) => {
+    if (!text) {
+      setSuggestions([]);
+      return;
+    }
+    setLoading(true);
+    try {
+        const { data, error } = await supabase
+            .from('area_master')
+            .select('id, area_name, latitude, longitude')
+            .ilike('area_name', `%${text}%`)
+            .limit(5);
+
+        if (error) throw error;
+        setSuggestions(data);
+    } catch (e) {
+      setSuggestions([]);
+    }
+    setLoading(false);
+  };
+
+  const onChangeText = (text) => {
+    setQuery(text);
+    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+    debounceTimeout.current = setTimeout(() => fetchSuggestions(text), 400);
+  };
+
+  const onSuggestionPress = (item) => {
+    setQuery(item.area_name);
+    setSuggestions([]);
+    onAreaSelected(item);
+  };
+
+  return (
+    <View style={styles.searchContainer}>
+      <View style={{ flexDirection: 'row' }}>
+        <TextInput
+          value={query}
+          onChangeText={onChangeText}
+          placeholder="Search Area"
+          style={styles.searchInput}
+        />
+        {loading && <ActivityIndicator size="small" style={{ marginLeft: 8 }} />}
+      </View>
+      {suggestions.length > 0 && (
+        <FlatList
+          data={suggestions}
+          keyExtractor={(item) => item.id.toString()}
+          style={styles.suggestionList}
+          renderItem={({ item }) => (
+            <TouchableOpacity onPress={() => onSuggestionPress(item)} style={styles.suggestionItem}>
+              <Text>{item.area_name}</Text>
+            </TouchableOpacity>
+          )}
+        />
+      )}
+    </View>
+  );
+}
 
 export default function CustomerMapScreen({ route }) {
   const navigation = useNavigation();
   const { groupId, areaId } = route.params;
   const [customerLocations, setCustomerLocations] = useState([]);
+  const [allAreas, setAllAreas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const webViewRef = useRef(null);
 
   useEffect(() => {
-    async function fetchCustomerLocations() {
-      console.log('fetchCustomerLocations started. groupId:', groupId, 'areaId:', areaId);
+    async function fetchData() {
       try {
         setLoading(true);
+        await Promise.all([fetchCustomerLocations(), fetchAllAreas()]);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [groupId, areaId]);
+
+  async function fetchAllAreas() {
+      try {
+        const { data, error } = await supabase
+          .from('area_master')
+          .select('id, area_name, latitude, longitude');
+        if (error) throw error;
+        setAllAreas(data.filter(a => a.latitude && a.longitude));
+      } catch (err) {
+        console.error('Error fetching all areas:', err);
+      }
+  }
+
+  async function fetchCustomerLocations() {
+      console.log('fetchCustomerLocations started. groupId:', groupId, 'areaId:', areaId);
+      try {
         let query = supabase
           .from('customers')
           .select('id, name, email, latitude, longitude, area_id, mobile, book_no'); // Include mobile and book_no
@@ -60,65 +153,26 @@ export default function CustomerMapScreen({ route }) {
       } catch (err) {
         console.error('Error fetching customer locations:', err);
         setError(err.message);
-      } finally {
-        setLoading(false);
-        console.log('setLoading(false) called.');
       }
-    }
+  }
 
-    fetchCustomerLocations();
-  }, [groupId, areaId]);
-
-  // Haversine distance function (still useful for internal calculations if needed)
-  const haversineDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // Radius of Earth in kilometers
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
-  // Nearest Neighbor algorithm for approximate TSP (kept for reference, not used by LRM)
-  const calculateShortestPath = (locations) => {
-    if (locations.length === 0) return [];
-
-    let unvisited = [...locations];
-    let path = [];
-    let current = unvisited.shift(); // Start with the first location
-    path.push(current);
-
-    while (unvisited.length > 0) {
-      let nearest = null;
-      let minDistance = Infinity;
-
-      for (let i = 0; i < unvisited.length; i++) {
-        const distance = haversineDistance(
-          current.latitude, current.longitude,
-          unvisited[i].latitude, unvisited[i].longitude
-        );
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearest = unvisited[i];
-        }
+  const onAreaSelected = (area) => {
+      if(webViewRef.current && area.latitude && area.longitude) {
+          webViewRef.current.injectJavaScript(`
+            map.setView([${area.latitude}, ${area.longitude}], 14);
+            L.marker([${area.latitude}, ${area.longitude}])
+                .addTo(map)
+                .bindPopup('<b>${area.area_name}</b>')
+                .openPopup();
+          `);
       }
-      path.push(nearest);
-      unvisited = unvisited.filter(loc => loc !== nearest);
-      current = nearest;
-    }
-    return path;
-  };
-
-  // const orderedLocations = calculateShortestPath(customerLocations); // Not directly used by LRM
+  }
 
   if (loading) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#0000ff" />
-        <Text>Loading customer locations...</Text>
+        <Text>Loading map data...</Text>
       </View>
     );
   }
@@ -130,8 +184,6 @@ export default function CustomerMapScreen({ route }) {
       </View>
     );
   }
-
-  console.log('WebView: customerLocations before HTML generation:', customerLocations);
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -145,28 +197,14 @@ export default function CustomerMapScreen({ route }) {
         <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
         <style>
             body { margin: 0; padding: 0; }
-            #mapid { width: 100vw; height: 100vh; background-color: #f0f0f0; border: 2px solid red; }
+            #mapid { width: 100vw; height: 100vh; background-color: #f0f0f0; }
             .leaflet-routing-container { display: none; } /* Hide routing control UI */
-            #totalDistance { 
-                position: absolute; 
-                bottom: 10px; 
-                left: 50%; 
-                transform: translateX(-50%);
-                background-color: white; 
-                padding: 3px 8px; /* Reduced padding */
-                border-radius: 3px; /* Reduced border-radius */
-                z-index: 1000; 
-                font-weight: bold; 
-                white-space: nowrap; /* Ensure it stays on one line */
-                font-size: 14px; /* Slightly smaller font size */
-            }
         </style>
     </head>
     <body>
         <div id="mapid"></div>
-        <div id="totalDistance"></div>
         <script>
-            var map = L.map('mapid').setView([0, 0], 2); // Default view, will be adjusted
+            var map = L.map('mapid').setView([20.5937, 78.9629], 5); // Default view over India
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -178,16 +216,25 @@ export default function CustomerMapScreen({ route }) {
                 name: loc.name || loc.email,
                 mobile: loc.mobile || 'N/A',
                 book_no: loc.book_no || 'N/A',
-                id: loc.id // Include customer ID for view details button
+                id: loc.id
             })))};
 
-            console.log('WebView: customerLocations received:', customerLocations);
-                       if (customerLocations.length > 0) {
+            var allAreas = ${JSON.stringify(allAreas)};
+
+            allAreas.forEach(function(area) {
+                L.circle([area.latitude, area.longitude], { 
+                    color: 'red',
+                    fillColor: '#f03',
+                    fillOpacity: 0.5,
+                    radius: 500
+                }).addTo(map).bindPopup(area.area_name);
+            });
+
+            if (customerLocations.length > 0) {
                 var waypoints = customerLocations.map(function(loc) {
                     return L.latLng(loc.latitude, loc.longitude);
                 });
 
-                // Create routing control
                 var routingControl = L.Routing.control({
                     waypoints: waypoints,
                     routeWhileDragging: false,
@@ -195,89 +242,50 @@ export default function CustomerMapScreen({ route }) {
                     addWaypoints: false,
                     draggableWaypoints: false,
                     fitSelectedRoutes: true,
-                    show: false, // Hide the routing instructions panel
+                    show: false,
                     lineOptions: {
-                        styles: [{
-                            color: 'blue',
-                            weight: 5
-                        }]
+                        styles: [{ color: 'blue', weight: 5 }]
                     },
-                    router: L.Routing.osrmv1({
-                        serviceUrl: 'https://router.project-osrm.org/route/v1'
-                    })
+                    router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' })
                 }).addTo(map);
 
-                // Fit map to all markers and the route
                 routingControl.on('routesfound', function(e) {
                     var routes = e.routes;
-                    console.log('Leaflet Routing Machine: Routes found', routes);
                     if (routes.length > 0) {
-                        var bounds = L.latLngBounds([]);
-                        routes[0].coordinates.forEach(function(coord) {
-                            bounds.extend(coord);
-                        });
-                        customerLocations.forEach(function(loc) {
-                            bounds.extend(L.latLng(loc.latitude, loc.longitude));
-                        });
-                        map.fitBounds(bounds);
+                        var bounds = L.latLngBounds(waypoints);
+                        map.fitBounds(bounds.pad(0.1));
 
-                        // Add markers with popups
                         customerLocations.forEach(function(location) {
                             L.marker([location.latitude, location.longitude])
                                 .addTo(map)
                                 .bindPopup(
                                    '<b>' + (location.name || 'Customer') + '</b><br/>' +
-'Mobile: ' + (location.mobile || 'N/A') + '<br/>' +
-'Card No: ' + (location.book_no || 'N/A') + '<br/>'                                 );
+                                   'Mobile: ' + (location.mobile || 'N/A') + '<br/>' +
+                                   'Card No: ' + (location.book_no || 'N/A')
+                                 );
                         });
-
-                        // Display total distance
-                        var totalDistance = (routes[0].summary.totalDistance / 1000).toFixed(2);
-                        document.getElementById('totalDistance').innerHTML = 'Total Distance: ' + totalDistance + ' km';
-
-                        // Display total duration (optional)
-                        var totalTime = (routes[0].summary.totalTime / 60).toFixed(0);
-                        console.log('Total Time:', totalTime, 'minutes');
-                    } else {
-                        console.log('Leaflet Routing Machine: No routes found.');
-                        document.getElementById('totalDistance').innerHTML = 'No route found.';
                     }
                 });
-                routingControl.on('routingerror', function(e) {
-                    console.error('Leaflet Routing Machine Error:', e.error.message);
-                    document.getElementById('totalDistance').innerHTML = 'Routing Error: ' + e.error.message;
-                });
-            } else {
-                console.log('No customer locations to display.');
-                document.getElementById('totalDistance').innerHTML = 'No customer locations to display.';
+            } else if (allAreas.length > 0) {
+                var areaBounds = L.latLngBounds(allAreas.map(a => [a.latitude, a.longitude]));
+                map.fitBounds(areaBounds.pad(0.1));
             }
         </script>
     </body>
     </html>
   `;
 
-  console.log('WebView: Generated HTML content:', htmlContent);
-
   return (
     <View style={styles.container}>
-      <WebView
-        originWhitelist={['*']}
-        source={{ html: htmlContent }}
-        style={styles.webview}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        allowFileAccess={true}
-        allowUniversalAccessFromFileURLs={true}
-        mixedContentMode="always"
-        onMessage={(event) => {
-          const message = event.nativeEvent.data;
-          if (message.startsWith('view_details:')) {
-            const customerId = message.split(':')[1];
-            // Navigate to CreateCustomerScreen in read-only mode
-            navigation.navigate('Customers', { customerId: customerId, readOnly: true });
-          }
-        }}
-      />
+        <AreaSearchBar onAreaSelected={onAreaSelected} />
+        <WebView
+            ref={webViewRef}
+            originWhitelist={['*']}
+            source={{ html: htmlContent }}
+            style={styles.webview}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+        />
     </View>
   );
 }
@@ -294,4 +302,38 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
   },
+  searchContainer: {
+      position: 'absolute',
+      top: 10,
+      left: 10,
+      right: 10,
+      zIndex: 1,
+      backgroundColor: 'white',
+      borderRadius: 8,
+      padding: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      elevation: 5,
+  },
+  searchInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: '#ccc',
+      borderRadius: 8,
+      padding: 8,
+  },
+  suggestionList: {
+      backgroundColor: '#fff',
+      borderRadius: 8,
+      elevation: 2,
+      maxHeight: 150,
+      marginTop: 2,
+  },
+  suggestionItem: {
+      padding: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: '#eee',
+  }
 });

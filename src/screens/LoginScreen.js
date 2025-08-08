@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { supabase } from '../services/supabase';
 
+
 export default function LoginScreen({ navigation, route }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -63,6 +64,27 @@ export default function LoginScreen({ navigation, route }) {
         if (onAuthSuccess) {
           onAuthSuccess(authenticatedUser);
         }
+
+        // Push Notification Integration
+        /*
+        const pushToken = await registerForPushNotificationsAsync(authenticatedUser.id);
+
+        if (pushToken) {
+          // Call your Supabase Edge Function to send the login notification
+          const { data: edgeFunctionData, error: edgeFunctionError } = await supabase.functions.invoke('send-login-notification', {
+            body: { user_id: authenticatedUser.id },
+          });
+
+          if (edgeFunctionError) {
+            console.error('Error invoking Edge Function:', edgeFunctionError);
+          } else {
+            console.log('Edge Function invoked successfully:', edgeFunctionData);
+          }
+        }
+        */
+
+        // Navigate to Dashboard or other screen
+        
       }
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred');

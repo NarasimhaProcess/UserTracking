@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,108 @@ import {
   RefreshControl,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { supabase } from '../services/supabase';
 import { Buffer } from 'buffer';
+import LeafletMap from '../components/LeafletMap';
+import * as Location from 'expo-location';
+
+// Location Search Bar Component (similar to ProfileScreen)
+function LocationSearchBar({ onLocationFound }) {
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const debounceTimeout = useRef(null);
+
+  const fetchSuggestions = async (text) => {
+    console.log('fetchSuggestions called with text:', text);
+    if (!text) {
+      setSuggestions([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&addressdetails=1&limit=5`;
+      console.log('Nominatim API URL:', url);
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'DalabHRPORTAL/1.0 (dalab.hrportal@example.com)' // Replace with your app name and contact email
+        }
+      });
+      const textResponse = await response.text(); // Get raw text response
+      console.log('Nominatim API raw response:', textResponse);
+      try {
+        const results = JSON.parse(textResponse); // Attempt to parse as JSON
+        console.log('Nominatim API results:', results);
+        setSuggestions(results);
+      } catch (parseError) {
+        console.error('Error parsing Nominatim API response:', parseError);
+        Alert.alert('Error', 'Failed to parse location data. Please try again.');
+        setSuggestions([]);
+      }
+      setSuggestions(results);
+    } catch (e) {
+      console.error('Error fetching suggestions:', e);
+      setSuggestions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onChangeText = (text) => {
+    setQuery(text);
+    console.log('Query changed to:', text);
+    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+    debounceTimeout.current = setTimeout(() => fetchSuggestions(text), 400);
+  };
+
+  const onSuggestionPress = (item) => {
+    console.log('Suggestion pressed:', item);
+    setQuery(item.display_name);
+    setSuggestions([]);
+    onLocationFound({ latitude: parseFloat(item.lat), longitude: parseFloat(item.lon) });
+  };
+
+  const highlightMatch = (text, query) => {
+    if (!query) return <Text>{text}</Text>;
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i');
+    const parts = text.split(regex);
+    return parts.map((part, i) =>
+      regex.test(part) ? (
+        <Text key={i} style={{ fontWeight: 'bold', color: '#007AFF' }}>{part}</Text>
+      ) : (
+        <Text key={i}>{part}</Text>
+      )
+    );
+  };
+
+  return (
+    <View style={{ marginBottom: 8 }}>
+      <View style={{ flexDirection: 'row' }}>
+        <TextInput
+          value={query}
+          onChangeText={onChangeText}
+          placeholder="Search address"
+          style={{ flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 8 }}
+        />
+        {loading && <ActivityIndicator size="small" style={{ marginLeft: 8 }} />} 
+      </View>
+      {suggestions.length > 0 && (
+        <FlatList
+          data={suggestions}
+          keyExtractor={(item) => item.place_id.toString()}
+          style={{ backgroundColor: '#fff', borderRadius: 8, elevation: 2, maxHeight: 150, marginTop: 2 }}
+          renderItem={({ item }) => (
+            <TouchableOpacity onPress={() => onSuggestionPress(item)} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+              {highlightMatch(item.display_name, query)}
+            </TouchableOpacity>
+          )}
+        />
+      )}
+    </View>
+  );
+}
 
 function hexToBase64(hexString) {
   if (!hexString) return '';
@@ -37,6 +136,15 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
   const [pinCode, setPinCode] = useState('');
   const [state, setState] = useState('');
   const [description, setDescription] = useState('');
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 20.5937,
+    longitude: 78.9629,
+    latitudeDelta: 10,
+    longitudeDelta: 10,
+  });
+  const mapRef = useRef(null);
   
   // Form states for groups
   const [groupName, setGroupName] = useState('');
@@ -141,6 +249,7 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
     setPinCode('');
     setState('');
     setDescription('');
+    setSelectedLocation(null); // Reset location
     setShowAreaModal(true);
   };
 
@@ -151,6 +260,17 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
     setPinCode(area.pin_code || '');
     setState(area.state || '');
     setDescription(area.description || '');
+    if (area.latitude && area.longitude) {
+      setSelectedLocation({ latitude: area.latitude, longitude: area.longitude });
+      setMapRegion({
+        latitude: area.latitude,
+        longitude: area.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+    } else {
+      setSelectedLocation(null);
+    }
     setShowAreaModal(true);
   };
 
@@ -167,6 +287,8 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
         pin_code: pinCode.trim() || null,
         state: state.trim() || null,
         description: description.trim() || null,
+        latitude: selectedLocation ? selectedLocation.latitude : null,
+        longitude: selectedLocation ? selectedLocation.longitude : null,
       };
 
       if (editingArea) {
@@ -401,7 +523,7 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
         } catch (error) {
           Alert.alert('Error', 'Failed to delete repayment plan');
         }
-      }}
+      }},
     ]);
   };
 
@@ -413,6 +535,7 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
         {item.pin_code && <Text style={styles.itemDetail}>PIN: {item.pin_code}</Text>}
         {item.state && <Text style={styles.itemDetail}>State: {item.state}</Text>}
         {item.description && <Text style={styles.itemDetail}>{item.description}</Text>}
+        {item.latitude && item.longitude && <Text style={styles.itemDetail}>Location: {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}</Text>}
       </View>
       <View style={styles.itemActions}>
         <TouchableOpacity
@@ -455,6 +578,108 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
         </TouchableOpacity>
       </View>
     </View>
+  );
+
+  const openLocationPicker = async () => {
+    let initialLat = 20.5937; // Default to India center
+    let initialLon = 78.9629;
+
+    // Try to get current mobile location
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        let location = await Location.getCurrentPositionAsync({});
+        initialLat = location.coords.latitude;
+        initialLon = location.coords.longitude;
+      } else {
+        Alert.alert('Permission denied', 'Location permission not granted. Using default or area location.');
+      }
+    } catch (error) {
+      console.error('Error getting current location:', error);
+      Alert.alert('Error', 'Could not get current location. Using default or area location.');
+    }
+
+    // If editing an area and it has lat/lon, prioritize that
+    if (editingArea && editingArea.latitude && editingArea.longitude) {
+      initialLat = editingArea.latitude;
+      initialLon = editingArea.longitude;
+    }
+
+    setSelectedLocation({ latitude: initialLat, longitude: initialLon });
+    setMapRegion({
+      latitude: initialLat,
+      longitude: initialLon,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    });
+    if (mapRef.current) {
+      mapRef.current.centerOnLocation({ latitude: initialLat, longitude: initialLon });
+    }
+    setShowLocationPicker(true);
+  };
+
+  const handleMapPress = ({ latitude, longitude }) => {
+    setSelectedLocation({ latitude, longitude });
+  };
+
+  const confirmLocationSelection = () => {
+      setShowLocationPicker(false);
+  };
+
+  const renderLocationPickerModal = () => (
+    <Modal
+        visible={showLocationPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowLocationPicker(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' }}>
+          <View style={{ width: '90%', backgroundColor: '#fff', borderRadius: 12, padding: 16 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 8 }}>Select Location</Text>
+            <LocationSearchBar onLocationFound={(coords) => {
+              setSelectedLocation(coords);
+              setMapRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 });
+              if (mapRef.current) {
+                mapRef.current.centerOnLocation(coords);
+              }
+            }} />
+            <View style={{ width: '100%', height: 400, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+              <LeafletMap
+                ref={mapRef}
+                onMapPress={handleMapPress}
+                initialRegion={mapRegion}
+                markerCoordinate={selectedLocation}
+              />
+            </View>
+            {selectedLocation && (
+              <View style={{ backgroundColor: '#f0f0f0', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 4 }}>Selected Location:</Text>
+                <Text style={{ fontSize: 12, color: '#666' }}>
+                  Latitude: {selectedLocation.latitude.toFixed(6)}
+                </Text>
+                <Text style={{ fontSize: 12, color: '#666' }}>
+                  Longitude: {selectedLocation.longitude.toFixed(6)}
+                </Text>
+              </View>
+            )}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#ccc', borderRadius: 8, paddingVertical: 12, marginRight: 8, alignItems: 'center' }}
+                onPress={() => setShowLocationPicker(false)}
+              >
+                <Text style={{ color: '#333', fontWeight: 'bold', fontSize: 16 }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 12, marginLeft: 8, alignItems: 'center' }}
+                onPress={confirmLocationSelection}
+                disabled={!selectedLocation}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
   );
 
   const renderAreaModal = () => (
@@ -523,6 +748,20 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
             multiline
             numberOfLines={3}
           />
+
+          <TouchableOpacity style={styles.locationButton} onPress={openLocationPicker}>
+            <Text style={styles.locationButtonText}>
+                {selectedLocation ? 'Change Location' : 'Select Location'}
+            </Text>
+          </TouchableOpacity>
+
+            {selectedLocation && (
+                <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: 'bold' }}>Selected Location:</Text>
+                <Text>Latitude: {selectedLocation.latitude.toFixed(6)}</Text>
+                <Text>Longitude: {selectedLocation.longitude.toFixed(6)}</Text>
+                </View>
+            )}
           
           <View style={styles.modalActions}>
             <TouchableOpacity
@@ -787,6 +1026,7 @@ export default function AreaManagementScreen({ navigation, user, userProfile }) 
               }
             />
           {renderAreaModal()}
+          {renderLocationPickerModal()}
           </>
         ) : (
           <>
@@ -1031,4 +1271,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-}); 
+  locationButton: {
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  locationButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

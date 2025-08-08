@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, StyleSheet, Platform, TouchableOpacity, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
+import { MaterialIcons } from '@expo/vector-icons';
 import { registerRootComponent } from 'expo';
 import { AppRegistry } from 'react-native';
 import CalculatorModal from './src/components/CalculatorModal';
@@ -30,6 +31,7 @@ import YouTubeScreen from './src/screens/YouTubeScreen';
 import CustomerMapScreen from './src/screens/CustomerMapScreen';
 import BirthdayScreen from './src/screens/BirthdayScreen';
 import MarriageScreen from './src/screens/MarriageScreen';
+import UserExpensesScreen from './src/screens/UserExpensesScreen';
 
 // Import services
 import { supabase } from './src/services/supabase';
@@ -141,7 +143,7 @@ function NewsTabNavigator() {
   );
 }
 
-function TabNavigator({ route, setShowCalculatorModal }) {
+function TabNavigator({ route }) {
   // Get user and userProfile from route params or use the state from App.js
   const { user, userProfile } = route.params || {};
   const isAdmin = userProfile?.user_type === 'admin' || userProfile?.user_type === 'superadmin';
@@ -174,7 +176,7 @@ function TabNavigator({ route, setShowCalculatorModal }) {
           ),
         }}
       >
-        {(props) => <DashboardScreen {...props} user={user} userProfile={userProfile} setShowCalculatorModal={setShowCalculatorModal} />}
+        {(props) => <DashboardScreen {...props} user={user} userProfile={userProfile} />}
       </Tab.Screen>
       {!isCustomer && !isUser && (
         <Tab.Screen 
@@ -251,8 +253,9 @@ function TabNavigator({ route, setShowCalculatorModal }) {
           ),
         }}
       >
-        {(props) => <ProfileScreen {...props} user={user} userProfile={userProfile} reloadUserProfile={() => loadUserProfile(user.id)} />}
+        {(props) => <ProfileScreen {...props} user={user} userProfile={userProfile} reloadUserProfile={() => loadUserProfile(user.id)} handleLogout={handleLogout} />}
       </Tab.Screen>
+      
     </Tab.Navigator>
   );
 }
@@ -429,17 +432,54 @@ export default function App() {
     setUser(userData);
     await loadUserProfile(userData.id);
     setIsAuthenticated(true);
+    setShowCalculatorModal(false); // Ensure calculator is hidden on successful auth
   };
 
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
+      await locationTracker.stopTracking();
       setUser(null);
+      setUserProfile(null);
       setIsAuthenticated(false);
     } catch (error) {
       console.error('Error logging out:', error);
     }
   };
+
+  // Header component for authenticated screens
+  const renderHeader = (navigation) => ({
+    headerShown: isAuthenticated,
+    headerLeft: () => (
+      userProfile?.profile_photo_data ? (
+        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+          <Image 
+            source={{ uri: userProfile.profile_photo_data }} 
+            style={{ width: 30, height: 30, borderRadius: 15, marginLeft: 15 }} 
+          />
+        </TouchableOpacity>
+      ) : null
+    ),
+    headerTitle: () => null,
+    headerRight: () => (
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15 }}>
+        <TouchableOpacity onPress={handleLogout}>
+          <Text style={{ color: '#FF3B30', fontSize: 16, fontWeight: '600', marginRight: 15 }}>
+            Logout
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          onPress={() => navigation.navigate('Expenses')} 
+          style={{ marginRight: 15 }}
+        >
+          <MaterialIcons name="receipt-long" size={24} color="#007AFF" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setShowCalculatorModal(true)}>
+          <Icon name="calculator" size={20} color="#007AFF" />
+        </TouchableOpacity>
+      </View>
+    ),
+  });
 
   if (isLoading) {
     return (
@@ -452,74 +492,85 @@ export default function App() {
   return (
     <NavigationContainer>
       <StatusBar style="auto" />
-      <Stack.Navigator screenOptions={({ navigation }) => ({
-        headerShown: isAuthenticated, // Only show header if authenticated
-        headerLeft: () => (
-          userProfile?.profile_photo_data ? (
-            <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-              <Image source={{ uri: userProfile.profile_photo_data }} style={{ width: 30, height: 30, borderRadius: 15, marginLeft: 15 }} />
-            </TouchableOpacity>
-          ) : null
-        ),
-        headerTitle: () => null,
-        headerRight: () => (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15 }}>
-            <TouchableOpacity onPress={handleLogout}>
-              <Text style={{ color: '#FF3B30', fontSize: 16, fontWeight: '600', marginRight: 15 }}>Logout</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowCalculatorModal(true)}>
-              <Icon name="calculator" size={20} color="#007AFF" />
-            </TouchableOpacity>
-          </View>
-        ),
-      })}>
-        {isAuthenticated ? (
-          <>
-            <Stack.Screen 
-              name="Main" 
-              initialParams={{ user, userProfile }}
-            >
-              {(props) => <TabNavigator {...props} setShowCalculatorModal={setShowCalculatorModal} />}
-            </Stack.Screen>
-            <Stack.Screen 
-              name="CustomerMap" 
-              component={CustomerMapScreen}
-            />
-          </>
-        ) : (
+      <Stack.Navigator>
+        {!isAuthenticated ? (
+          // Auth screens without header
           <>
             <Stack.Screen 
               name="Login" 
-              component={LoginScreen}
-              initialParams={{ onAuthSuccess: handleAuthSuccess }}
-            />
+              options={{ headerShown: false }}
+            >
+              {(props) => (
+                <LoginScreen {...props} onAuthSuccess={handleAuthSuccess} />
+              )}
+            </Stack.Screen>
             <Stack.Screen 
               name="Signup" 
-              component={SignupScreen}
-              initialParams={{ onAuthSuccess: handleAuthSuccess }}
-            />
+              options={{ headerShown: false }}
+            >
+              {(props) => (
+                <SignupScreen {...props} onAuthSuccess={handleAuthSuccess} />
+              )}
+            </Stack.Screen>
+          </>
+        ) : (
+          // Authenticated screens with header
+          <>
+            <Stack.Screen 
+              name="Main" 
+              options={({ navigation }) => renderHeader(navigation, setShowCalculatorModal)}
+            >
+              {(props) => (
+                <TabNavigator 
+                  {...props} 
+                  route={{ params: { user, userProfile } }}
+                  setShowCalculatorModal={setShowCalculatorModal}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen 
+              name="CustomerMap" 
+              options={({ navigation }) => renderHeader(navigation)}
+            >
+              {(props) => (
+                <CustomerMapScreen {...props} user={user} userProfile={userProfile} />
+              )}
+            </Stack.Screen>
+            <Stack.Screen 
+              name="Expenses" 
+              options={({ navigation }) => renderHeader(navigation)}
+            >
+              {(props) => (
+                <UserExpensesScreen {...props} user={user} userProfile={userProfile} />
+              )}
+            </Stack.Screen>
           </>
         )}
       </Stack.Navigator>
-      <CalculatorModal
-        isVisible={showCalculatorModal}
-        onClose={() => setShowCalculatorModal(false)}
-      />
+      
+      {/* Calculator Modal */}
+      {console.log('showCalculatorModal before render:', showCalculatorModal)}
+      {isAuthenticated && (
+        <CalculatorModal 
+          isVisible={showCalculatorModal} 
+          onClose={() => setShowCalculatorModal(false)} 
+        />
+      )}
     </NavigationContainer>
   );
 }
 
+// Add styles
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#ffffff',
   },
   loadingText: {
     fontSize: 18,
-    color: '#007AFF',
+    color: '#333333',
+    fontWeight: '500',
   },
 });
-
-registerRootComponent(App); 

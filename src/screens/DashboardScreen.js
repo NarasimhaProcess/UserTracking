@@ -18,11 +18,14 @@ import { supabase } from '../services/supabase';
 import { locationTracker } from '../services/locationTracker';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import Icon from 'react-native-vector-icons/FontAwesome';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import AreaSearchBar from '../components/AreaSearchBar';
 import LargeChartModal from '../components/LargeChartModal';
 import CalculatorModal from '../components/CalculatorModal';
 
-export default function DashboardScreen({ user, userProfile, setShowCalculatorModal }) {
+export default function DashboardScreen({ user, userProfile }) {
+  const [showCalculatorModal, setShowCalculatorModal] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [groupAreas, setGroupAreas] = useState([]);
@@ -307,10 +310,9 @@ export default function DashboardScreen({ user, userProfile, setShowCalculatorMo
   
 
   const renderHeader = () => {
+    const navigation = useNavigation();
     return (
       <View>
-        
-
         <View style={styles.searchContainer}>
           <AreaSearchBar
             areas={groupAreas}

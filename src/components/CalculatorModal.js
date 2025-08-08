@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 const CalculatorModal = ({ isVisible, onClose }) => {
+  console.log('CalculatorModal isVisible:', isVisible);
   const [display, setDisplay] = useState('0');
   const [currentValue, setCurrentValue] = useState(null);
   const [operator, setOperator] = useState(null);

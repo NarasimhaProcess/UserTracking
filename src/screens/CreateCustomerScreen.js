@@ -320,10 +320,19 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   useEffect(() => {
     // Fetch areas for user's groups
     async function fetchAreas() {
+      console.log('fetchAreas: Fetching areas for user ID:', user?.id);
       const { data, error } = await supabase
         .from('user_groups')
         .select('group_id, groups (group_areas (area_master (id, area_name)))')
         .eq('user_id', user.id);
+      
+      if (error) {
+        console.error('fetchAreas: Error fetching user groups:', error);
+        return;
+      }
+
+      console.log('fetchAreas: User groups data:', data);
+
       const areaList = [];
       (data || []).forEach(g => {
         (g.groups?.group_areas || []).forEach(ga => {
@@ -332,6 +341,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
           }
         });
       });
+      console.log('fetchAreas: Constructed area list:', areaList);
       setAreas(areaList);
     }
     if (user?.id) fetchAreas();
