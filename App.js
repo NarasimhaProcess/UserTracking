@@ -32,6 +32,8 @@ import CustomerMapScreen from './src/screens/CustomerMapScreen';
 import BirthdayScreen from './src/screens/BirthdayScreen';
 import MarriageScreen from './src/screens/MarriageScreen';
 import UserExpensesScreen from './src/screens/UserExpensesScreen';
+import QuickTransactionScreen from './src/screens/QuickTransactionScreen';
+import QuickTransactionButton from './src/components/QuickTransactionButton';
 
 // Import services
 import { supabase } from './src/services/supabase';
@@ -463,11 +465,7 @@ export default function App() {
     headerTitle: () => null,
     headerRight: () => (
       <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15 }}>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text style={{ color: '#FF3B30', fontSize: 16, fontWeight: '600', marginRight: 15 }}>
-            Logout
-          </Text>
-        </TouchableOpacity>
+        <QuickTransactionButton onPress={() => navigation.navigate('QuickTransaction')} />
         <TouchableOpacity 
           onPress={() => navigation.navigate('Expenses')} 
           style={{ marginRight: 15 }}
@@ -476,6 +474,11 @@ export default function App() {
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowCalculatorModal(true)}>
           <Icon name="calculator" size={20} color="#007AFF" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleLogout}>
+          <Text style={{ color: '#FF3B30', fontSize: 16, fontWeight: '600', marginRight: 0 }}>
+            Logout
+          </Text>
         </TouchableOpacity>
       </View>
     ),
@@ -542,6 +545,14 @@ export default function App() {
             >
               {(props) => (
                 <UserExpensesScreen {...props} user={user} userProfile={userProfile} />
+              )}
+            </Stack.Screen>
+            <Stack.Screen 
+              name="QuickTransaction" 
+              options={{ headerShown: false }} // Quick transaction screen might not need a header
+            >
+              {(props) => (
+                <QuickTransactionScreen {...props} user={user} />
               )}
             </Stack.Screen>
           </>
