@@ -235,24 +235,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     }
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            await locationTracker.stopTracking();
-            await supabase.auth.signOut();
-            // The auth state change listener in App.js will handle the navigation
-          },
-        },
-      ]
-    );
-  };
+  
 
   const handleDeleteAccount = async () => {
     Alert.alert(
@@ -383,6 +366,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
           <Text style={{ fontSize: 24 }}>📍</Text>
         </TouchableOpacity>
       </View>
+      
       {/* Profile Image Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Profile Picture</Text>
@@ -484,9 +468,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
             <Text style={styles.actionButtonText}>Clear Location Data</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
-            <Text style={styles.actionButtonText}>Logout</Text>
-          </TouchableOpacity>
+          
           
           <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
             <Text style={styles.deleteButtonText}>Delete Account</Text>
@@ -519,6 +501,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
       {/* Location Picker Modal */}
       <Modal
         visible={showLocationPicker}
@@ -737,4 +720,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-}); 
+});

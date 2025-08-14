@@ -7,17 +7,14 @@ import {
   StyleSheet,
   Alert,
   FlatList,
-  ScrollView,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { supabase } from '../services/supabase';
 import { MaterialIcons } from '@expo/vector-icons';
 import CalculatorModal from '../components/CalculatorModal';
-import EnhancedDatePicker from '../components/EnhancedDatePicker';
-
 import { Picker } from '@react-native-picker/picker';
 
-export default function UserExpensesScreen({ user, userProfile }) {
+export default function UserExpensesScreen({ navigation, user, userProfile }) {
   // User Expenses State
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseType, setExpenseType] = useState('');
@@ -28,12 +25,23 @@ export default function UserExpensesScreen({ user, userProfile }) {
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [showExpenseCalculatorModal, setShowExpenseCalculatorModal] = useState(false);
   const [calculatorTarget, setCalculatorTarget] = useState(null); // To know which field to update
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
-  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [expenseDate, setExpenseDate] = useState(new Date());
-  const [showExpenseDatePicker, setShowExpenseDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [dates, setDates] = useState([]);
+
+  useEffect(() => {
+    const today = new Date();
+    const pastThreeDays = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 3);
+    const dates = [];
+    for (let dt = pastThreeDays; dt <= today; dt.setDate(dt.getDate() + 1)) {
+      dates.push(new Date(dt));
+    }
+    setDates(dates);
+    setSelectedDate(new Date()); // Keep defaulting to today
+  }, []);
+
+  useEffect(() => {
+    fetchUserExpenses();
+  }, [user?.id]);
 
   const handleAddExpense = async () => {
     const finalExpenseType = expenseType === 'Other' ? otherExpenseType : expenseType;
@@ -54,7 +62,7 @@ export default function UserExpensesScreen({ user, userProfile }) {
         amount: parseFloat(expenseAmount),
         expense_type: finalExpenseType, // Use the potentially combined type
         remarks: expenseRemarks,
-        created_at: expenseDate.toISOString(),
+        created_at: selectedDate.toISOString(),
       });
 
       if (error) {
@@ -65,7 +73,6 @@ export default function UserExpensesScreen({ user, userProfile }) {
         setExpenseType('');
         setOtherExpenseType(''); // Clear the other field as well
         setExpenseRemarks('');
-        setExpenseDate(new Date());
         fetchUserExpenses(); // Refresh the list
       }
     } catch (error) {
@@ -97,27 +104,6 @@ export default function UserExpensesScreen({ user, userProfile }) {
     }
   };
 
-  const handleFilter = () => {
-    if (!startDate || !endDate) {
-      Alert.alert('Please select both start and end dates.');
-      return;
-    }
-
-    const filtered = userExpenses.filter(expense => {
-      const expenseDate = new Date(expense.created_at);
-      return expenseDate >= startDate && expenseDate <= endDate;
-    });
-
-    setFilteredUserExpenses(filtered);
-    const total = filtered.reduce((sum, expense) => sum + Number(expense.amount), 0);
-    setTotalExpenses(total);
-  };
-
-  // Call fetchUserExpenses on component mount and when user changes
-  useEffect(() => {
-    fetchUserExpenses();
-  }, [user?.id]);
-
   const renderExpenseItem = ({ item }) => (
     <View style={styles.expenseRow}>
       <View style={styles.amountContainer}>
@@ -130,100 +116,58 @@ export default function UserExpensesScreen({ user, userProfile }) {
   );
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.sectionHeader}>Add New Expense</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-        <TextInput
-          value={expenseAmount}
-          onChangeText={setExpenseAmount}
-          placeholder="Amount"
-          keyboardType="numeric"
-          style={[styles.input, { flex: 1, marginRight: 10 }]} 
-        />
-        <TouchableOpacity
-          style={{ backgroundColor: '#4A90E2', padding: 10, borderRadius: 8 }}
-          onPress={() => { setShowExpenseCalculatorModal(true); setCalculatorTarget('expenseAmount'); }}
-        >
-          <MaterialIcons name="calculate" size={24} color="white" />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={expenseType}
-          onValueChange={(itemValue) => setExpenseType(itemValue)}
-          style={styles.picker}
-        >
-          <Picker.Item label="Select Expense Type" value="" />
-          <Picker.Item label="Food" value="Food" />
-          <Picker.Item label="Travel" value="Travel" />
-          <Picker.Item label="Hotel" value="Hotel" />
-          <Picker.Item label="Mobile Recharge" value="Mobile Recharge" />
-          <Picker.Item label="Petrol" value="Petrol" />
-          <Picker.Item label="Other" value="Other" />
-        </Picker>
-      </View>
-      {expenseType === 'Other' && (
-        <TextInput
-          value={otherExpenseType}
-          onChangeText={setOtherExpenseType}
-          placeholder="Please specify other expense type"
-          style={styles.input}
-        />
-      )}
-      <TextInput
-        value={expenseRemarks}
-        onChangeText={setExpenseRemarks}
-        placeholder="Remarks (Optional)"
-        style={[styles.input, { height: 80, textAlignVertical: 'top' }]} 
-        multiline
-      />
-      <EnhancedDatePicker
-        date={expenseDate}
-        onDateChange={(date) => { setExpenseDate(date); setShowExpenseDatePicker(false); }}
-        showDatePicker={showExpenseDatePicker}
-        setShowDatePicker={setShowExpenseDatePicker}
-        placeholder="Select Expense Date"
-        style={styles.datePicker}
-      />
-      <TouchableOpacity style={styles.button} onPress={handleAddExpense}>
-        <Text style={styles.buttonText}>Add Expense</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.sectionHeader}>Expense List</Text>
-      <Text style={styles.totalExpensesText}>{`Total Spent: ₹${totalExpenses.toFixed(2)}`}</Text>
-      <View style={styles.filterContainer}>
-        <EnhancedDatePicker
-          date={startDate}
-          onDateChange={(date) => { setStartDate(date); setShowStartDatePicker(false); }}
-          showDatePicker={showStartDatePicker}
-          setShowDatePicker={setShowStartDatePicker}
-          placeholder="Start Date"
-          style={styles.datePicker}
-        />
-        <EnhancedDatePicker
-          date={endDate}
-          onDateChange={(date) => { setEndDate(date); setShowEndDatePicker(false); }}
-          showDatePicker={showEndDatePicker}
-          setShowDatePicker={setShowEndDatePicker}
-          placeholder="End Date"
-          style={styles.datePicker}
-        />
-        <TouchableOpacity style={styles.filterButton} onPress={handleFilter}>
-          <Text style={styles.buttonText}>Filter</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.expenseHeader}>
-        <Text style={styles.headerText}>Amount</Text>
-        <Text style={styles.headerText}>Type</Text>
-        <Text style={styles.headerText}>Remarks</Text>
-      </View>
+    <View style={{ flex: 1 }}>
       <FlatList
         data={filteredUserExpenses}
         keyExtractor={item => item.id.toString()}
         renderItem={renderExpenseItem}
         ListEmptyComponent={<Text style={styles.emptyListText}>No expenses recorded.</Text>}
+        ListHeaderComponent={
+          <View style={styles.container}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>
+              <MaterialIcons name="close" size={24} color="black" />
+            </TouchableOpacity>
+            <Text style={styles.sectionHeader}>Add New Expense</Text>
+            <Text style={styles.inputLabel}>Expense Amount</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+              <TextInput
+                value={expenseAmount}
+                onChangeText={setExpenseAmount}
+                placeholder="Enter Amount" 
+                keyboardType="numeric"
+                style={[styles.input, { flex: 1, marginRight: 10 }]} 
+              />
+              <TouchableOpacity
+                style={{ backgroundColor: '#4A90E2', padding: 10, borderRadius: 8 }}
+                onPress={() => { setShowExpenseCalculatorModal(true); setCalculatorTarget('expenseAmount'); }}
+              >
+                <MaterialIcons name="calculate" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+            
+            
+            {expenseType === 'Other' && (
+              <TextInput
+                value={otherExpenseType}
+                onChangeText={setOtherExpenseType}
+                placeholder="Please specify other expense type"
+                style={styles.input}
+              />
+            )}
+            
+                     <TouchableOpacity style={styles.button} onPress={handleAddExpense}>
+              <Text style={styles.buttonText}>Add Expense</Text>
+            </TouchableOpacity>
+            <Text style={styles.sectionHeader}>Expense List</Text>
+            <Text style={styles.totalExpensesText}>{`Total Spent: ₹${totalExpenses.toFixed(2)}`}</Text>
+            <View style={styles.expenseHeader}>
+              <Text style={styles.headerText}>Amount</Text>
+              <Text style={styles.headerText}>Type</Text>
+              <Text style={styles.headerText}>Remarks</Text>
+            </View>
+          </View>
+        }
       />
-
       <CalculatorModal
         isVisible={showExpenseCalculatorModal}
         onClose={() => setShowExpenseCalculatorModal(false)}
@@ -234,7 +178,7 @@ export default function UserExpensesScreen({ user, userProfile }) {
           setShowExpenseCalculatorModal(false);
         }}
       />
-    </ScrollView>
+    </View>
   );
 }
 
@@ -270,6 +214,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    color: '#333',
+  },
+  amountContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
   expenseRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -283,6 +237,11 @@ const styles = StyleSheet.create({
   rowText: {
     fontSize: 14,
     flex: 1,
+    textAlign: 'center',
+  },
+  dateText: {
+    fontSize: 12,
+    color: '#888',
     textAlign: 'center',
   },
   expenseHeader: {
@@ -321,18 +280,11 @@ const styles = StyleSheet.create({
     height: 50,
     width: '100%',
   },
-  filterContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 10,
-  },
-  datePicker: {
-    flex: 1,
-  },
-  filterButton: {
-    backgroundColor: '#4A90E2',
-    padding: 10,
-    borderRadius: 8,
-    justifyContent: 'center',
+  closeButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 1,
+    padding: 5,
   },
 });
