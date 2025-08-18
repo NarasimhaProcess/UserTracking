@@ -24,6 +24,10 @@ import AreaSearchBar from '../components/AreaSearchBar';
 import LargeChartModal from '../components/LargeChartModal';
 import CalculatorModal from '../components/CalculatorModal';
 
+const formatNumberWithCommas = (number) => {
+  return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};
+
 export default function DashboardScreen({ user, userProfile }) {
   const [showCalculatorModal, setShowCalculatorModal] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
@@ -48,6 +52,9 @@ export default function DashboardScreen({ user, userProfile }) {
   const [largeChartData, setLargeChartData] = useState(null);
   const [largeChartTitle, setLargeChartTitle] = useState('');
   const [expandedCustomerId, setExpandedCustomerId] = useState(null);
+  const [totalPaidCash, setTotalPaidCash] = useState(0);
+  const [totalPaidUPI, setTotalPaidUPI] = useState(0);
+  const [totalNotPaid, setTotalNotPaid] = useState(0);
 
   const debounceTimeout = useRef(null);
 
@@ -193,23 +200,46 @@ export default function DashboardScreen({ user, userProfile }) {
       totalAmountReceived: (totalTransactionsMap.get(customer.id) || 0).toFixed(2),
     }));
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+
+    console.log('Dashboard: Today\'s date range for query:', startOfDay.toISOString(), endOfDay.toISOString());
+
     const { data: transactions, error: transactionError } = await supabase
       .from('transactions')
-      .select('customer_id')
+      .select('customer_id, amount, payment_mode')
       .in('customer_id', customers.map(c => c.id))
-      .eq('transaction_date', today)
+      .gte('created_at', startOfDay.toISOString())
+      .lte('created_at', endOfDay.toISOString())
       .eq('transaction_type', 'repayment');
 
     if (transactionError) {
-      console.error("Error fetching today's transactions:", transactionError);
+      console.error("Dashboard: Error fetching today's transactions:", transactionError);
       setLoadingChart(false);
       return;
     }
+    console.log('Dashboard: Today\'s transactions fetched:', transactions);
+
+    let paidCash = 0;
+    let paidUPI = 0;
+    transactions.forEach(t => {
+      if (t.payment_mode === 'cash') {
+        paidCash += t.amount;
+      } else if (t.payment_mode === 'upi') {
+        paidUPI += t.amount;
+      }
+    });
+
+    setTotalPaidCash(paidCash);
+    setTotalPaidUPI(paidUPI);
 
     const paidCustomerIds = new Set(transactions.map(t => t.customer_id));
     const paidToday = customersWithTotalTransactions.filter(c => paidCustomerIds.has(c.id));
     const notPaidToday = customersWithTotalTransactions.filter(c => !paidCustomerIds.has(c.id));
+
+    const notPaidAmount = notPaidToday.reduce((acc, customer) => acc + customer.repayment_amount, 0);
+    setTotalNotPaid(notPaidAmount);
 
     console.log("Unique Paid Today Customers:", paidToday.map(c => c.name));
 
@@ -352,6 +382,13 @@ export default function DashboardScreen({ user, userProfile }) {
                     <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
                     <Text style={styles.legendText}>Not Paid Today ({notPaidTodayCustomers.length})</Text>
                   </TouchableOpacity>
+                </View>
+              )}
+              {!loadingChart && (
+                <View style={styles.totalsContainer}>
+                  <Text style={styles.totalText}>Paid by Cash: ₹{formatNumberWithCommas(totalPaidCash.toFixed(2))}</Text>
+                  <Text style={styles.totalText}>Paid by UPI: ₹{formatNumberWithCommas(totalPaidUPI.toFixed(2))}</Text>
+                  <Text style={styles.totalText}>Not Paid: ₹{formatNumberWithCommas(totalNotPaid.toFixed(2))}</Text>
                 </View>
               )}
               <TouchableOpacity
@@ -729,5 +766,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 5,
+  },
+  totalsContainer: {
+    marginTop: 16,
+    padding: 10,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+  },
+  totalText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 8,
   },
 });
