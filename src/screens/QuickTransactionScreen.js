@@ -8,17 +8,23 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../services/supabase';
 import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 export default function QuickTransactionScreen({ navigation, user }) {
+  console.log('QuickTransactionScreen: user prop:', user);
   const [amount, setAmount] = useState('');
   const [remarks, setRemarks] = useState('');
   const [loading, setLoading] = useState(false);
   const [allAreas, setAllAreas] = useState([]);
   const [selectedAreaId, setSelectedAreaId] = useState(null);
+  const [paymentType, setPaymentType] = useState('cash');
+  const [paymentProofImage, setPaymentProofImage] = useState(null); // New state for payment proof image
 
   // New states for customer dropdown
   const [allCustomers, setAllCustomers] = useState([]); // Stores all customers
@@ -60,6 +66,8 @@ export default function QuickTransactionScreen({ navigation, user }) {
           } else {
             setSelectedAreaId(null);
           }
+          console.log('QuickTransactionScreen: Fetched Areas:', areaList);
+          console.log('QuickTransactionScreen: Initial selectedAreaId:', areaList.length > 0 ? areaList[0].id : null);
         }
 
         // Fetch all customers (this part remains largely the same, but ensure it's not dependent on selectedAreaId yet)
@@ -72,6 +80,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
           Alert.alert('Error', 'Failed to load customers.');
         } else {
           setAllCustomers(customersData || []);
+          console.log('QuickTransactionScreen: Fetched All Customers:', customersData || []);
         }
       } catch (error) {
         console.error('Error fetching initial data:', error);
@@ -109,7 +118,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
       const lowerCaseSearchText = customerSearchText.toLowerCase();
       const filtered = customersInSelectedArea.filter(cust =>
         (cust.name && cust.name.toLowerCase().includes(lowerCaseSearchText)) ||
-        (cust.card_number && cust.card_number.toLowerCase().includes(lowerCaseSearchText))
+        (cust.book_no && cust.book_no.toLowerCase().includes(lowerCaseSearchText))
       );
       setFilteredCustomers(filtered);
     } else {
@@ -117,7 +126,6 @@ export default function QuickTransactionScreen({ navigation, user }) {
     }
   }, [customerSearchText, customersInSelectedArea]);
 
-  // Handle customer selection from the second dropdown
   const handleCustomerSelect = (customerId) => {
     const foundCustomer = filteredCustomers.find(cust => cust.id === customerId);
     setSelectedCustomer(foundCustomer);
@@ -128,7 +136,110 @@ export default function QuickTransactionScreen({ navigation, user }) {
     }
   };
 
+  const uploadImageToSupabaseStorage = async (uri, userId, mimeType) => {
+    try {
+      const fileExt = mimeType.split('/')[1];
+      const fileName = `${Date.now()}_${Math.floor(Math.random() * 100000)}.${fileExt}`;
+      const filePath = `payment_proofs/${userId}/${fileName}`;
+
+      const fileData = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const fileBuffer = Buffer.from(fileData, 'base64');
+
+      const { data, error } = await supabase.storage
+        .from('locationtracker') // Assuming 'locationtracker' is your bucket name
+        .upload(filePath, fileBuffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
+
+      if (error) {
+        Alert.alert('Error', 'Failed to upload image: ' + error.message);
+        return null;
+      }
+
+      const { data: urlData } = supabase.storage.from('locationtracker').getPublicUrl(filePath);
+      return urlData?.publicUrl || '';
+    } catch (error) {
+      Alert.alert('Error', 'Failed to upload image: ' + error.message);
+      console.error('Image upload error:', error);
+      return null;
+    }
+  };
+
+  const pickImage = async () => {
+    Alert.alert(
+      "Select Image",
+      "Choose an option to select your payment proof image.",
+      [
+        {
+          text: "Pick from Gallery",
+          onPress: async () => {
+            try {
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.5,
+              });
+              // Process result
+              if (!result.canceled && result.assets[0]) {
+                const asset = result.assets[0];
+                if (!user || !user.id) {
+                  Alert.alert('Error', 'User not logged in or user ID not available.');
+                  return;
+                }
+                const publicUrl = await uploadImageToSupabaseStorage(asset.uri, user.id, asset.mimeType || 'image/jpeg');
+                if (publicUrl) {
+                  setPaymentProofImage(publicUrl);
+                  Alert.alert('Success', 'Image selected and uploaded!');
+                }
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to pick image from gallery: ' + error.message);
+              console.error('Image picker gallery error:', error);
+            }
+          },
+        },
+        {
+          text: "Take Photo",
+          onPress: async () => {
+            try {
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.5,
+              });
+              // Process result
+              if (!result.canceled && result.assets[0]) {
+                const asset = result.assets[0];
+                if (!user || !user.id) {
+                  Alert.alert('Error', 'User not logged in or user ID not available.');
+                  return;
+                }
+                const publicUrl = await uploadImageToSupabaseStorage(asset.uri, user.id, asset.mimeType || 'image/jpeg');
+                if (publicUrl) {
+                  setPaymentProofImage(publicUrl);
+                  Alert.alert('Success', 'Image selected and uploaded!');
+                }
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to take photo: ' + error.message);
+              console.error('Image picker camera error:', error);
+            }
+          },
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
   const handleAddTransaction = async () => {
+    console.log('handleAddTransaction called!');
     if (!selectedCustomer) {
       Alert.alert('Error', 'Please select a customer.');
       return;
@@ -141,29 +252,41 @@ export default function QuickTransactionScreen({ navigation, user }) {
       Alert.alert('Error', 'Please select an Area.');
       return;
     }
+    // New validation for payment type
+    if (!paymentType) {
+      Alert.alert('Error', 'Please select a Payment Type (Cash or UPI).');
+      return;
+    }
+    // New validation for UPI image
+    if (paymentType === 'upi' && !paymentProofImage) {
+      Alert.alert('Error', 'Please upload a payment proof image for UPI transactions.');
+      return;
+    }
 
     setLoading(true);
     try {
       const { error } = await supabase
-        .from('customer_transactions')
+        .from('transactions')
         .insert({
           customer_id: selectedCustomer.id,
           amount: parseFloat(amount),
           remarks: remarks,
-          area_id: selectedAreaId,
+          payment_mode: paymentType, // New field with correct name
+          upi_image: paymentType === 'upi' ? paymentProofImage : null, // New field with correct name
+          user_id: user.id, // Add user_id
+          transaction_type: 'repayment', // Add transaction_type
+          latitude: user.latitude, // Add latitude
+          longitude: user.longitude, // Add longitude
         });
 
       if (error) {
+        console.error('Supabase transaction insert error:', error);
         Alert.alert('Error', 'Failed to add transaction: ' + error.message);
       } else {
         Alert.alert('Success', 'Transaction added successfully!');
         // Clear fields after successful transaction
         setAmount('');
         setRemarks('');
-        setSelectedCustomer(null);
-        setCustomerSearchText('');
-        // Reset area selection to default or first area
-        setSelectedAreaId(allAreas.length > 0 ? allAreas[0].id : null);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to add transaction.');
@@ -174,7 +297,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollViewContent}>
       <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>
         <MaterialIcons name="close" size={24} color="black" />
       </TouchableOpacity>
@@ -226,7 +349,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
                   filteredCustomers.map((cust) => (
                     <Picker.Item
                       key={cust.id}
-                      label={`${cust.card_number} - ${cust.name} (${cust.repayment_amount || 'N/A'})`}
+                      label={`${cust.book_no} - ${cust.name} (${cust.repayment_amount || 'N/A'})`}
                       value={cust.id}
                     />
                   ))
@@ -269,6 +392,35 @@ export default function QuickTransactionScreen({ navigation, user }) {
         />
       </View>
 
+      {/* Payment Type Dropdown */}
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Payment Type:</Text>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={paymentType}
+            onValueChange={(itemValue) => setPaymentType(itemValue)}
+            style={styles.picker}
+          >
+            <Picker.Item label="Select Payment Type" value={null} />
+            <Picker.Item label="Cash" value="cash" />
+            <Picker.Item label="UPI" value="upi" />
+          </Picker>
+        </View>
+      </View>
+
+      {paymentType === 'upi' && (
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Payment Proof (UPI):</Text>
+          <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+            <Text style={styles.imagePickerButtonText}>Pick Image</Text>
+          </TouchableOpacity>
+          {paymentProofImage && (
+            <Image source={{ uri: paymentProofImage }} style={styles.paymentProofImage} />
+          )}
+        </View>
+      )}
+
+     
       <TouchableOpacity style={styles.addButton} onPress={handleAddTransaction} disabled={loading || !selectedCustomer || !selectedAreaId || !amount}>
         {loading ? (
           <ActivityIndicator size="small" color="#fff" />
@@ -363,5 +515,28 @@ const styles = StyleSheet.create({
   picker: {
     height: 50,
     width: '100%',
+  },
+  imagePickerButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  imagePickerButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  paymentProofImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    resizeMode: 'contain',
+    marginTop: 10,
+  },
+  scrollViewContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
   },
 });

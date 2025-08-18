@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -63,8 +63,6 @@ function LocationSearchBar({ onLocationFound }) {
     onLocationFound({ latitude: parseFloat(item.lat), longitude: parseFloat(item.lon) });
   };
 
-  // In LocationSearchBar, update renderItem in FlatList to highlight the matched part
-  // Add this helper function inside LocationSearchBar
   const highlightMatch = (text, query) => {
     if (!query) return <Text>{text}</Text>;
     const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i');
@@ -106,6 +104,13 @@ function LocationSearchBar({ onLocationFound }) {
 }
 
 export default function ProfileScreen({ navigation, user, userProfile, reloadUserProfile }) {
+  // Debug log to check if component is mounting properly
+  console.log('ProfileScreen mounted with props:', { 
+    hasNavigation: !!navigation, 
+    hasUser: !!user, 
+    hasUserProfile: !!userProfile 
+  });
+
   const [profileImage, setProfileImage] = useState(null);
   const [settings, setSettings] = useState({
     notifications: true,
@@ -131,111 +136,17 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     }
   }, [userProfile]);
 
-  const loadUserData = async () => {
+  // Using useCallback to ensure function reference stability
+  const handleLogout = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      // setUser(user); // This line is removed as user is now a prop
+      await supabase.auth.signOut();
+      Alert.alert('Success', 'Logged out successfully!');
+      navigation.replace('Login'); // Assuming 'Login' is the name of your login screen route
     } catch (error) {
-      console.error('Error loading user data:', error);
+      Alert.alert('Error', 'Failed to log out: ' + error.message);
+      console.error('Logout error:', error);
     }
   };
-
-  const loadUserProfile = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (error) {
-        console.error('Error loading user profile:', error);
-        return;
-      }
-
-      // setUserProfile(data); // This line is removed as userProfile is now a prop
-      if (data.profile_photo_data) {
-        const base64 = hexToBase64(data.profile_photo_data);
-        setProfileImage(`data:image/jpeg;base64,${base64}`);
-      }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-    }
-  };
-
-  const uploadProfileImage = async (uri, userId, mimeType) => {
-    try {
-      // Generate a unique file name using timestamp and random number
-      const fileExt = mimeType.split('/')[1];
-      const fileName = `${Date.now()}_${Math.floor(Math.random() * 100000)}.${fileExt}`;
-      const filePath = `profiles/${userId}/${fileName}`;
-      // Read file as binary
-      const fileData = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-      const fileBuffer = Buffer.from(fileData, 'base64');
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('locationtracker')
-        .upload(filePath, fileBuffer, {
-          contentType: mimeType,
-          upsert: true,
-        });
-      if (error) {
-        Alert.alert('Error', 'Failed to upload profile image: ' + error.message);
-        return null;
-      }
-      // Get the public URL (or signed URL if private bucket)
-      const { data: urlData } = supabase.storage.from('locationtracker').getPublicUrl(filePath);
-      const publicUrl = urlData?.publicUrl || '';
-      // Store only the URL in profile_photo_data
-      const { error: updateError } = await supabase.from('users').update({ profile_photo_data: publicUrl }).eq('id', userId);
-      if (updateError) {
-        console.error('Failed to update profile_photo_data in users table:', updateError);
-      } else {
-        console.log('profile_photo_data updated in users table:', publicUrl);
-      }
-      return publicUrl;
-    } catch (error) {
-      Alert.alert('Error', 'Failed to upload profile image: ' + error.message);
-      return null;
-    }
-  };
-
-  const getProfileImageUrl = (filePath) => {
-    const { data } = supabase.storage.from('locationtracker').getPublicUrl(filePath);
-    if (data?.publicUrl) {
-      console.log('Generated Supabase image URL:', data.publicUrl);
-    } else {
-      console.warn('No public URL generated for filePath:', filePath, data);
-    }
-    return data?.publicUrl || '';
-  };
-
-  // Update pickImage to use Supabase Storage
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.3,
-      });
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const publicUrl = await uploadProfileImage(asset.uri, user.id, asset.mimeType || 'image/jpeg');
-        if (publicUrl) {
-          setProfileImage(publicUrl);
-          Alert.alert('Success', 'Profile image updated successfully');
-        }
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to pick image');
-      console.error('Image picker error:', error);
-    }
-  };
-
-  
 
   const handleDeleteAccount = async () => {
     Alert.alert(
@@ -276,16 +187,16 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     }));
   };
 
-  const handleSyncData = async () => {
+  const handleSyncData = useCallback(async () => {
     try {
       await locationTracker.syncOfflineLocations();
       Alert.alert('Success', 'Data synced successfully');
     } catch (error) {
       Alert.alert('Error', 'Failed to sync data');
     }
-  };
+  }, []);
 
-  const handleClearData = async () => {
+  const handleClearData = useCallback(async () => {
     Alert.alert(
       'Clear Data',
       'Are you sure you want to clear all location data?',
@@ -314,9 +225,66 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
         },
       ]
     );
+  }, [user]);
+
+  const uploadProfileImage = async (uri, userId, mimeType) => {
+    try {
+      const fileExt = mimeType.split('/')[1];
+      const fileName = `${Date.now()}_${Math.floor(Math.random() * 100000)}.${fileExt}`;
+      const filePath = `profiles/${userId}/${fileName}`;
+      const fileData = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const fileBuffer = Buffer.from(fileData, 'base64');
+      
+      const { data, error } = await supabase.storage
+        .from('locationtracker')
+        .upload(filePath, fileBuffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
+      
+      if (error) {
+        Alert.alert('Error', 'Failed to upload profile image: ' + error.message);
+        return null;
+      }
+      
+      const { data: urlData } = supabase.storage.from('locationtracker').getPublicUrl(filePath);
+      const publicUrl = urlData?.publicUrl || '';
+      
+      const { error: updateError } = await supabase.from('users').update({ profile_photo_data: publicUrl }).eq('id', userId);
+      if (updateError) {
+        console.error('Failed to update profile_photo_data in users table:', updateError);
+      } else {
+        console.log('profile_photo_data updated in users table:', publicUrl);
+      }
+      return publicUrl;
+    } catch (error) {
+      Alert.alert('Error', 'Failed to upload profile image: ' + error.message);
+      return null;
+    }
   };
 
-  // Add location picker functions
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.3,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const publicUrl = await uploadProfileImage(asset.uri, user.id, asset.mimeType || 'image/jpeg');
+        if (publicUrl) {
+          setProfileImage(publicUrl);
+          Alert.alert('Success', 'Profile image updated successfully');
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick image');
+      console.error('Image picker error:', error);
+    }
+  };
+
   const openLocationPicker = () => {
     setSelectedLocation({
       latitude: userProfile?.latitude || 37.78825,
@@ -464,11 +432,13 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
             <Text style={styles.actionButtonText}>Sync Offline Data</Text>
           </TouchableOpacity>
           
+          <TouchableOpacity style={[styles.actionButton, styles.logoutButton]} onPress={handleLogout}>
+            <Text style={styles.actionButtonText}>Logout</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.actionButton} onPress={handleClearData}>
             <Text style={styles.actionButtonText}>Clear Location Data</Text>
           </TouchableOpacity>
-          
-          
           
           <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
             <Text style={styles.deleteButtonText}>Delete Account</Text>
@@ -476,7 +446,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
         </View>
       </View>
 
-      {/* Add a modal for large image preview */}
+      {/* Image Modal */}
       <Modal
         visible={showImageModal}
         transparent={true}
@@ -684,29 +654,10 @@ const styles = StyleSheet.create({
   logoutButton: {
     backgroundColor: '#FF9500',
   },
-  dangerButton: {
-    backgroundColor: '#FF3B30',
-  },
   actionButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-  },
-  dangerText: {
-    color: '#FFFFFF',
-  },
-  infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   deleteButton: {
     backgroundColor: '#FF3B30',

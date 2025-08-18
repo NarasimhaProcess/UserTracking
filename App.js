@@ -255,7 +255,7 @@ function TabNavigator({ route }) {
           ),
         }}
       >
-        {(props) => <ProfileScreen {...props} user={user} userProfile={userProfile} reloadUserProfile={() => loadUserProfile(user.id)} handleLogout={handleLogout} />}
+        {(props) => <ProfileScreen {...props} user={user} userProfile={userProfile} reloadUserProfile={() => loadUserProfile(user.id)} />}
       </Tab.Screen>
       
     </Tab.Navigator>
@@ -437,18 +437,6 @@ export default function App() {
     setShowCalculatorModal(false); // Ensure calculator is hidden on successful auth
   };
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      await locationTracker.stopTracking();
-      setUser(null);
-      setUserProfile(null);
-      setIsAuthenticated(false);
-    } catch (error) {
-      console.error('Error logging out:', error);
-    }
-  };
-
   // Header component for authenticated screens
   const renderHeader = (navigation) => ({
     headerShown: isAuthenticated,
@@ -474,11 +462,6 @@ export default function App() {
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowCalculatorModal(true)}>
           <Icon name="calculator" size={20} color="#007AFF" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text style={{ color: '#FF3B30', fontSize: 16, fontWeight: '600', marginRight: 0 }}>
-            Logout
-          </Text>
         </TouchableOpacity>
       </View>
     ),
