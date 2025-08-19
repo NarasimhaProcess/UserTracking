@@ -7,6 +7,9 @@ import {
   StyleSheet,
   Alert,
   FlatList,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { supabase } from '../services/supabase';
@@ -116,75 +119,103 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
   );
 
   return (
-    <View style={{ flex: 1 }}>
-      <FlatList
-        data={filteredUserExpenses}
-        keyExtractor={item => item.id.toString()}
-        renderItem={renderExpenseItem}
-        ListEmptyComponent={<Text style={styles.emptyListText}>No expenses recorded.</Text>}
-        ListHeaderComponent={
-          <View style={styles.container}>
-            <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>
-              <MaterialIcons name="close" size={24} color="black" />
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView style={{ flex: 1 }}>
+        <View style={styles.container}>
+          <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>
+            <MaterialIcons name="close" size={24} color="black" />
+          </TouchableOpacity>
+          <Text style={styles.sectionHeader}>Add New Expense</Text>
+          <Text style={styles.inputLabel}>Expense Amount</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+            <TextInput
+              value={expenseAmount}
+              onChangeText={setExpenseAmount}
+              placeholder="Enter Amount" 
+              keyboardType="numeric"
+              style={[styles.input, { flex: 1, marginRight: 10 }]} 
+            />
+            <TouchableOpacity
+              style={{ backgroundColor: '#4A90E2', padding: 10, borderRadius: 8 }}
+              onPress={() => { setShowExpenseCalculatorModal(true); setCalculatorTarget('expenseAmount'); }}
+            >
+              <MaterialIcons name="calculate" size={24} color="white" />
             </TouchableOpacity>
-            <Text style={styles.sectionHeader}>Add New Expense</Text>
-            <Text style={styles.inputLabel}>Expense Amount</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-              <TextInput
-                value={expenseAmount}
-                onChangeText={setExpenseAmount}
-                placeholder="Enter Amount" 
-                keyboardType="numeric"
-                style={[styles.input, { flex: 1, marginRight: 10 }]} 
-              />
-              <TouchableOpacity
-                style={{ backgroundColor: '#4A90E2', padding: 10, borderRadius: 8 }}
-                onPress={() => { setShowExpenseCalculatorModal(true); setCalculatorTarget('expenseAmount'); }}
-              >
-                <MaterialIcons name="calculate" size={24} color="white" />
-              </TouchableOpacity>
-            </View>
-            
-            
-            {expenseType === 'Other' && (
-              <TextInput
-                value={otherExpenseType}
-                onChangeText={setOtherExpenseType}
-                placeholder="Please specify other expense type"
-                style={styles.input}
-              />
-            )}
-            
-                     <TouchableOpacity style={styles.button} onPress={handleAddExpense}>
-              <Text style={styles.buttonText}>Add Expense</Text>
-            </TouchableOpacity>
-            <Text style={styles.sectionHeader}>Expense List</Text>
-            <Text style={styles.totalExpensesText}>{`Total Spent: ₹${totalExpenses.toFixed(2)}`}</Text>
-            <View style={styles.expenseHeader}>
-              <Text style={styles.headerText}>Amount</Text>
-              <Text style={styles.headerText}>Type</Text>
-              <Text style={styles.headerText}>Remarks</Text>
-            </View>
           </View>
-        }
-      />
-      <CalculatorModal
-        isVisible={showExpenseCalculatorModal}
-        onClose={() => setShowExpenseCalculatorModal(false)}
-        onResult={(result) => {
-          if (calculatorTarget === 'expenseAmount') {
-            setExpenseAmount(String(result));
+          
+          <Text style={styles.inputLabel}>Expense Type</Text>
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={expenseType}
+              onValueChange={(itemValue) => setExpenseType(itemValue)}
+              style={styles.picker}
+            >
+              <Picker.Item label="Select Expense Type" value="" />
+              <Picker.Item label="Food" value="Food" />
+              <Picker.Item label="Travel" value="Travel" />
+              <Picker.Item label="Fuel" value="Fuel" />
+              <Picker.Item label="Other" value="Other" />
+            </Picker>
+          </View>
+          
+          {expenseType === 'Other' && (
+            <TextInput
+              value={otherExpenseType}
+              onChangeText={setOtherExpenseType}
+              placeholder="Please specify other expense type"
+              style={styles.input}
+            />
+          )}
+          
+          <Text style={styles.inputLabel}>Remarks</Text>
+          <TextInput
+            value={expenseRemarks}
+            onChangeText={setExpenseRemarks}
+            placeholder="Enter remarks (optional)"
+            style={styles.input}
+          />
+          
+                   <TouchableOpacity style={styles.button} onPress={handleAddExpense}>
+            <Text style={styles.buttonText}>Add Expense</Text>
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={filteredUserExpenses}
+          keyExtractor={item => item.id.toString()}
+          renderItem={renderExpenseItem}
+          ListEmptyComponent={<Text style={styles.emptyListText}>No expenses recorded.</Text>}
+          ListHeaderComponent={
+            <View style={styles.container}>
+              <Text style={styles.sectionHeader}>Expense List</Text>
+              <Text style={styles.totalExpensesText}>{`Total Spent: ₹${totalExpenses.toFixed(2)}`}</Text>
+              <View style={styles.expenseHeader}>
+                <Text style={styles.headerText}>Amount</Text>
+                <Text style={styles.headerText}>Type</Text>
+                <Text style={styles.headerText}>Remarks</Text>
+              </View>
+            </View>
           }
-          setShowExpenseCalculatorModal(false);
-        }}
-      />
-    </View>
+        />
+        <CalculatorModal
+          isVisible={showExpenseCalculatorModal}
+          onClose={() => setShowExpenseCalculatorModal(false)}
+          onResult={(result) => {
+            if (calculatorTarget === 'expenseAmount') {
+              setExpenseAmount(String(result));
+            }
+            setShowExpenseCalculatorModal(false);
+          }}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 16,
     backgroundColor: '#F5F5F5',
   },
