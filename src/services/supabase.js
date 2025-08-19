@@ -24,9 +24,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-export async function fetchCustomerPaymentStatusForCSV(areaId) {
-  console.log('Sending areaId to Supabase RPC:', areaId);
-  const { data, error } = await supabase.rpc('get_customer_payment_status_for_csv', { p_area_id: areaId });
+export async function fetchCustomerPaymentStatusForCSV() {
+  const { data, error } = await supabase.rpc('get_customer_payment_status_for_csv');
 
   if (error) {
     console.error('Error fetching customer payment status for CSV:', error);

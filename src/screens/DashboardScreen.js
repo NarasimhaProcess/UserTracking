@@ -14,9 +14,7 @@ import {
   FlatList,
   TextInput,
 } from 'react-native';
-import { supabase, fetchCustomerPaymentStatusForCSV } from '../services/supabase';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import { supabase } from '../services/supabase';
 import { locationTracker } from '../services/locationTracker';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import Icon from 'react-native-vector-icons/FontAwesome';
@@ -25,6 +23,8 @@ import { useNavigation } from '@react-navigation/native';
 import AreaSearchBar from '../components/AreaSearchBar';
 import LargeChartModal from '../components/LargeChartModal';
 import CalculatorModal from '../components/CalculatorModal';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 const formatNumberWithCommas = (number) => {
   return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -149,6 +149,63 @@ export default function DashboardScreen({ user, userProfile }) {
     }
   }, [selectedAreaId]);
 
+  const generateAndShareCsv = async () => {
+    if (!selectedAreaId) {
+      Alert.alert('No Area Selected', 'Please select an area to generate the CSV.');
+      return;
+    }
+
+    // Fetch data directly using the RPC for CSV generation to ensure consistency
+    const { data, error } = await supabase.rpc('get_customer_payment_status_for_csv', { p_area_id: selectedAreaId });
+
+    if (error) {
+      console.error('Error calling get_customer_payment_status_for_csv for CSV:', error);
+      Alert.alert('Error', 'Failed to fetch data for CSV export.');
+      return;
+    }
+
+    if (data.length === 0) {
+      Alert.alert('No Data', 'No transaction data available for today to export.');
+      return;
+    }
+
+    const header = ['Area Name', 'Card No.', 'Customer Name', 'Mobile', 'Email', 'Payment Status', 'Repayment Amount', 'Start Date', 'End Date'].join(',');
+    const rows = data.map(row => [
+      `"${row.area_name || ''}"`, 
+      `"${row.card_no || ''}"`, 
+      `"${row.customer_name || ''}"`, 
+      `"${row.mobile || ''}"`, 
+      `"${row.email || ''}"`, 
+      `"${row.payment_status || ''}"`, 
+      `"${row.repayment_amount || 0}"`, 
+      `"${row.start_date || ''}"`, 
+      `"${row.end_date || ''}"`, 
+    ].join(','));
+
+    const csvContent = [header, ...rows].join('\n');
+        const fileName = `${selectedAreaName.replace(/[^a-zA-Z0-9]/g, '_ ')}_transactions_${new Date().toISOString().slice(0, 10)}.csv`;
+    const fileUri = FileSystem.cacheDirectory + fileName;
+
+    try {
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+      console.log('CSV written to:', fileUri);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          UTI: 'public.csv',
+          subject: 'Today\'s Transaction Report',
+          recipients: [],
+        });
+      } else {
+        Alert.alert('Sharing not available', 'Sharing is not available on your device.');
+      }
+    } catch (error) {
+      console.error('Error generating or sharing CSV:', error);
+      Alert.alert('Error', 'Failed to generate or share CSV.');
+    }
+  };
+
   // This function will be passed to the useEffect hook
   const fetchPaymentData = async (areaId) => {
     if (!areaId || !user?.id) {
@@ -165,85 +222,39 @@ export default function DashboardScreen({ user, userProfile }) {
     setCustomerList([]);
     setCustomerListTitle('');
 
-    const { data: customers, error: customerError } = await supabase
-      .from('customers')
-      .select('id, name, mobile, book_no, amount_given, repayment_amount, days_to_complete, start_date, end_date, repayment_frequency')
-      .eq('area_id', areaId);
+    const { data, error } = await supabase.rpc('get_customer_payment_status_for_csv', { p_area_id: areaId });
 
-    if (customerError) {
-      console.error('Error fetching customers for chart:', customerError);
+    if (error) {
+      console.error('Error calling get_customer_payment_status_for_csv:', error);
       setLoadingChart(false);
       return;
     }
 
-    const customerIds = customers.map(c => c.id);
-    let totalTransactionsMap = new Map();
-
-    if (customerIds.length > 0) {
-      const { data: allTransactions, error: transactionsError } = await supabase
-        .from('transactions')
-        .select('customer_id, amount')
-        .in('customer_id', customerIds);
-
-      if (transactionsError) {
-        console.error('Error fetching all transactions for customers:', transactionsError);
-      } else {
-        allTransactions.forEach(transaction => {
-          totalTransactionsMap.set(
-            transaction.customer_id,
-            (totalTransactionsMap.get(transaction.customer_id) || 0) + (transaction.amount || 0)
-          );
-        });
-      }
-    }
-
-    const customersWithTotalTransactions = customers.map(customer => ({
-      ...customer,
-      totalAmountReceived: (totalTransactionsMap.get(customer.id) || 0).toFixed(2),
+    const paidToday = data.filter(customer => customer.payment_status === 'Paid Today').map(c => ({
+      id: c.card_no, // Using card_no as a unique identifier for the list key
+      name: c.customer_name,
+      mobile: c.mobile,
+      book_no: c.card_no,
+      repayment_amount: c.repayment_amount,
+      start_date: c.start_date,
+      end_date: c.end_date,
+    }));
+    const notPaidToday = data.filter(customer => customer.payment_status === 'Not Paid Today').map(c => ({
+      id: c.card_no, // Using card_no as a unique identifier for the list key
+      name: c.customer_name,
+      mobile: c.mobile,
+      book_no: c.card_no,
+      repayment_amount: c.repayment_amount,
+      start_date: c.start_date,
+      end_date: c.end_date,
     }));
 
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-
-    console.log('Dashboard: Today\'s date range for query:', startOfDay.toISOString(), endOfDay.toISOString());
-
-    const { data: transactions, error: transactionError } = await supabase
-      .from('transactions')
-      .select('customer_id, amount, payment_mode')
-      .in('customer_id', customers.map(c => c.id))
-      .gte('created_at', startOfDay.toISOString())
-      .lte('created_at', endOfDay.toISOString())
-      .eq('transaction_type', 'repayment');
-
-    if (transactionError) {
-      console.error("Dashboard: Error fetching today's transactions:", transactionError);
-      setLoadingChart(false);
-      return;
-    }
-    console.log('Dashboard: Today\'s transactions fetched:', transactions);
-
-    let paidCash = 0;
-    let paidUPI = 0;
-    transactions.forEach(t => {
-      if (t.payment_mode === 'cash') {
-        paidCash += t.amount;
-      } else if (t.payment_mode === 'upi') {
-        paidUPI += t.amount;
-      }
-    });
-
-    setTotalPaidCash(paidCash);
-    setTotalPaidUPI(paidUPI);
-
-    const paidCustomerIds = new Set(transactions.map(t => t.customer_id));
-    const paidToday = customersWithTotalTransactions.filter(c => paidCustomerIds.has(c.id));
-    const notPaidToday = customersWithTotalTransactions.filter(c => !paidCustomerIds.has(c.id));
+    // Reset cash/UPI totals as they are not available from the RPC function
+    setTotalPaidCash(0);
+    setTotalPaidUPI(0);
 
     const notPaidAmount = notPaidToday.reduce((acc, customer) => acc + customer.repayment_amount, 0);
     setTotalNotPaid(notPaidAmount);
-
-    console.log("Unique Paid Today Customers:", paidToday.map(c => c.name));
 
     setPaidTodayCustomers(paidToday);
     setNotPaidTodayCustomers(notPaidToday);
@@ -255,18 +266,16 @@ export default function DashboardScreen({ user, userProfile }) {
 
     // Set Paid Today customers as default displayed list and bar chart
     setCustomerListTitle('Customers Who Paid Today');
-      setCustomerList(paidToday);
-    console.log('customerList updated:', paidToday.length, 'customers');
+    setCustomerList(paidToday);
     setDisplayedCustomerList(paidToday);
-    console.log('displayedCustomerList (initial) updated:', paidToday.length, 'customers');
-      if (paidToday.length > 0) {
-        setBarChartData({
-          labels: paidToday.map(c => c.name.substring(0, 10)),
-          datasets: [{ data: paidToday.map(c => c.repayment_amount || 0) }],
-        });
-      } else {
-        setBarChartData(null);
-      }
+    if (paidToday.length > 0) {
+      setBarChartData({
+        labels: paidToday.map(c => c.name.substring(0, 10)),
+        datasets: [{ data: paidToday.map(c => c.repayment_amount || 0) }],
+      });
+    } else {
+      setBarChartData(null);
+    }
 
     setLoadingChart(false);
   };
@@ -341,62 +350,30 @@ export default function DashboardScreen({ user, userProfile }) {
 
   
 
-  const handleExportCSV = async () => {
-    if (!selectedAreaId) {
-      Alert.alert('Select Area', 'Please select an area to export data.');
-      return;
-    }
-    try {
-      const data = await fetchCustomerPaymentStatusForCSV(selectedAreaId);
-      if (!data || data.length === 0) {
-        Alert.alert('No Data', 'No customer payment data available for the selected area.');
-        return;
-      }
-
-      const headers = Object.keys(data[0]).join(',');
-      const csvRows = data.map(row => Object.values(row).map(val => `"${val}"`).join(','));
-      const csvString = [headers, ...csvRows].join('\n');
-
-      const fileName = `${selectedAreaName.replace(/[^a-zA-Z0-9]/g, '_')}_customer_payment_status.csv`;
-      const fileUri = FileSystem.documentDirectory + fileName;
-      await FileSystem.writeAsStringAsync(fileUri, csvString);
-
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', UTI: 'public.csv' });
-      } else {
-        Alert.alert('Sharing not available', 'Sharing is not available on this device.');
-      }
-    } catch (error) {
-      console.error('Error exporting CSV:', error);
-      Alert.alert('Error', 'Failed to export CSV. Please try again.');
-    }
-  };
-
   const renderHeader = () => {
     const navigation = useNavigation();
     return (
-      <View> {/* This will be the main wrapper for all header content */}
-        <View style={styles.headerContainer}> {/* Original header with search bar and share icon */}
-          <View style={styles.searchContainer}>
-            <AreaSearchBar
-              areas={groupAreas}
-              onAreaSelect={(id, name) => {
-                setSelectedAreaId(id);
-                setSelectedAreaName(name);
-              }}
-              selectedAreaName={selectedAreaName}
-            />
-          </View>
-          <TouchableOpacity onPress={handleExportCSV} style={styles.shareIconContainer}>
-            <MaterialIcons name="share" size={24} color="#007AFF" />
-          </TouchableOpacity>
+      <View>
+        <View style={styles.searchContainer}>
+          <AreaSearchBar
+            areas={groupAreas}
+            onAreaSelect={(id, name) => {
+              setSelectedAreaId(id);
+              setSelectedAreaName(name);
+            }}
+            selectedAreaName={selectedAreaName}
+          />
         </View>
 
-        {/* Chart Cards */}
         {selectedAreaId && (
           <>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Customer Payment Status</Text>
+              <View style={styles.cardTitleContainer}>
+                <Text style={styles.cardTitle}>Customer Payment Status</Text>
+                <TouchableOpacity onPress={generateAndShareCsv} style={styles.shareButton}>
+                  <MaterialIcons name="share" size={24} color="#007AFF" />
+                </TouchableOpacity>
+              </View>
               {loadingChart ? (
                 <ActivityIndicator size="large" color="#007AFF" />
               ) : (
@@ -413,11 +390,11 @@ export default function DashboardScreen({ user, userProfile }) {
               )}
               {!loadingChart && (
                 <View style={styles.legendContainer}>
-                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Paid Today' }) }>
+                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Paid Today' })}>
                     <View style={[styles.legendColor, { backgroundColor: '#4CAF50' }]} />
                     <Text style={styles.legendText}>Paid Today ({paidTodayCustomers.length})</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Not Paid Today' }) }>
+                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Not Paid Today' })}>
                     <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
                     <Text style={styles.legendText}>Not Paid Today ({notPaidTodayCustomers.length})</Text>
                   </TouchableOpacity>
@@ -456,11 +433,8 @@ export default function DashboardScreen({ user, userProfile }) {
                     verticalLabelRotation={60}
                     fromZero={true}
                     showValuesOnTopOfBars={true}
-                    renderValues={(value, index) => {
-                      const customer = displayedCustomerList[index];
-                      console.log('Dashboard BarChart - Customer:', customer);
-                      return `₹${value.toFixed(0)} ${customer ? customer.book_no : ''}`;
-                    }}
+                    renderValues={(value, index) => {                      const customer = displayedCustomerList[index];                      console.log('Dashboard BarChart - Customer:', customer);                      return `₹${value.toFixed(0)}
+${customer ? customer.book_no : ''}`;                    }}
                     style={{ paddingRight: 30, paddingLeft: 10 }}
                   />
                 </ScrollView>
@@ -480,22 +454,13 @@ export default function DashboardScreen({ user, userProfile }) {
           </>
         )}
 
-        {/* Customer Search Input */}
-        <TextInput
+        
+      <TextInput
           style={[styles.customerSearchInput, { marginHorizontal: 16, marginBottom: 16 }]} // Apply margin here
           placeholder="Search customers by card no., name, or mobile."
           value={customerSearchQuery}
           onChangeText={handleSearchChange}
         />
-
-        {/* Customer List Header */}
-        {selectedAreaId && displayedCustomerList.length > 0 && (
-          <View style={styles.customerListHeaderContainer}>
-            <Text style={[styles.customerListHeaderText, { flex: 1 }]}>Card No.</Text>
-            <Text style={[styles.customerListHeaderText, { flex: 2.5 }]}>Name</Text>
-            <Text style={[styles.customerListHeaderText, { flex: 2 }]}>Mobile</Text>
-          </View>
-        )}
       </View>
     );
   };
@@ -507,6 +472,13 @@ export default function DashboardScreen({ user, userProfile }) {
         ListHeaderComponent={() => (
           <>
             {renderHeader()}
+            {selectedAreaId && displayedCustomerList.length > 0 && (
+              <View style={styles.customerListHeaderContainer}>
+                <Text style={[styles.customerListHeaderText, { flex: 1 }]}>Card No.</Text>
+                <Text style={[styles.customerListHeaderText, { flex: 2.5 }]}>Name</Text>
+                <Text style={[styles.customerListHeaderText, { flex: 2 }]}>Mobile</Text>
+              </View>
+            )}
           </>
         )}
         keyExtractor={item => item.id.toString()}
@@ -649,7 +621,6 @@ const styles = StyleSheet.create({
     margin: 16,
     marginBottom: 0,
     borderRadius: 12,
-    flex: 1, // Add this line to make it take available space
   },
   customerSearchInput: {
     borderWidth: 1,
@@ -674,6 +645,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1C1C1E',
     marginBottom: 16,
+  },
+  cardTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  shareButton: {
+    padding: 8,
   },
   modalOverlay: {
     flex: 1,
@@ -716,7 +696,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
   },
- customerListHeaderContainer: {
+  customerListHeaderContainer: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
     paddingHorizontal: 20,
@@ -823,16 +803,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1C1C1E',
     marginBottom: 8,
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 5,
-  },
-  shareIconContainer: {
-    padding: 8,
   },
 });
