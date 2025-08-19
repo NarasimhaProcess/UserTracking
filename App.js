@@ -1,3 +1,4 @@
+import 'react-native-get-random-values';
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -532,7 +533,7 @@ export default function App() {
             </Stack.Screen>
             <Stack.Screen 
               name="QuickTransaction" 
-              options={{ headerShown: false }} // Quick transaction screen might not need a header
+              options={({ navigation }) => renderHeader(navigation)}
             >
               {(props) => (
                 <QuickTransactionScreen {...props} user={user} />

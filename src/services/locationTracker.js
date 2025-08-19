@@ -4,20 +4,10 @@ import * as Device from 'expo-device';
 import * as Application from 'expo-application';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import { NetInfoService } from './NetInfoService';
+import { OfflineStorageService } from './OfflineStorageService';
+import NetInfo from '@react-native-community/netinfo';
 
-let Storage;
-if (Platform.OS === 'web') {
-  Storage = {
-    getItem: async (key) => window.localStorage.getItem(key),
-    setItem: async (key, value) => window.localStorage.setItem(key, value),
-    removeItem: async (key) => window.localStorage.removeItem(key),
-  };
-} else {
-  Storage = require('@react-native-async-storage/async-storage').default;
-}
-
-const BACKGROUND_LOCATION_TASK = 'background-location-tracking';
-const OFFLINE_LOCATIONS_KEY = 'offline_locations';
 
 class LocationTracker {
   constructor() {
@@ -25,76 +15,18 @@ class LocationTracker {
     this.watchId = null;
     this.currentUser = null;
     this.currentUserEmail = null;
-    this.offlineLocations = [];
     this.lastLocation = null;
-  }
 
-  async init() {
-    console.log('🔧 Initializing location tracker...');
-    
-    // Request permissions
-    console.log('🔐 Requesting location permissions...');
-    const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-    const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-    
-    console.log('📱 Initial permission status - Foreground:', foregroundStatus, 'Background:', backgroundStatus);
-    
-    if (foregroundStatus !== 'granted' || backgroundStatus !== 'granted') {
-      console.log('⚠️ Location permissions not granted - Foreground:', foregroundStatus, 'Background:', backgroundStatus);
-      return false;
-    }
-
-    // Setup background task
-    console.log('🔧 Setting up background task...');
-    this.setupBackgroundTask();
-    
-    // Setup notifications (optional for Expo Go)
-    try {
-      console.log('🔔 Setting up notifications...');
-      await this.setupNotifications();
-    } catch (error) {
-      console.log('⚠️ Notifications setup skipped:', error.message);
-    }
-    
-    // Load offline locations
-    console.log('📦 Loading offline locations...');
-    await this.loadOfflineLocations();
-    
-    console.log('✅ Location tracker initialization complete');
-    return true;
-  }
-
-  setupBackgroundTask() {
-    console.log('🔧 Setting up background location task...');
-    TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
-      console.log('🔄 Background task triggered:', new Date().toISOString());
-      
-      if (error) {
-        console.error('❌ Background location task error:', error);
-        return;
-      }
-      
-      if (data) {
-        console.log('📍 Background task data received:', data);
-        const { locations } = data;
-        if (locations && locations.length > 0) {
-          // Always load user info from Storage
-          const userId = await Storage.getItem('user_id');
-          const userEmail = await Storage.getItem('user_email');
-          if (userId && userEmail) {
-            locationTracker.handleLocationUpdateWithUser(locations[0], userId, userEmail);
-          } else {
-            console.warn('No user info found in Storage for background location update');
-          }
-        } else {
-          console.log('⚠️ No locations in background task data');
-        }
-      } else {
-        console.log('⚠️ No data in background task');
+    NetInfo.addEventListener(state => {
+      if (state.isConnected) {
+        this.syncOfflineLocations();
       }
     });
-    console.log('✅ Background task setup complete');
   }
+
+  
+
+  
 
   async setupNotifications() {
     // Notifications are not supported in Expo Go with SDK 53
@@ -111,23 +43,24 @@ class LocationTracker {
 
     this.currentUser = userId;
     this.currentUserEmail = userEmail;
-    // Persist user info for background task
-    await Storage.setItem('user_id', String(userId));
-    await Storage.setItem('user_email', String(userEmail));
     
     // Fetch location_update_interval from users table
     let interval = 30; // default
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('location_update_interval')
-        .eq('id', userId)
-        .single();
-      if (!error && data && data.location_update_interval) {
-        interval = data.location_update_interval;
-      }
-    } catch (e) {
-      console.warn('Could not fetch location_update_interval, using default 30s');
+    if (!await NetInfoService.isNetworkAvailable()) {
+        console.warn('Could not fetch location_update_interval, using default 30s');
+    } else {
+        try {
+          const { data, error } = await supabase
+            .from('users')
+            .select('location_update_interval')
+            .eq('id', userId)
+            .single();
+          if (!error && data && data.location_update_interval) {
+            interval = data.location_update_interval;
+          }
+        } catch (e) {
+          console.warn('Could not fetch location_update_interval, using default 30s');
+        }
     }
 
     try {
@@ -159,16 +92,18 @@ class LocationTracker {
       }
 
       // Update users table with location_status = 1 (active)
-      console.log('📝 Updating users table - setting location_status to active...');
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ location_status: 1 })
-        .eq('id', userId);
-
-      if (updateError) {
-        console.error('❌ Error updating users table:', updateError);
-      } else {
-        console.log('✅ Users table updated - location_status set to active');
+      if (await NetInfoService.isNetworkAvailable()) {
+          console.log('📝 Updating users table - setting location_status to active...');
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({ location_status: 1 })
+            .eq('id', userId);
+    
+          if (updateError) {
+            console.error('❌ Error updating users table:', updateError);
+          } else {
+            console.log('✅ Users table updated - location_status set to active');
+          }
       }
 
       // Start foreground tracking with custom interval
@@ -221,7 +156,7 @@ class LocationTracker {
 
     try {
       // Update users table with latest lat/lon and updated_at, but do NOT set location_status
-      if (this.currentUser && this.lastLocation) {
+      if (this.currentUser && this.lastLocation && await NetInfoService.isNetworkAvailable()) {
         const { coords, timestamp } = this.lastLocation;
         const deviceName = Device.deviceName || 'MobileApp';
         const deviceId = Application.androidId || 'unknownid';
@@ -297,95 +232,87 @@ class LocationTracker {
       return;
     }
 
-    try {
-      // Insert into location_history table
-      const { error } = await supabase
-        .from('location_history')
-        .insert([
-          {
-            user_id: this.currentUser,
-            user_email: this.currentUserEmail,
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            device_name: deviceInfo,
-            accuracy: coords.accuracy,
-            timestamp: new Date(timestamp).toISOString(),
-          }
-        ]);
+    const isNetworkAvailable = await NetInfoService.isNetworkAvailable();
+    console.log('🌐 Network status:', isNetworkAvailable);
 
-      if (error) {
-        console.error('❌ Error inserting into location_history:', error);
-        throw error;
-      }
+    if (isNetworkAvailable) {
+      try {
+        console.log('📡 Sending location data to Supabase...');
+        // Insert into location_history table
+        const { error } = await supabase
+          .from('location_history')
+          .insert([
+            {
+              user_id: this.currentUser,
+              user_email: this.currentUserEmail,
+              latitude: coords.latitude,
+              longitude: coords.longitude,
+              device_name: deviceInfo,
+              accuracy: coords.accuracy,
+              timestamp: new Date(timestamp).toISOString(),
+            }
+          ]);
 
-      console.log('✅ Location successfully stored in location_history table:', new Date().toISOString());
-      
-      // Also update the users table with current location (match HTML logic)
-      if (this.currentUser) {
-        console.log('📝 Updating users table with current location...');
-        const { error: userUpdateError } = await supabase
-          .from('users')
-          .update({ 
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            device_name: deviceInfo,
-            updated_at: new Date(timestamp).toISOString(),
-            location_status: 1,
-          })
-          .eq('email', this.currentUserEmail);
-
-        if (userUpdateError) {
-          console.error('❌ Error updating users table:', userUpdateError);
-        } else {
-          console.log('✅ Users table updated with current location');
+        if (error) {
+          console.error('❌ Error inserting into location_history:', error);
+          throw error;
         }
+
+        console.log('✅ Location successfully stored in location_history table:', new Date().toISOString());
+        
+        // Also update the users table with current location (match HTML logic)
+        if (this.currentUser) {
+          console.log('📝 Updating users table with current location...');
+          const { error: userUpdateError } = await supabase
+            .from('users')
+            .update({ 
+              latitude: coords.latitude,
+              longitude: coords.longitude,
+              device_name: deviceInfo,
+              updated_at: new Date(timestamp).toISOString(),
+              location_status: 1,
+            })
+            .eq('email', this.currentUserEmail);
+
+          if (userUpdateError) {
+            console.error('❌ Error updating users table:', userUpdateError);
+          } else {
+            console.log('✅ Users table updated with current location');
+          }
+        }
+        
+      } catch (error) {
+        console.error('❌ Error sending location to Supabase:', error);
+        
+        // Store offline for later sync
+        console.log('💾 Storing location offline for later sync...');
+        await OfflineStorageService.saveOfflineLocation(locationData);
       }
-      
-    } catch (error) {
-      console.error('❌ Error sending location to Supabase:', error);
-      
+    } else {
       // Store offline for later sync
       console.log('💾 Storing location offline for later sync...');
-      await this.storeOfflineLocation(locationData);
+      await OfflineStorageService.saveOfflineLocation(locationData);
     }
     this.lastLocation = location;
   }
 
-  async storeOfflineLocation(locationData) {
-    this.offlineLocations.push(locationData);
-    await Storage.setItem(OFFLINE_LOCATIONS_KEY, JSON.stringify(this.offlineLocations));
-    console.log('Location stored offline');
-  }
-
-  async loadOfflineLocations() {
-    try {
-      const stored = await Storage.getItem(OFFLINE_LOCATIONS_KEY);
-      if (stored) {
-        this.offlineLocations = JSON.parse(stored);
-        console.log('Loaded offline locations:', this.offlineLocations.length);
-      }
-    } catch (error) {
-      console.error('Error loading offline locations:', error);
-    }
-  }
-
   async syncOfflineLocations() {
-    if (this.offlineLocations.length === 0) {
+    const offlineLocations = await OfflineStorageService.getOfflineLocations();
+    if (offlineLocations.length === 0) {
       return;
     }
 
     try {
       const { error } = await supabase
         .from('location_history')
-        .insert(this.offlineLocations);
+        .insert(offlineLocations);
 
       if (error) {
         throw error;
       }
 
       // Clear offline locations
-      this.offlineLocations = [];
-      await Storage.removeItem(OFFLINE_LOCATIONS_KEY);
+      await OfflineStorageService.clearOfflineLocations();
       
       console.log('Offline locations synced successfully');
       
@@ -403,15 +330,7 @@ class LocationTracker {
     return this.isTracking;
   }
 
-  getOfflineLocationsCount() {
-    return this.offlineLocations.length;
-  }
-
-  handleLocationUpdateWithUser(location, userId, userEmail) {
-    this.currentUser = userId;
-    this.currentUserEmail = userEmail;
-    this.handleLocationUpdate(location);
-  }
+  
 }
 
 export const locationTracker = new LocationTracker(); 

@@ -7,15 +7,16 @@ import {
   StyleSheet,
   Alert,
   FlatList,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { supabase } from '../services/supabase';
 import { MaterialIcons } from '@expo/vector-icons';
 import CalculatorModal from '../components/CalculatorModal';
 import { Picker } from '@react-native-picker/picker';
+import NetInfo from '@react-native-community/netinfo';
+import { NetInfoService } from '../services/NetInfoService';
+import { OfflineStorageService } from '../services/OfflineStorageService';
+import { v4 as uuidv4 } from 'uuid';
 
 export default function UserExpensesScreen({ navigation, user, userProfile }) {
   // User Expenses State
@@ -44,7 +45,30 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
 
   useEffect(() => {
     fetchUserExpenses();
+    syncOfflineExpenses();
   }, [user?.id]);
+
+  const syncOfflineExpenses = async () => {
+    const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
+    if (offlineExpenses.length > 0 && await NetInfoService.isNetworkAvailable()) {
+      Alert.alert('Syncing', 'Syncing offline expenses...');
+      for (const expense of offlineExpenses) {
+        try {
+          const { error } = await supabase.from('user_expenses').insert(expense);
+          if (error) {
+            throw error;
+          }
+        } catch (error) {
+          console.error('Error syncing offline expense:', error);
+          Alert.alert('Error', 'Failed to sync some expenses. Please try again later.');
+          return; // Stop syncing if there is an error
+        }
+      }
+      await OfflineStorageService.clearOfflineExpenses();
+      Alert.alert('Success', 'Offline expenses synced successfully!');
+      fetchUserExpenses();
+    }
+  };
 
   const handleAddExpense = async () => {
     const finalExpenseType = expenseType === 'Other' ? otherExpenseType : expenseType;
@@ -59,163 +83,184 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
       return;
     }
 
-    try {
-      const { error } = await supabase.from('user_expenses').insert({
-        user_id: user.id,
-        amount: parseFloat(expenseAmount),
-        expense_type: finalExpenseType, // Use the potentially combined type
-        remarks: expenseRemarks,
-        created_at: selectedDate.toISOString(),
-      });
+    const expense = {
+      id: uuidv4(),
+      user_id: user.id,
+      amount: parseFloat(expenseAmount),
+      expense_type: finalExpenseType,
+      remarks: expenseRemarks,
+      created_at: selectedDate.toISOString(),
+    };
 
-      if (error) {
-        Alert.alert('Error', error.message);
-      } else {
-        Alert.alert('Success', 'Expense added successfully!');
-        setExpenseAmount('');
-        setExpenseType('');
-        setOtherExpenseType(''); // Clear the other field as well
-        setExpenseRemarks('');
-        fetchUserExpenses(); // Refresh the list
+    if (!await NetInfoService.isNetworkAvailable()) {
+      await OfflineStorageService.saveOfflineExpense(expense);
+      Alert.alert('Offline', 'Expense saved locally and will be synced when you are back online.');
+      setExpenseAmount('');
+      setExpenseType('');
+      setOtherExpenseType('');
+      setExpenseRemarks('');
+      fetchUserExpenses();
+    } else {
+      try {
+        const { error } = await supabase.from('user_expenses').insert(expense);
+
+        if (error) {
+          Alert.alert('Error', error.message);
+        } else {
+          Alert.alert('Success', 'Expense added successfully!');
+          setExpenseAmount('');
+          setExpenseType('');
+          setOtherExpenseType(''); // Clear the other field as well
+          setExpenseRemarks('');
+          fetchUserExpenses(); // Refresh the list
+        }
+      } catch (error) {
+        console.error('Error adding expense:', error);
+        Alert.alert('Error', 'Failed to add expense.');
       }
-    } catch (error) {
-      console.error('Error adding expense:', error);
-      Alert.alert('Error', 'Failed to add expense.');
     }
   };
 
   const fetchUserExpenses = async () => {
     if (!user?.id) return;
 
-    try {
-      const { data, error } = await supabase
-        .from('user_expenses')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+    if (!await NetInfoService.isNetworkAvailable()) {
+      const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
+      const allExpenses = [...offlineExpenses.map(e => ({...e, isOffline: true}))];
 
-      if (error) {
-        console.error('Error fetching user expenses:', error);
-      } else {
-        setUserExpenses(data || []);
-        setFilteredUserExpenses(data || []);
-        const total = (data || []).reduce((sum, expense) => sum + Number(expense.amount), 0);
+      setUserExpenses(allExpenses);
+      setFilteredUserExpenses(allExpenses);
+      const total = allExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+      setTotalExpenses(total);
+    } else {
+      try {
+        const { data, error } = await supabase
+          .from('user_expenses')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching user expenses:', error);
+        }
+
+        const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
+        const allExpenses = [...(data || []), ...offlineExpenses.map(e => ({...e, isOffline: true}))];
+
+        setUserExpenses(allExpenses);
+        setFilteredUserExpenses(allExpenses);
+        const total = allExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
         setTotalExpenses(total);
+      } catch (error) {
+        console.error('Error fetching user expenses:', error);
       }
-    } catch (error) {
-      console.error('Error fetching user expenses:', error);
     }
   };
 
   const renderExpenseItem = ({ item }) => (
-    <View style={styles.expenseRow}>
+    <View style={[styles.expenseRow, item.isOffline && styles.offlineRow]}>
       <View style={styles.amountContainer}>
         <Text style={styles.rowText}>{`₹${item.amount}`}</Text>
         <Text style={styles.dateText}>{new Date(item.created_at).toLocaleDateString()}</Text>
       </View>
       <Text style={styles.rowText}>{item.expense_type}</Text>
       <Text style={styles.rowText}>{item.remarks || 'N/A'}</Text>
+      {item.isOffline && <MaterialIcons name="cloud-off" size={24} color="gray" />}
     </View>
   );
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView style={{ flex: 1 }}>
-        <View style={styles.container}>
-          <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>
-            <MaterialIcons name="close" size={24} color="black" />
-          </TouchableOpacity>
-          <Text style={styles.sectionHeader}>Add New Expense</Text>
-          <Text style={styles.inputLabel}>Expense Amount</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-            <TextInput
-              value={expenseAmount}
-              onChangeText={setExpenseAmount}
-              placeholder="Enter Amount" 
-              keyboardType="numeric"
-              style={[styles.input, { flex: 1, marginRight: 10 }]} 
-            />
-            <TouchableOpacity
-              style={{ backgroundColor: '#4A90E2', padding: 10, borderRadius: 8 }}
-              onPress={() => { setShowExpenseCalculatorModal(true); setCalculatorTarget('expenseAmount'); }}
-            >
-              <MaterialIcons name="calculate" size={24} color="white" />
+    <View style={{ flex: 1 }}>
+      <FlatList
+        data={filteredUserExpenses}
+        keyExtractor={item => item.id ? item.id.toString() : item.created_at}
+        renderItem={renderExpenseItem}
+        ListEmptyComponent={<Text style={styles.emptyListText}>No expenses recorded.</Text>}
+        ListHeaderComponent={
+          <View style={styles.container}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>
+              <MaterialIcons name="close" size={24} color="black" />
             </TouchableOpacity>
-          </View>
-          
-          <Text style={styles.inputLabel}>Expense Type</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={expenseType}
-              onValueChange={(itemValue) => setExpenseType(itemValue)}
-              style={styles.picker}
-            >
-              <Picker.Item label="Select Expense Type" value="" />
-              <Picker.Item label="Food" value="Food" />
-              <Picker.Item label="Travel" value="Travel" />
-              <Picker.Item label="Fuel" value="Fuel" />
-              <Picker.Item label="Other" value="Other" />
-            </Picker>
-          </View>
-          
-          {expenseType === 'Other' && (
+            <Text style={styles.sectionHeader}>Add New Expense</Text>
+            <Text style={styles.inputLabel}>Expense Amount</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+              <TextInput
+                value={expenseAmount}
+                onChangeText={setExpenseAmount}
+                placeholder="Enter Amount" 
+                keyboardType="numeric"
+                style={[styles.input, { flex: 1, marginRight: 10 }]} 
+              />
+              <TouchableOpacity
+                style={{ backgroundColor: '#4A90E2', padding: 10, borderRadius: 8 }}
+                onPress={() => { setShowExpenseCalculatorModal(true); setCalculatorTarget('expenseAmount'); }}
+              >
+                <MaterialIcons name="calculate" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.inputLabel}>Expense Type</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={expenseType}
+                onValueChange={(itemValue) => setExpenseType(itemValue)}
+                style={styles.picker}
+              >
+                <Picker.Item label="Select Expense Type" value="" />
+                <Picker.Item label="Food" value="Food" />
+                <Picker.Item label="Travel" value="Travel" />
+                <Picker.Item label="Fuel" value="Fuel" />
+                <Picker.Item label="Other" value="Other" />
+              </Picker>
+            </View>
+            
+            {expenseType === 'Other' && (
+              <TextInput
+                value={otherExpenseType}
+                onChangeText={setOtherExpenseType}
+                placeholder="Please specify other expense type"
+                style={styles.input}
+              />
+            )}
+            
+            <Text style={styles.inputLabel}>Remarks</Text>
             <TextInput
-              value={otherExpenseType}
-              onChangeText={setOtherExpenseType}
-              placeholder="Please specify other expense type"
+              value={expenseRemarks}
+              onChangeText={setExpenseRemarks}
+              placeholder="Enter remarks (optional)"
               style={styles.input}
             />
-          )}
-          
-          <Text style={styles.inputLabel}>Remarks</Text>
-          <TextInput
-            value={expenseRemarks}
-            onChangeText={setExpenseRemarks}
-            placeholder="Enter remarks (optional)"
-            style={styles.input}
-          />
-          
-                   <TouchableOpacity style={styles.button} onPress={handleAddExpense}>
-            <Text style={styles.buttonText}>Add Expense</Text>
-          </TouchableOpacity>
-        </View>
-        <FlatList
-          data={filteredUserExpenses}
-          keyExtractor={item => item.id.toString()}
-          renderItem={renderExpenseItem}
-          ListEmptyComponent={<Text style={styles.emptyListText}>No expenses recorded.</Text>}
-          ListHeaderComponent={
-            <View style={styles.container}>
-              <Text style={styles.sectionHeader}>Expense List</Text>
-              <Text style={styles.totalExpensesText}>{`Total Spent: ₹${totalExpenses.toFixed(2)}`}</Text>
-              <View style={styles.expenseHeader}>
-                <Text style={styles.headerText}>Amount</Text>
-                <Text style={styles.headerText}>Type</Text>
-                <Text style={styles.headerText}>Remarks</Text>
-              </View>
+            
+                     <TouchableOpacity style={styles.button} onPress={handleAddExpense}>
+              <Text style={styles.buttonText}>Add Expense</Text>
+            </TouchableOpacity>
+            <Text style={styles.sectionHeader}>Expense List</Text>
+            <Text style={styles.totalExpensesText}>{`Total Spent: ₹${totalExpenses.toFixed(2)}`}</Text>
+            <View style={styles.expenseHeader}>
+              <Text style={styles.headerText}>Amount</Text>
+              <Text style={styles.headerText}>Type</Text>
+              <Text style={styles.headerText}>Remarks</Text>
             </View>
+          </View>
+        }
+      />
+      <CalculatorModal
+        isVisible={showExpenseCalculatorModal}
+        onClose={() => setShowExpenseCalculatorModal(false)}
+        onResult={(result) => {
+          if (calculatorTarget === 'expenseAmount') {
+            setExpenseAmount(String(result));
           }
-        />
-        <CalculatorModal
-          isVisible={showExpenseCalculatorModal}
-          onClose={() => setShowExpenseCalculatorModal(false)}
-          onResult={(result) => {
-            if (calculatorTarget === 'expenseAmount') {
-              setExpenseAmount(String(result));
-            }
-            setShowExpenseCalculatorModal(false);
-          }}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+          setShowExpenseCalculatorModal(false);
+        }}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
     padding: 16,
     backgroundColor: '#F5F5F5',
   },
@@ -264,6 +309,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+  },
+  offlineRow: {
+    backgroundColor: '#f0f0f0',
+    borderColor: '#d0d0d0',
   },
   rowText: {
     fontSize: 14,

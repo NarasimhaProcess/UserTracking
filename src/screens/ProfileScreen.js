@@ -19,6 +19,7 @@ import { supabase } from '../services/supabase';
 import { locationTracker } from '../services/locationTracker';
 import { Buffer } from 'buffer';
 import LeafletMap from '../components/LeafletMap';
+import { OfflineStorageService } from '../services/OfflineStorageService';
 
 // Utility function to convert BYTEA hex to base64
 function hexToBase64(hexString) {
@@ -138,13 +139,42 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
 
   // Using useCallback to ensure function reference stability
   const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      Alert.alert('Success', 'Logged out successfully!');
-      navigation.replace('Login'); // Assuming 'Login' is the name of your login screen route
-    } catch (error) {
-      Alert.alert('Error', 'Failed to log out: ' + error.message);
-      console.error('Logout error:', error);
+    const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
+
+    if (offlineExpenses.length > 0) {
+      Alert.alert(
+        'Offline Expenses',
+        'You have offline expenses that have not been synced. What would you like to do?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Logout and Discard',
+            style: 'destructive',
+            onPress: async () => {
+              await OfflineStorageService.clearOfflineExpenses();
+              await supabase.auth.signOut();
+              navigation.replace('Login');
+            },
+          },
+          {
+            text: 'Connect to Sync',
+            onPress: () => {},
+            style: 'default',
+          },
+        ]
+      );
+    } else {
+      try {
+        await supabase.auth.signOut();
+        Alert.alert('Success', 'Logged out successfully!');
+        navigation.replace('Login'); // Assuming 'Login' is the name of your login screen route
+      } catch (error) {
+        Alert.alert('Error', 'Failed to log out: ' + error.message);
+        console.error('Logout error:', error);
+      }
     }
   };
 
@@ -187,14 +217,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     }));
   };
 
-  const handleSyncData = useCallback(async () => {
-    try {
-      await locationTracker.syncOfflineLocations();
-      Alert.alert('Success', 'Data synced successfully');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to sync data');
-    }
-  }, []);
+  
 
   const handleClearData = useCallback(async () => {
     Alert.alert(
@@ -428,9 +451,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Actions</Text>
         <View style={styles.actionsCard}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleSyncData}>
-            <Text style={styles.actionButtonText}>Sync Offline Data</Text>
-          </TouchableOpacity>
+          
           
           <TouchableOpacity style={[styles.actionButton, styles.logoutButton]} onPress={handleLogout}>
             <Text style={styles.actionButtonText}>Logout</Text>
