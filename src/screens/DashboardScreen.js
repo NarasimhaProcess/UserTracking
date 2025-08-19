@@ -231,23 +231,26 @@ export default function DashboardScreen({ user, userProfile }) {
     }
 
     const paidToday = data.filter(customer => customer.payment_status === 'Paid Today').map(c => ({
-      id: c.card_no, // Using card_no as a unique identifier for the list key
+      id: `${c.card_no}-${c.customer_name}`,
       name: c.customer_name,
       mobile: c.mobile,
       book_no: c.card_no,
       repayment_amount: c.repayment_amount,
       start_date: c.start_date,
       end_date: c.end_date,
-    }));
+      transaction_date: c.transaction_date, // Assuming this field exists in the data
+    })).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
+
     const notPaidToday = data.filter(customer => customer.payment_status === 'Not Paid Today').map(c => ({
-      id: c.card_no, // Using card_no as a unique identifier for the list key
+      id: `${c.card_no}-${c.customer_name}`,
       name: c.customer_name,
       mobile: c.mobile,
       book_no: c.card_no,
       repayment_amount: c.repayment_amount,
       start_date: c.start_date,
       end_date: c.end_date,
-    }));
+      transaction_date: c.transaction_date, // Assuming this field exists in the data
+    })).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
 
     // Reset cash/UPI totals as they are not available from the RPC function
     setTotalPaidCash(0);
@@ -501,6 +504,7 @@ ${customer ? customer.book_no : ''}`;                    }}
                 <Text style={[styles.detailText, { color: 'blue' }]}>Total Amount Received: ₹{item.totalAmountReceived}</Text>
                 <Text style={styles.detailText}>Start Date: {item.start_date}</Text>
                 <Text style={[styles.detailText, { color: 'blue' }]}>End Date: {item.end_date}</Text>
+                <Text style={styles.detailText}>Transaction Date: {item.transaction_date}</Text>
               </View>
             )}
           </View>
