@@ -622,10 +622,10 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   header: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 30,
-    textAlign: 'center',
+    textAlign: 'left',
     color: '#333',
   },
   inputGroup: {

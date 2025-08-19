@@ -14,7 +14,9 @@ import {
   FlatList,
   TextInput,
 } from 'react-native';
-import { supabase } from '../services/supabase';
+import { supabase, fetchCustomerPaymentStatusForCSV } from '../services/supabase';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { locationTracker } from '../services/locationTracker';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import Icon from 'react-native-vector-icons/FontAwesome';
@@ -339,21 +341,58 @@ export default function DashboardScreen({ user, userProfile }) {
 
   
 
+  const handleExportCSV = async () => {
+    if (!selectedAreaId) {
+      Alert.alert('Select Area', 'Please select an area to export data.');
+      return;
+    }
+    try {
+      const data = await fetchCustomerPaymentStatusForCSV(selectedAreaId);
+      if (!data || data.length === 0) {
+        Alert.alert('No Data', 'No customer payment data available for the selected area.');
+        return;
+      }
+
+      const headers = Object.keys(data[0]).join(',');
+      const csvRows = data.map(row => Object.values(row).map(val => `"${val}"`).join(','));
+      const csvString = [headers, ...csvRows].join('\n');
+
+      const fileName = `${selectedAreaName.replace(/[^a-zA-Z0-9]/g, '_')}_customer_payment_status.csv`;
+      const fileUri = FileSystem.documentDirectory + fileName;
+      await FileSystem.writeAsStringAsync(fileUri, csvString);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', UTI: 'public.csv' });
+      } else {
+        Alert.alert('Sharing not available', 'Sharing is not available on this device.');
+      }
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      Alert.alert('Error', 'Failed to export CSV. Please try again.');
+    }
+  };
+
   const renderHeader = () => {
     const navigation = useNavigation();
     return (
-      <View>
-        <View style={styles.searchContainer}>
-          <AreaSearchBar
-            areas={groupAreas}
-            onAreaSelect={(id, name) => {
-              setSelectedAreaId(id);
-              setSelectedAreaName(name);
-            }}
-            selectedAreaName={selectedAreaName}
-          />
+      <View> {/* This will be the main wrapper for all header content */}
+        <View style={styles.headerContainer}> {/* Original header with search bar and share icon */}
+          <View style={styles.searchContainer}>
+            <AreaSearchBar
+              areas={groupAreas}
+              onAreaSelect={(id, name) => {
+                setSelectedAreaId(id);
+                setSelectedAreaName(name);
+              }}
+              selectedAreaName={selectedAreaName}
+            />
+          </View>
+          <TouchableOpacity onPress={handleExportCSV} style={styles.shareIconContainer}>
+            <MaterialIcons name="share" size={24} color="#007AFF" />
+          </TouchableOpacity>
         </View>
 
+        {/* Chart Cards */}
         {selectedAreaId && (
           <>
             <View style={styles.card}>
@@ -374,11 +413,11 @@ export default function DashboardScreen({ user, userProfile }) {
               )}
               {!loadingChart && (
                 <View style={styles.legendContainer}>
-                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Paid Today' })}>
+                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Paid Today' }) }>
                     <View style={[styles.legendColor, { backgroundColor: '#4CAF50' }]} />
                     <Text style={styles.legendText}>Paid Today ({paidTodayCustomers.length})</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Not Paid Today' })}>
+                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Not Paid Today' }) }>
                     <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
                     <Text style={styles.legendText}>Not Paid Today ({notPaidTodayCustomers.length})</Text>
                   </TouchableOpacity>
@@ -417,8 +456,11 @@ export default function DashboardScreen({ user, userProfile }) {
                     verticalLabelRotation={60}
                     fromZero={true}
                     showValuesOnTopOfBars={true}
-                    renderValues={(value, index) => {                      const customer = displayedCustomerList[index];                      console.log('Dashboard BarChart - Customer:', customer);                      return `₹${value.toFixed(0)}
-${customer ? customer.book_no : ''}`;                    }}
+                    renderValues={(value, index) => {
+                      const customer = displayedCustomerList[index];
+                      console.log('Dashboard BarChart - Customer:', customer);
+                      return `₹${value.toFixed(0)} ${customer ? customer.book_no : ''}`;
+                    }}
                     style={{ paddingRight: 30, paddingLeft: 10 }}
                   />
                 </ScrollView>
@@ -438,13 +480,22 @@ ${customer ? customer.book_no : ''}`;                    }}
           </>
         )}
 
-        
-      <TextInput
+        {/* Customer Search Input */}
+        <TextInput
           style={[styles.customerSearchInput, { marginHorizontal: 16, marginBottom: 16 }]} // Apply margin here
           placeholder="Search customers by card no., name, or mobile."
           value={customerSearchQuery}
           onChangeText={handleSearchChange}
         />
+
+        {/* Customer List Header */}
+        {selectedAreaId && displayedCustomerList.length > 0 && (
+          <View style={styles.customerListHeaderContainer}>
+            <Text style={[styles.customerListHeaderText, { flex: 1 }]}>Card No.</Text>
+            <Text style={[styles.customerListHeaderText, { flex: 2.5 }]}>Name</Text>
+            <Text style={[styles.customerListHeaderText, { flex: 2 }]}>Mobile</Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -456,13 +507,6 @@ ${customer ? customer.book_no : ''}`;                    }}
         ListHeaderComponent={() => (
           <>
             {renderHeader()}
-            {selectedAreaId && displayedCustomerList.length > 0 && (
-              <View style={styles.customerListHeaderContainer}>
-                <Text style={[styles.customerListHeaderText, { flex: 1 }]}>Card No.</Text>
-                <Text style={[styles.customerListHeaderText, { flex: 2.5 }]}>Name</Text>
-                <Text style={[styles.customerListHeaderText, { flex: 2 }]}>Mobile</Text>
-              </View>
-            )}
           </>
         )}
         keyExtractor={item => item.id.toString()}
@@ -605,6 +649,7 @@ const styles = StyleSheet.create({
     margin: 16,
     marginBottom: 0,
     borderRadius: 12,
+    flex: 1, // Add this line to make it take available space
   },
   customerSearchInput: {
     borderWidth: 1,
@@ -671,7 +716,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
   },
-  customerListHeaderContainer: {
+ customerListHeaderContainer: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
     paddingHorizontal: 20,
@@ -778,5 +823,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1C1C1E',
     marginBottom: 8,
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 5,
+  },
+  shareIconContainer: {
+    padding: 8,
   },
 });
