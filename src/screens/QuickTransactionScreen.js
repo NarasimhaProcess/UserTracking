@@ -143,10 +143,12 @@ export default function QuickTransactionScreen({ navigation, user }) {
           }
 
           // Remove the temporary id used for offline storage before syncing to Supabase
-          const { id, upi_image, ...transactionToSync } = transaction;
+          const { id, upi_image, customer_name, customer_book_no, ...transactionToSync } = transaction;
           const { error } = await supabase.from('transactions').insert({
             ...transactionToSync,
             upi_image: finalUpiImage,
+            customer_name: customer_name, // Include customer_name
+            customer_book_no: customer_book_no, // Include customer_book_no
           });
           if (error) {
             throw error;
@@ -171,7 +173,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
       try {
         let query = supabase
           .from('transactions')
-          .select('*')
+          .select('*, customers(name, book_no)') // Select all transaction fields and customer name/book_no
           .eq('user_id', user.id);
 
         if (customerId) { // Filter by customerId if provided
@@ -197,7 +199,20 @@ export default function QuickTransactionScreen({ navigation, user }) {
       filteredOfflineTransactions = filteredOfflineTransactions.filter(t => t.customer_id === customerId);
     }
 
-    const allTransactions = [...fetchedOnlineTransactions, ...filteredOfflineTransactions];
+    // For offline transactions, we need to manually get customer names if possible
+    // This assumes allCustomers state is populated.
+    const offlineTransactionsWithNames = filteredOfflineTransactions.map(t => {
+      const customer = allCustomers.find(c => c.id === t.customer_id);
+      return {
+        ...t,
+        customers: {
+          name: customer ? customer.name : 'Unknown',
+          book_no: customer ? customer.book_no : 'N/A'
+        }
+      };
+    });
+
+    const allTransactions = [...fetchedOnlineTransactions, ...offlineTransactionsWithNames];
     setTransactions(allTransactions);
   };
 
@@ -407,6 +422,8 @@ export default function QuickTransactionScreen({ navigation, user }) {
     const transaction = {
       id: uuidv4(), // Generate a unique ID for offline storage
       customer_id: selectedCustomer.id,
+      customer_name: selectedCustomer.name, // Store customer name directly
+      customer_book_no: selectedCustomer.book_no, // Store customer book_no directly
       amount: parseFloat(amount),
       remarks: remarks,
       payment_mode: paymentType,
@@ -457,7 +474,8 @@ export default function QuickTransactionScreen({ navigation, user }) {
         <Text style={styles.rowText}>{`₹${item.amount}`}</Text>
         <Text style={styles.dateText}>{new Date(item.created_at).toLocaleDateString()}</Text>
       </View>
-      <Text style={styles.rowText}>{item.customer_id}</Text>
+      <Text style={styles.rowText}>{item.customers?.name || 'N/A'}</Text>
+      <Text style={styles.rowText}>{item.customers?.book_no || 'N/A'}</Text>
       <Text style={styles.rowText}>{item.remarks || 'N/A'}</Text>
       {item.isOffline && <MaterialIcons name="cloud-off" size={24} color="gray" />}
     </View>
@@ -602,6 +620,13 @@ export default function QuickTransactionScreen({ navigation, user }) {
           </TouchableOpacity>
 
           <Text style={styles.sectionHeader}>Recent Transactions</Text>
+          <View style={styles.transactionHeaderRow}>
+            <Text style={styles.headerCell}>Amount</Text>
+            <Text style={styles.headerCell}>Customer Name</Text>
+            <Text style={styles.headerCell}>Card No</Text>
+            <Text style={styles.headerCell}>Remarks</Text>
+            <Text style={styles.headerCell}>Status</Text>
+          </View>
         </View>
       }
     />
@@ -722,6 +747,20 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textAlign: 'center',
     color: '#333',
+  },
+  transactionHeaderRow: { // New style for header row
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#E0E0E0',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  headerCell: { // New style for header cells
+    fontWeight: 'bold',
+    fontSize: 14,
+    flex: 1,
+    textAlign: 'center',
   },
   transactionRow: {
     flexDirection: 'row',
