@@ -252,9 +252,34 @@ export default function DashboardScreen({ user, userProfile }) {
       transaction_date: c.transaction_date, // Assuming this field exists in the data
     })).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
 
-    // Reset cash/UPI totals as they are not available from the RPC function
-    setTotalPaidCash(0);
-    setTotalPaidUPI(0);
+    // Fetch daily payment summary
+    const today = new Date().toISOString().slice(0, 10); // Get current date in YYYY-MM-DD format
+    const { data: paymentSummary, error: summaryError } = await supabase.rpc('get_daily_payment_summary', { p_area_id: areaId, p_date: today });
+
+    if (summaryError) {
+      console.error('Error calling get_daily_payment_summary:', summaryError);
+      // Continue with other data even if summary fails
+    }
+
+    let cashTotal = 0;
+    let upiTotal = 0;
+
+    if (paymentSummary) {
+      paymentSummary.forEach(item => {
+        if (item.payment_mode && item.payment_mode.toLowerCase() === 'cash') {
+          cashTotal += parseFloat(item.total_amount);
+        } else if (item.payment_mode && item.payment_mode.toLowerCase() === 'upi') {
+          upiTotal += parseFloat(item.total_amount);
+        } else if (item.payment_mode && item.payment_mode.toLowerCase() === 'paid by cash') { // Added for robustness
+          cashTotal += parseFloat(item.total_amount);
+        } else if (item.payment_mode && item.payment_mode.toLowerCase() === 'paid by upi') { // Added for robustness
+          upiTotal += parseFloat(item.total_amount);
+        }
+      });
+    }
+
+    setTotalPaidCash(cashTotal);
+    setTotalPaidUPI(upiTotal);
 
     const notPaidAmount = notPaidToday.reduce((acc, customer) => acc + customer.repayment_amount, 0);
     setTotalNotPaid(notPaidAmount);
@@ -407,7 +432,8 @@ export default function DashboardScreen({ user, userProfile }) {
                 <View style={styles.totalsContainer}>
                   <Text style={styles.totalText}>Paid by Cash: ₹{formatNumberWithCommas(totalPaidCash.toFixed(2))}</Text>
                   <Text style={styles.totalText}>Paid by UPI: ₹{formatNumberWithCommas(totalPaidUPI.toFixed(2))}</Text>
-                  <Text style={styles.totalText}>Not Paid: ₹{formatNumberWithCommas(totalNotPaid.toFixed(2))}</Text>
+                  <Text style={[styles.totalText, styles.paidTotalText]}>Total Paid: ₹{formatNumberWithCommas((totalPaidCash + totalPaidUPI).toFixed(2))}</Text>
+                  <Text style={[styles.totalText, styles.notPaidTotalText]}>Not Paid: ₹{formatNumberWithCommas(totalNotPaid.toFixed(2))}</Text>
                 </View>
               )}
               <TouchableOpacity
@@ -807,5 +833,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1C1C1E',
     marginBottom: 8,
+  },
+  paidTotalText: {
+    color: 'green',
+  },
+  notPaidTotalText: {
+    color: 'red',
   },
 });
