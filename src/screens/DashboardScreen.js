@@ -169,7 +169,7 @@ export default function DashboardScreen({ user, userProfile }) {
       return;
     }
 
-    const header = ['Area Name', 'Card No.', 'Customer Name', 'Mobile', 'Email', 'Payment Status', 'Repayment Amount', 'Start Date', 'End Date'].join(',');
+    const header = ['Area Name', 'Card No.', 'Customer Name', 'Mobile', 'Email', 'Payment Status', 'Expected Repayment Amount', 'Start Date', 'End Date'].join(',');
     const rows = data.map(row => [
       `"${row.area_name || ''}"`, 
       `"${row.card_no || ''}"`, 
@@ -177,7 +177,7 @@ export default function DashboardScreen({ user, userProfile }) {
       `"${row.mobile || ''}"`, 
       `"${row.email || ''}"`, 
       `"${row.payment_status || ''}"`, 
-      `"${row.repayment_amount || 0}"`, 
+      `"${row.expected_repayment_amount || 0}"`, 
       `"${row.start_date || ''}"`, 
       `"${row.end_date || ''}"`, 
     ].join(','));
@@ -230,27 +230,51 @@ export default function DashboardScreen({ user, userProfile }) {
       return;
     }
 
+    const calculateCustomerDetails = (customer) => {
+      const totalAmountToPay = (customer.expected_repayment_amount || 0) * (customer.days_to_complete || 0);
+      const totalAmountReceived = parseFloat(customer["totalAmountReceived"]) || 0;
+
+      const calculatedRepaymentPeriod = (customer.expected_repayment_amount && customer.expected_repayment_amount !== 0)
+        ? ((totalAmountToPay - totalAmountReceived) / customer.expected_repayment_amount)
+        : 0; // Handle division by zero
+
+      const remainingPeriods = (customer.days_to_complete || 0) - calculatedRepaymentPeriod;
+
+      return {
+        ...customer,
+        totalAmountToPay: totalAmountToPay.toFixed(2),
+        repaymentPeriod: calculatedRepaymentPeriod.toFixed(2),
+        completionPeriods: customer.days_to_complete || 0,
+        remainingPeriods: remainingPeriods.toFixed(2),
+        totalAmountReceived: totalAmountReceived.toFixed(2),
+      };
+    };
+
     const paidToday = data.filter(customer => customer.payment_status === 'Paid Today').map(c => ({
       id: `${c.card_no}-${c.customer_name}`,
       name: c.customer_name,
       mobile: c.mobile,
       book_no: c.card_no,
-      repayment_amount: c.repayment_amount,
+      expected_repayment_amount: c.expected_repayment_amount,
       start_date: c.start_date,
       end_date: c.end_date,
       transaction_date: c.transaction_date, // Assuming this field exists in the data
-    })).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
+      days_to_complete: c.days_to_complete,
+      totalAmountReceived: c["totalAmountReceived"]
+    })).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
 
     const notPaidToday = data.filter(customer => customer.payment_status === 'Not Paid Today').map(c => ({
       id: `${c.card_no}-${c.customer_name}`,
       name: c.customer_name,
       mobile: c.mobile,
       book_no: c.card_no,
-      repayment_amount: c.repayment_amount,
+      expected_repayment_amount: c.expected_repayment_amount,
       start_date: c.start_date,
       end_date: c.end_date,
       transaction_date: c.transaction_date, // Assuming this field exists in the data
-    })).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
+      days_to_complete: c.days_to_complete,
+      totalAmountReceived: c["totalAmountReceived"]
+    })).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
 
     // Fetch daily payment summary
     const today = new Date().toISOString().slice(0, 10); // Get current date in YYYY-MM-DD format
@@ -281,7 +305,7 @@ export default function DashboardScreen({ user, userProfile }) {
     setTotalPaidCash(cashTotal);
     setTotalPaidUPI(upiTotal);
 
-    const notPaidAmount = notPaidToday.reduce((acc, customer) => acc + customer.repayment_amount, 0);
+    const notPaidAmount = notPaidToday.reduce((acc, customer) => acc + (customer.expected_repayment_amount || 0), 0);
     setTotalNotPaid(notPaidAmount);
 
     setPaidTodayCustomers(paidToday);
@@ -299,7 +323,7 @@ export default function DashboardScreen({ user, userProfile }) {
     if (paidToday.length > 0) {
       setBarChartData({
         labels: paidToday.map(c => c.name.substring(0, 10)),
-        datasets: [{ data: paidToday.map(c => c.repayment_amount || 0) }],
+        datasets: [{ data: paidToday.map(c => c.expected_repayment_amount || 0) }],
       });
     } else {
       setBarChartData(null);
@@ -330,43 +354,16 @@ export default function DashboardScreen({ user, userProfile }) {
       customers = notPaidTodayCustomers;
     }
     
-    // Calculate additional details for each customer
-    const customersWithCalculations = customers.map(customer => {
-      const totalAmountToPay = (customer.repayment_amount || 0) * (customer.days_to_complete || 0);
-      const totalAmountReceived = parseFloat(customer.totalAmountReceived) || 0;
-
-      const calculatedRepaymentPeriod = (customer.repayment_amount && customer.repayment_amount !== 0)
-        ? ((totalAmountToPay - totalAmountReceived) / customer.repayment_amount)
-        : 0; // Handle division by zero
-
-      const remainingPeriods = (customer.days_to_complete || 0) - calculatedRepaymentPeriod;
-
-      console.log(`Customer: ${customer.name}`);
-      console.log(`  Total Amount to Pay: ${totalAmountToPay.toFixed(2)}`);
-      console.log(`  Total Amount Received: ${totalAmountReceived.toFixed(2)}`);
-      console.log(`  Calculated Repayment Period: ${calculatedRepaymentPeriod.toFixed(2)}`);
-      console.log(`  Remaining Periods: ${remainingPeriods.toFixed(2)}`);
-
-      return {
-        ...customer,
-        totalAmountToPay: totalAmountToPay.toFixed(2),
-        repaymentPeriod: calculatedRepaymentPeriod.toFixed(2),
-        completionPeriods: customer.days_to_complete || 0,
-        remainingPeriods: remainingPeriods.toFixed(2),
-        totalAmountReceived: totalAmountReceived.toFixed(2),
-      };
-    });
-
     setCustomerListTitle(title);
-    setCustomerList(customersWithCalculations); // Store the full list with calculations
-    setDisplayedCustomerList(customersWithCalculations); // Initially display the full list
+    setCustomerList(customers); // Store the full list with calculations
+    setDisplayedCustomerList(customers); // Initially display the full list
     setCustomerSearchQuery(''); // Clear search query on new selection
     
 
-    if (customersWithCalculations.length > 0) {
+    if (customers.length > 0) {
         const newBarChartData = {
-            labels: customersWithCalculations.map(c => c.name.substring(0, 20)),
-            datasets: [{ data: customersWithCalculations.map(c => c.repayment_amount || 0) }],
+            labels: customers.map(c => c.name.substring(0, 20)),
+            datasets: [{ data: customers.map(c => c.expected_repayment_amount || 0) }],
         };
         console.log('Setting bar chart data:', newBarChartData);
         setBarChartData(newBarChartData);
@@ -418,11 +415,11 @@ export default function DashboardScreen({ user, userProfile }) {
               )}
               {!loadingChart && (
                 <View style={styles.legendContainer}>
-                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Paid Today' })}>
+                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Paid Today' }) }>
                     <View style={[styles.legendColor, { backgroundColor: '#4CAF50' }]} />
                     <Text style={styles.legendText}>Paid Today ({paidTodayCustomers.length})</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Not Paid Today' })}>
+                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Not Paid Today' }) }>
                     <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
                     <Text style={styles.legendText}>Not Paid Today ({notPaidTodayCustomers.length})</Text>
                   </TouchableOpacity>
@@ -462,8 +459,10 @@ export default function DashboardScreen({ user, userProfile }) {
                     verticalLabelRotation={60}
                     fromZero={true}
                     showValuesOnTopOfBars={true}
-                    renderValues={(value, index) => {                      const customer = displayedCustomerList[index];                      console.log('Dashboard BarChart - Customer:', customer);                      return `₹${value.toFixed(0)}
-${customer ? customer.book_no : ''}`;                    }}
+                    renderValues={(value, index) => {                      const customer = displayedCustomerList[index];                      console.log('Dashboard BarChart - Customer:', customer);
+                      return `₹${value.toFixed(0)}
+${customer ? customer.book_no : ''}`;
+                    }}
                     style={{ paddingRight: 30, paddingLeft: 10 }}
                   />
                 </ScrollView>
@@ -517,14 +516,14 @@ ${customer ? customer.book_no : ''}`;                    }}
               <View style={styles.customerItem}>
                 <Text style={[styles.customerBookNo, { flex: 1 }]}>{item.book_no}</Text>
                 <Text style={[styles.customerName, { flex: 2.5 }]}>{item.name}</Text>
-                <Text style={[styles.customerMobile, { flex: 2 }]}>{item.mobile} (₹{item.repayment_amount})</Text>
+                <Text style={[styles.customerMobile, { flex: 2 }]}>{item.mobile} (₹{item.expected_repayment_amount})</Text>
               </View>
             </TouchableOpacity>
             {expandedCustomerId === item.id && (
               <View style={styles.customerDetailsContainer}>
                 <Text style={styles.detailText}>Total Amount to Pay: ₹{item.totalAmountToPay}</Text>
                 <Text style={styles.detailText}>Total Periods: {item.completionPeriods}</Text>
-                <Text style={styles.detailText}>Repayment Amount: ₹{item.repayment_amount}</Text>
+                <Text style={styles.detailText}>Repayment Amount: ₹{item.expected_repayment_amount}</Text>
                 <Text style={[styles.detailText, styles.pendingText]}>Pending Repayment Period: {item.repaymentPeriod}</Text>
                 <Text style={[styles.detailText, { color: 'green' }]}>Paid Repayment Period: {item.remainingPeriods}</Text>
                 <Text style={[styles.detailText, { color: 'blue' }]}>Total Amount Received: ₹{item.totalAmountReceived}</Text>
