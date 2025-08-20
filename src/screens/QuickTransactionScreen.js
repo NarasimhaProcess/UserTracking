@@ -21,7 +21,7 @@ import { OfflineStorageService } from '../services/OfflineStorageService';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function QuickTransactionScreen({ navigation, user }) {
-  console.log('QuickTransactionScreen: user prop:', user);
+  // console.log('QuickTransactionScreen: user prop:', user);
   const [amount, setAmount] = useState('');
   const [remarks, setRemarks] = useState('');
   const [loading, setLoading] = useState(false);
@@ -56,7 +56,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
             .eq('user_id', user?.id);
 
           if (userGroupsError) {
-            console.error('Error fetching user groups for areas:', userGroupsError);
+            // console.error('Error fetching user groups for areas:', userGroupsError);
             Alert.alert('Error', 'Failed to load areas based on user groups.');
           } else {
             const areaList = [];
@@ -72,7 +72,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
             });
             fetchedAreas = areaList;
             await OfflineStorageService.saveOfflineAreas(areaList); // Save to offline storage
-            console.log('QuickTransactionScreen: Fetched Areas (Online):', areaList);
+            // console.log('QuickTransactionScreen: Fetched Areas (Online):', areaList);
           }
 
           // Fetch all customers
@@ -81,15 +81,15 @@ export default function QuickTransactionScreen({ navigation, user }) {
             .select('id, name, book_no, repayment_amount, area_id');
 
           if (customersError) {
-            console.error('Error fetching all customers:', customersError);
+            // console.error('Error fetching all customers:', customersError);
             Alert.alert('Error', 'Failed to load customers.');
           } else {
             fetchedCustomers = customersData || [];
             await OfflineStorageService.saveOfflineCustomers(fetchedCustomers); // Save to offline storage
-            console.log('QuickTransactionScreen: Fetched All Customers (Online):', fetchedCustomers);
+            // console.log('QuickTransactionScreen: Fetched All Customers (Online):', fetchedCustomers);
           }
         } catch (error) {
-          console.error('Error fetching initial data online:', error);
+          // console.error('Error fetching initial data online:', error);
           Alert.alert('Error', 'Failed to load initial data online.');
         }
       } else {
@@ -97,8 +97,8 @@ export default function QuickTransactionScreen({ navigation, user }) {
         fetchedAreas = await OfflineStorageService.getOfflineAreas();
         fetchedCustomers = await OfflineStorageService.getOfflineCustomers();
         Alert.alert('Offline Mode', 'Loading areas and customers from offline storage.');
-        console.log('QuickTransactionScreen: Loaded Areas (Offline):', fetchedAreas);
-        console.log('QuickTransactionScreen: Loaded Customers (Offline):', fetchedCustomers);
+        // console.log('QuickTransactionScreen: Loaded Areas (Offline):', fetchedAreas);
+        // console.log('QuickTransactionScreen: Loaded Customers (Offline):', fetchedCustomers);
       }
 
       setAllAreas(fetchedAreas);
@@ -135,7 +135,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
                 finalUpiImage = publicUrl;
                 await OfflineStorageService.clearOfflineImage(imageData.id); // Clear local image after upload
               } else {
-                console.error('Failed to upload offline UPI image for transaction:', transaction.id);
+                // console.error('Failed to upload offline UPI image for transaction:', transaction.id);
                 // Skip this transaction for now, it will be retried next time
                 continue;
               }
@@ -143,18 +143,17 @@ export default function QuickTransactionScreen({ navigation, user }) {
           }
 
           // Remove the temporary id used for offline storage before syncing to Supabase
-          const { id, upi_image, customer_name, customer_book_no, ...transactionToSync } = transaction;
+          const { id, upi_image, book_no, ...transactionToSync } = transaction;
           const { error } = await supabase.from('transactions').insert({
             ...transactionToSync,
             upi_image: finalUpiImage,
-            customer_name: customer_name, // Include customer_name
-            customer_book_no: customer_book_no, // Include customer_book_no
+            book_no: book_no, // Include book_no
           });
           if (error) {
             throw error;
           }
         } catch (error) {
-          console.error('Error syncing offline quick transaction:', error);
+          // console.error('Error syncing offline quick transaction:', error);
           Alert.alert('Error', 'Failed to sync some quick transactions. Please try again later.');
           return; // Stop syncing if there is an error
         }
@@ -183,12 +182,12 @@ export default function QuickTransactionScreen({ navigation, user }) {
         const { data, error } = await query.order('created_at', { ascending: false });
 
         if (error) {
-          console.error('Error fetching online transactions:', error);
+          // console.error('Error fetching online transactions:', error);
         } else {
           fetchedOnlineTransactions = data || [];
         }
       } catch (error) {
-        console.error('Error fetching online transactions:', error);
+        // console.error('Error fetching online transactions:', error);
       }
     }
 
@@ -288,7 +287,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
       return urlData?.publicUrl || '';
     } catch (error) {
       Alert.alert('Error', 'Failed to upload image: ' + error.message);
-      console.error('Image upload error:', error);
+      // console.error('Image upload error:', error);
       return null;
     }
   };
@@ -337,7 +336,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
               }
             } catch (error) {
               Alert.alert('Error', 'Failed to pick image from gallery: ' + error.message);
-              console.error('Image picker gallery error:', error);
+              // console.error('Image picker gallery error:', error);
             }
           },
         },
@@ -380,7 +379,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
               }
             } catch (error) {
               Alert.alert('Error', 'Failed to take photo: ' + error.message);
-              console.error('Image picker camera error:', error);
+              // console.error('Image picker camera error:', error);
             }
           },
         },
@@ -394,7 +393,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
   };
 
   const handleAddTransaction = async () => {
-    console.log('handleAddTransaction called!');
+    // console.log('handleAddTransaction called!');
     if (!selectedCustomer) {
       Alert.alert('Error', 'Please select a customer.');
       return;
@@ -422,8 +421,6 @@ export default function QuickTransactionScreen({ navigation, user }) {
     const transaction = {
       id: uuidv4(), // Generate a unique ID for offline storage
       customer_id: selectedCustomer.id,
-      customer_name: selectedCustomer.name, // Store customer name directly
-      customer_book_no: selectedCustomer.book_no, // Store customer book_no directly
       amount: parseFloat(amount),
       remarks: remarks,
       payment_mode: paymentType,
@@ -451,7 +448,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
           .insert(transactionToSync);
 
         if (error) {
-          console.error('Supabase transaction insert error:', error);
+          // console.error('Supabase transaction insert error:', error);
           Alert.alert('Error', 'Failed to add transaction: ' + error.message);
         } else {
           Alert.alert('Success', 'Transaction added successfully!');
@@ -461,7 +458,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
         }
       } catch (error) {
         Alert.alert('Error', 'Failed to add transaction.');
-        console.error('Transaction add error:', error);
+        // console.error('Transaction add error:', error);
       } finally {
         setLoading(false);
       }
@@ -474,8 +471,8 @@ export default function QuickTransactionScreen({ navigation, user }) {
         <Text style={styles.rowText}>{`₹${item.amount}`}</Text>
         <Text style={styles.dateText}>{new Date(item.created_at).toLocaleDateString()}</Text>
       </View>
-      <Text style={styles.rowText}>{item.customers?.name || 'N/A'}</Text>
-      <Text style={styles.rowText}>{item.customers?.book_no || 'N/A'}</Text>
+      <Text style={styles.rowText}>{item.customers?.name || item.customer_name || 'N/A'}</Text>
+      <Text style={styles.rowText}>{item.customers?.book_no || item.book_no || 'N/A'}</Text>
       <Text style={styles.rowText}>{item.remarks || 'N/A'}</Text>
       {item.isOffline && <MaterialIcons name="cloud-off" size={24} color="gray" />}
     </View>
@@ -554,7 +551,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
               {selectedCustomer && (
                 <View style={styles.customerInfoCard}>
                   <Text style={styles.customerInfoText}>Selected Customer: {selectedCustomer.name}</Text>
-                  <Text style={styles.customerInfoText}>Card No: {selectedCustomer.card_number}</Text>
+                  <Text style={styles.customerInfoText}>Card No: {selectedCustomer.book_no}</Text>
                   <Text style={styles.customerInfoText}>Repayment Amount: {selectedCustomer.repayment_amount || 'N/A'}</Text>
                 </View>
               )}
