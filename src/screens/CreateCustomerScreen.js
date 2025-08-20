@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TextInput, Button, Alert, TouchableOpacity, ScrollView, Modal, FlatList, Image, ActivityIndicator, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Picker } from '@react-native-picker/picker';
@@ -399,49 +399,49 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
     fetchAccessibleIds();
   }, [user?.id]);
 
-  // Update fetchCustomers to support search and pagination
-  useEffect(() => {
-    async function fetchCustomers() {
-      if (accessibleUserIds.length === 0 && accessibleAreaIds.length === 0) {
-        setCustomers([]);
-        return;
-      }
-
-      let query = supabase
-        .from('customers')
-        .select('*');
-
-      // Apply group-based access control
-      if (accessibleUserIds.length > 0 && accessibleAreaIds.length > 0) {
-        query = query.or(`user_id.in.(${accessibleUserIds.join(',')}),area_id.in.(${accessibleAreaIds.join(',')})`);
-      } else if (accessibleUserIds.length > 0) {
-        query = query.in('user_id', accessibleUserIds);
-      } else if (accessibleAreaIds.length > 0) {
-        query = query.in('area_id', accessibleAreaIds);
-      }
-
-      query = query
-        .order('created_at', { ascending: false });
-
-      const { data, error } = await query;
-      let filtered = data || [];
-      // Area filter (if a specific area is selected in the UI)
-      if (areaId) {
-        filtered = filtered.filter(c => c.area_id === areaId);
-      }
-      // Customer search filter
-      if (search) {
-        filtered = filtered.filter(c =>
-          (c.name && c.name.toLowerCase().includes(search.toLowerCase())) ||
-          (c.mobile && c.mobile.includes(search)) ||
-          (c.email && c.email.toLowerCase().includes(search.toLowerCase())) ||
-          (c.book_no && c.book_no.toString().toLowerCase().includes(search.toLowerCase()))
-        );
-      }
-      setCustomers(filtered);
+  const fetchCustomers = useCallback(async () => {
+    if (accessibleUserIds.length === 0 && accessibleAreaIds.length === 0) {
+      setCustomers([]);
+      return;
     }
+
+    let query = supabase
+      .from('customers')
+      .select('*');
+
+    // Apply group-based access control
+    if (accessibleUserIds.length > 0 && accessibleAreaIds.length > 0) {
+      query = query.or(`user_id.in.(${accessibleUserIds.join(',')}),area_id.in.(${accessibleAreaIds.join(',')})`);
+    } else if (accessibleUserIds.length > 0) {
+      query = query.in('user_id', accessibleUserIds);
+    } else if (accessibleAreaIds.length > 0) {
+      query = query.in('area_id', accessibleAreaIds);
+    }
+
+    query = query
+      .order('created_at', { ascending: false });
+
+    const { data, error } = await query;
+    let filtered = data || [];
+    // Area filter (if a specific area is selected in the UI)
+    if (areaId) {
+      filtered = filtered.filter(c => c.area_id === areaId);
+    }
+    // Customer search filter
+    if (search) {
+      filtered = filtered.filter(c =>
+        (c.name && c.name.toLowerCase().includes(search.toLowerCase())) ||
+        (c.mobile && c.mobile.includes(search)) ||
+        (c.email && c.email.toLowerCase().includes(search.toLowerCase())) ||
+        (c.book_no && c.book_no.toString().toLowerCase().includes(search.toLowerCase()))
+      );
+    }
+    setCustomers(filtered);
+  }, [user, search, areaSearch, areas, areaId, accessibleUserIds, accessibleAreaIds]); // Dependencies for useCallback
+
+  useEffect(() => {
     if (user?.id) fetchCustomers();
-  }, [user, search, areaSearch, areas, areaId, accessibleUserIds, accessibleAreaIds]);
+  }, [user?.id, fetchCustomers]);
 
   // Fetch repayment plans on mount and extract unique frequencies
   useEffect(() => {
@@ -1664,18 +1664,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       Alert.alert('Success', 'Customer created successfully!');
       setShowCustomerFormModal(false);
       
-      // Refresh customer list
-      const { data: customerList, error: listError } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-        
-      if (listError) {
-        console.error('Error fetching updated customer list:', listError);
-      } else {
-        setCustomers(customerList || []);
-      }
+      // Refresh customer list with current filters
+      fetchCustomers();
     } catch (error) {
       console.error('Error creating customer:', error);
       Alert.alert(
@@ -1781,18 +1771,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       Alert.alert('Success', 'Customer updated successfully!');
       setShowCustomerFormModal(false);
 
-      // Refresh customer list
-      const { data: refreshedData, error: refreshError } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (refreshError) {
-        console.error('Error refreshing customer list:', refreshError);
-      } else {
-        setCustomers(refreshedData || []);
-      }
+      // Refresh customer list with current filters
+      fetchCustomers();
     } catch (error) {
       console.error('Error updating customer:', error);
       Alert.alert('Error', 'An unexpected error occurred while updating the customer');
