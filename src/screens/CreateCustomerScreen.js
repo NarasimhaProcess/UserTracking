@@ -166,7 +166,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
         }
       }
       fetchAndDisplayCustomer();
-    }
+    } 
   }, [route?.params?.customerId, route?.params?.readOnly, areas]);
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
@@ -189,9 +189,6 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const PAGE_SIZE = 10;
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [transactionCustomer, setTransactionCustomer] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -407,7 +404,6 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
     async function fetchCustomers() {
       if (accessibleUserIds.length === 0 && accessibleAreaIds.length === 0) {
         setCustomers([]);
-        setHasMore(false);
         return;
       }
 
@@ -425,8 +421,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       }
 
       query = query
-        .order('created_at', { ascending: false })
-        .range(0, PAGE_SIZE * page - 1);
+        .order('created_at', { ascending: false });
 
       const { data, error } = await query;
       let filtered = data || [];
@@ -444,10 +439,9 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
         );
       }
       setCustomers(filtered);
-      setHasMore(filtered.length === PAGE_SIZE * page);
     }
     if (user?.id) fetchCustomers();
-  }, [user, search, areaSearch, page, areas, areaId, accessibleUserIds, accessibleAreaIds]);
+  }, [user, search, areaSearch, areas, areaId, accessibleUserIds, accessibleAreaIds]);
 
   // Fetch repayment plans on mount and extract unique frequencies
   useEffect(() => {
@@ -980,8 +974,6 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
     setEmail('');
     setBookNo('');
     setCustomerType('');
-    setAreaId(null);
-    setSelectedAreaName('');
     setLatitude(null);
     setLongitude(null);
     setRemarks('');
@@ -1486,6 +1478,68 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       // Clear missing fields if validation passes
       setMissingFields([]);
 
+      // --- Mobile Number Duplication Check (Alert, but allow proceed) ---
+      if (mobile && mobile.trim() !== '') {
+        console.log('Checking for duplicate mobile number:', mobile);
+        const { data: existingMobileCustomer, error: mobileError } = await supabase
+          .from('customers')
+          .select('id, name')
+          .eq('mobile', mobile)
+          .single();
+
+        if (mobileError && mobileError.code !== 'PGRST116') {
+          console.error('Error checking for duplicate mobile:', mobileError);
+          Alert.alert('Error', 'Failed to check for duplicate mobile number.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (existingMobileCustomer) {
+          const proceed = await new Promise((resolve) => {
+            Alert.alert(
+              'Duplicate Mobile Number',
+              `A customer with this mobile number (${mobile}) already exists: ${existingMobileCustomer.name}. Do you want to proceed?`,
+              [
+                { text: 'Cancel', onPress: () => resolve(false), style: 'cancel' },
+                { text: 'Proceed', onPress: () => resolve(true) },
+              ],
+              { cancelable: false }
+            );
+          });
+          if (!proceed) {
+            setIsSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      // --- Area & Card No. Duplication Check (Hard Block) ---
+      if (bookNo && bookNo.trim() !== '') {
+        console.log('Checking for unique customer: areaId=', areaId, 'bookNo=', bookNo);
+        const { data: existingCustomer, error: existingCustomerError } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('area_id', areaId)
+          .eq('book_no', bookNo)
+          .single();
+
+        console.log('Supabase query result: existingCustomer=', existingCustomer, 'error=', existingCustomerError);
+
+        if (existingCustomerError && existingCustomerError.code !== 'PGRST116') {
+          // PGRST116 means no rows found, which is good.
+          console.error('Error checking for existing customer:', existingCustomerError);
+          Alert.alert('Error', 'Failed to check for existing customer.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (existingCustomer) {
+          Alert.alert('Error', 'A customer with the same Card No. already exists in this area.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
   let lat = latitude;
   let lon = longitude;
   if (!lat || !lon) {
@@ -1594,7 +1648,6 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       setEmail('');
       setBookNo('');
       setCustomerType('');
-      setAreaId(null);
       setLatitude(null);
       setLongitude(null);
       setRemarks('');
@@ -1652,7 +1705,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
     }
 
     if (!selectedCustomer?.id) {
-      console.error('No customer selected for update. Current state:', { 
+      console.error('No customer selected for update. Current state:', {
         selectedCustomer,
         isEditMode,
         showCustomerFormModal 
@@ -1813,11 +1866,6 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
         style={styles.customerList}
         ListEmptyComponent={<Text style={styles.emptyListText}>No customers found.</Text>}
       />
-      {hasMore && (
-        <TouchableOpacity onPress={() => setPage(page + 1)} style={styles.loadMoreButton}>
-          <Text style={styles.loadMoreButtonText}>Load More</Text>
-        </TouchableOpacity>
-      )}
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginVertical: 12 }}>
         <TouchableOpacity
           onPress={() => navigation.navigate('CustomerMap', { areaId: areaId })}
@@ -1998,7 +2046,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
               <Text style={styles.formLabel}>Area</Text>
               <Picker selectedValue={areaId} onValueChange={setAreaId} style={styles.formPicker}>
                 <Picker.Item label="Select Area" value={null} />
-                {areas.map(area => <Picker.Item key={area.id} label={area.area_name} value={area.id} />)}
+                  {areas.map(area => <Picker.Item key={area.id} label={area.area_name} value={area.id} />)}
               </Picker>
               <Text style={styles.formLabel}>Remarks</Text>
               <TextInput value={remarks} onChangeText={setRemarks} style={styles.input} multiline numberOfLines={3} />
