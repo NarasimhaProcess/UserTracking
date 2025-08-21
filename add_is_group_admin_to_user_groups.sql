@@ -1,0 +1,2 @@
+ALTER TABLE public.user_groups
+ADD COLUMN is_group_admin BOOLEAN DEFAULT FALSE NOT NULL;

@@ -93,32 +93,48 @@ export default function DashboardScreen({ user, userProfile }) {
     if (!user?.id) return;
     
     async function fetchAreas() {
-      const { data, error } = await supabase
-        .from('user_groups')
-        .select('groups(group_areas(area_master(id, area_name)))')
-        .eq('user_id', user.id);
+      let areaList = [];
+      let error = null;
+
+      if (userProfile?.user_type === 'superadmin') {
+        // Superadmin can view all areas
+        const { data, error: fetchError } = await supabase
+          .from('area_master')
+          .select('id, area_name')
+          .order('area_name', { ascending: true });
+        areaList = data || [];
+        error = fetchError;
+      } else {
+        // Regular users/admins view areas based on their groups
+        const { data, error: fetchError } = await supabase
+          .from('user_groups')
+          .select('groups(group_areas(area_master(id, area_name)))')
+          .eq('user_id', user.id);
+
+        if (data) {
+          const areaIdSet = new Set();
+          data.forEach(userGroup => {
+            userGroup.groups?.group_areas?.forEach(groupArea => {
+              const area = groupArea.area_master;
+              if (area && !areaIdSet.has(area.id)) {
+                areaIdSet.add(area.id);
+                areaList.push(area);
+              }
+            });
+          });
+        }
+        error = fetchError;
+      }
 
       if (error) {
-        console.error("Error fetching user's groups and areas:", error);
+        console.error("Error fetching areas:", error);
         return;
       }
-      
-      const areaList = [];
-      const areaIdSet = new Set();
-      data.forEach(userGroup => {
-        userGroup.groups?.group_areas?.forEach(groupArea => {
-          const area = groupArea.area_master;
-          if (area && !areaIdSet.has(area.id)) {
-            areaIdSet.add(area.id);
-            areaList.push(area);
-          }
-        });
-      });
       setGroupAreas(areaList);
     }
 
     fetchAreas();
-  }, [user]);
+  }, [user, userProfile]); // Added userProfile to dependency array
 
   useEffect(() => {
     if (groupAreas.length > 0 && !selectedAreaId) {
