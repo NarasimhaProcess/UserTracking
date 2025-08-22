@@ -463,6 +463,13 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     }
   };
 
+  const handleCancelCustomerTypeEdit = () => {
+    setShowCustomerTypeModal(false);
+    setEditingCustomerType(null);
+    setCustomerTypeName('');
+    setCustomerTypeDescription('');
+  };
+
   const handleAddGroup = () => {
     setEditingGroup(null);
     setGroupName('');

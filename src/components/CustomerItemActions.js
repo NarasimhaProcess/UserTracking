@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { Tooltip } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
 
 const CustomerItemActions = ({
@@ -71,9 +72,11 @@ const CustomerItemActions = ({
 
   return (
     <View style={styles.actionsContainer}>
-      <View style={styles.iconButton}>
-        {renderStatusIcon(item.status)}
-      </View>
+      <Tooltip popover={<Text>{item.status}</Text>}>
+        <View style={styles.iconButton}>
+          {renderStatusIcon(item.status)}
+        </View>
+      </Tooltip>
       <TouchableOpacity
         style={styles.iconButton}
         onPress={() => {
