@@ -27,6 +27,9 @@ export default function QuickTransactionScreen({ navigation, user }) {
   const [loading, setLoading] = useState(false);
   const [allAreas, setAllAreas] = useState([]);
   const [selectedAreaId, setSelectedAreaId] = useState(null);
+  const [areaSearchText, setAreaSearchText] = useState(''); // New state for area search
+  const [filteredAreas, setFilteredAreas] = useState([]); // New state for filtered areas
+  const [showAreaDropdown, setShowAreaDropdown] = useState(false); // New state to control visibility of area dropdown
   const [paymentType, setPaymentType] = useState('cash');
   const [paymentProofImage, setPaymentProofImage] = useState(null); // New state for payment proof image
   const [transactions, setTransactions] = useState([]); // State to store transactions for display
@@ -39,8 +42,13 @@ export default function QuickTransactionScreen({ navigation, user }) {
   const [filteredCustomers, setFilteredCustomers] = useState([]); // Customers filtered by search text within selected area
 
   // Fetch all areas and all customers on component mount
-  useEffect(() => {
+    useEffect(() => {
     const fetchData = async () => {
+      if (allAreas.length > 0) { // Only fetch if areas are not already loaded
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       const isConnected = await NetInfoService.isNetworkAvailable();
 
@@ -49,31 +57,41 @@ export default function QuickTransactionScreen({ navigation, user }) {
 
       if (isConnected) {
         try {
-          // Fetch areas based on user groups
-          const { data: userGroupsData, error: userGroupsError } = await supabase
-            .from('user_groups')
-            .select('groups(group_areas(area_master(id, area_name)))')
-            .eq('user_id', user?.id);
+          let areaList = [];
+          // If user is superadmin, fetch all areas
+          if (user?.user_type === 'superadmin') {
+            const { data, error } = await supabase
+              .from('area_master')
+              .select('id, area_name')
+              .order('area_name', { ascending: true });
+            if (error) {
+              Alert.alert('Error', 'Failed to load all areas for superadmin.');
+            } else {
+              areaList = data || [];
+            }
+          } else { // For other user types, fetch areas based on user groups
+            const { data: userGroupsData, error: userGroupsError } = await supabase
+              .from('user_groups')
+              .select('groups(group_areas(area_master(id, area_name)))')
+              .eq('user_id', user?.id);
 
-          if (userGroupsError) {
-            // console.error('Error fetching user groups for areas:', userGroupsError);
-            Alert.alert('Error', 'Failed to load areas based on user groups.');
-          } else {
-            const areaList = [];
-            const areaIdSet = new Set();
-            userGroupsData.forEach(userGroup => {
-              userGroup.groups?.group_areas?.forEach(groupArea => {
-                const area = groupArea.area_master;
-                if (area && !areaIdSet.has(area.id)) {
-                  areaIdSet.add(area.id);
-                  areaList.push({ id: area.id, name: area.area_name });
-                }
+            if (userGroupsError) {
+              Alert.alert('Error', 'Failed to load areas based on user groups.');
+            } else {
+              const areaIdSet = new Set();
+              userGroupsData.forEach(userGroup => {
+                userGroup.groups?.group_areas?.forEach(groupArea => {
+                  const area = groupArea.area_master;
+                  if (area && !areaIdSet.has(area.id)) {
+                    areaIdSet.add(area.id);
+                    areaList.push({ id: area.id, area_name: area.area_name }); // Ensure area_name is used here
+                  }
+                });
               });
-            });
-            fetchedAreas = areaList;
-            await OfflineStorageService.saveOfflineAreas(areaList); // Save to offline storage
-            // console.log('QuickTransactionScreen: Fetched Areas (Online):', areaList);
+            }
           }
+          fetchedAreas = areaList;
+          await OfflineStorageService.saveOfflineAreas(areaList); // Save to offline storage
 
           // Fetch all customers
           const { data: customersData, error: customersError } = await supabase
@@ -81,15 +99,12 @@ export default function QuickTransactionScreen({ navigation, user }) {
             .select('id, name, book_no, repayment_amount, area_id');
 
           if (customersError) {
-            // console.error('Error fetching all customers:', customersError);
             Alert.alert('Error', 'Failed to load customers.');
           } else {
             fetchedCustomers = customersData || [];
             await OfflineStorageService.saveOfflineCustomers(fetchedCustomers); // Save to offline storage
-            // console.log('QuickTransactionScreen: Fetched All Customers (Online):', fetchedCustomers);
           }
         } catch (error) {
-          // console.error('Error fetching initial data online:', error);
           Alert.alert('Error', 'Failed to load initial data online.');
         }
       } else {
@@ -102,10 +117,13 @@ export default function QuickTransactionScreen({ navigation, user }) {
       }
 
       setAllAreas(fetchedAreas);
+      // Set initial selected area if available
       if (fetchedAreas.length > 0) {
         setSelectedAreaId(fetchedAreas[0].id);
+        setAreaSearchText(fetchedAreas[0].area_name); // Set search text to first area's name
       } else {
         setSelectedAreaId(null);
+        setAreaSearchText('');
       }
       setAllCustomers(fetchedCustomers);
       setLoading(false);
@@ -114,6 +132,19 @@ export default function QuickTransactionScreen({ navigation, user }) {
     fetchData();
     fetchTransactions();
   }, [user?.id]);
+
+  // Filter areas based on search text
+  useEffect(() => {
+    if (areaSearchText) {
+      const lowerCaseSearchText = areaSearchText.toLowerCase();
+      const filtered = allAreas.filter(area =>
+        area.area_name.toLowerCase().includes(lowerCaseSearchText)
+      );
+      setFilteredAreas(filtered);
+    } else {
+      setFilteredAreas(allAreas); // Show all areas if search text is empty
+    }
+  }, [areaSearchText, allAreas]);
 
   useEffect(() => {
     syncOfflineQuickTransactions();
@@ -491,24 +522,40 @@ export default function QuickTransactionScreen({ navigation, user }) {
           </TouchableOpacity>
           <Text style={styles.header}>Quick Transaction</Text>
 
-          {/* Area Dropdown */}
+          {/* Area Search Input */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Area:</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={selectedAreaId}
-                onValueChange={(itemValue) => setSelectedAreaId(itemValue)}
-                style={styles.picker}
-              >
-                {allAreas.length > 0 ? (
-                  allAreas.map((area) => (
-                    <Picker.Item key={area.id} label={area.name} value={area.id} />
-                  ))
-                ) : (
-                  <Picker.Item label="No areas available" value={null} />
-                )}
-              </Picker>
-            </View>
+            <TextInput
+              style={styles.input}
+              value={areaSearchText}
+              onChangeText={(text) => {
+                setAreaSearchText(text);
+                setShowAreaDropdown(true); // Show dropdown when typing
+                setSelectedAreaId(null); // Clear selected area when typing
+              }}
+              placeholder="Search Area by Name"
+              onFocus={() => setShowAreaDropdown(true)} // Show dropdown when input is focused
+            />
+            {showAreaDropdown && filteredAreas.length > 0 && (
+              <View style={styles.dropdownContainer}>
+                <FlatList
+                  data={filteredAreas}
+                  keyExtractor={(item) => item.id.toString()}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setSelectedAreaId(item.id);
+                        setAreaSearchText(item.area_name);
+                        setShowAreaDropdown(false);
+                      }}
+                    >
+                      <Text>{item.area_name}</Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              </View>
+            )}
           </View>
 
           {selectedAreaId && ( // Only show customer selection if an area is selected
@@ -713,6 +760,19 @@ const styles = StyleSheet.create({
   picker: {
     height: 50,
     width: '100%',
+  },
+  dropdownContainer: {
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    marginTop: 5,
+    backgroundColor: '#fff',
+  },
+  dropdownItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   imagePickerButton: {
     backgroundColor: '#007AFF',

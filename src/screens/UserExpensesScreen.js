@@ -32,6 +32,13 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [dates, setDates] = useState([]);
 
+  // New states for Area Search
+  const [allAreas, setAllAreas] = useState([]);
+  const [selectedAreaId, setSelectedAreaId] = useState(null);
+  const [areaSearchText, setAreaSearchText] = useState('');
+  const [filteredAreas, setFilteredAreas] = useState([]);
+  const [showAreaDropdown, setShowAreaDropdown] = useState(false);
+
   useEffect(() => {
     const today = new Date();
     const pastThreeDays = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 3);
@@ -41,12 +48,87 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
     }
     setDates(dates);
     setSelectedDate(new Date()); // Keep defaulting to today
+    fetchAreas(); // Fetch areas on component mount
   }, []);
 
+  // Fetch areas logic
+  const fetchAreas = async () => {
+    try {
+      let areaList = [];
+      const isConnected = await NetInfoService.isNetworkAvailable();
+
+      // Try to load from offline storage first
+      const offlineAreas = await OfflineStorageService.getOfflineAreas();
+      if (offlineAreas.length > 0) {
+        areaList = offlineAreas;
+      } else if (isConnected) {
+        // If user is superadmin, fetch all areas
+        if (userProfile?.user_type === 'superadmin') {
+          const { data, error } = await supabase
+            .from('area_master')
+            .select('id, area_name')
+            .order('area_name', { ascending: true });
+          if (error) {
+            Alert.alert('Error', 'Failed to load all areas for superadmin.');
+          } else {
+            areaList = data || [];
+          }
+        } else { // For other user types, fetch areas based on user groups
+          const { data: userGroupsData, error: userGroupsError } = await supabase
+            .from('user_groups')
+            .select('groups(group_areas(area_master(id, area_name)))')
+            .eq('user_id', user?.id);
+
+          if (userGroupsError) {
+            Alert.alert('Error', 'Failed to load areas based on user groups.');
+          } else {
+            const areaIdSet = new Set();
+            userGroupsData.forEach(userGroup => {
+              userGroup.groups?.group_areas?.forEach(groupArea => {
+                const area = groupArea.area_master;
+                if (area && !areaIdSet.has(area.id)) {
+                  areaIdSet.add(area.id);
+                  areaList.push({ id: area.id, area_name: area.area_name });
+                }
+              });
+            });
+          }
+        }
+        await OfflineStorageService.saveOfflineAreas(areaList); // Save to offline storage
+      }
+
+      setAllAreas(areaList);
+      setFilteredAreas(areaList); // Initially, filtered areas are all areas
+      if (areaList.length > 0) {
+        setSelectedAreaId(areaList[0].id);
+        setAreaSearchText(areaList[0].area_name);
+      } else {
+        setSelectedAreaId(null);
+        setAreaSearchText('');
+      }
+    } catch (error) {
+      console.error('Error fetching areas:', error);
+      Alert.alert('Error', 'Failed to load areas.');
+    }
+  };
+
+  // Filter areas based on search text
   useEffect(() => {
-    fetchUserExpenses();
+    if (areaSearchText) {
+      const lowerCaseSearchText = areaSearchText.toLowerCase();
+      const filtered = allAreas.filter(area =>
+        area.area_name.toLowerCase().includes(lowerCaseSearchText)
+      );
+      setFilteredAreas(filtered);
+    } else {
+      setFilteredAreas(allAreas); // Show all areas if search text is empty
+    }
+  }, [areaSearchText, allAreas]);
+
+  useEffect(() => {
+    fetchUserExpenses(allAreas);
     syncOfflineExpenses();
-  }, [user?.id]);
+  }, [user?.id, selectedAreaId, allAreas]);
 
   const syncOfflineExpenses = async () => {
     const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
@@ -78,6 +160,11 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
       return;
     }
 
+    if (!selectedAreaId) {
+      Alert.alert('Error', 'Please select an Area.');
+      return;
+    }
+
     if (!user?.id) {
       Alert.alert('Error', 'User not logged in.');
       return;
@@ -86,6 +173,7 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
     const expense = {
       id: uuidv4(),
       user_id: user.id,
+      area_id: selectedAreaId, // Add area_id here
       amount: parseFloat(expenseAmount),
       expense_type: finalExpenseType,
       remarks: expenseRemarks,
@@ -121,12 +209,23 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
     }
   };
 
-  const fetchUserExpenses = async () => {
+  const fetchUserExpenses = async (accessibleAreas) => {
     if (!user?.id) return;
+
+    const accessibleAreaIds = accessibleAreas.map(area => area.id);
 
     if (!await NetInfoService.isNetworkAvailable()) {
       const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
-      const allExpenses = [...offlineExpenses.map(e => ({...e, isOffline: true}))];
+      let allExpenses = [...offlineExpenses.map(e => ({...e, isOffline: true}))];
+
+      // Filter by accessible areas for regular users
+      if (userProfile?.user_type !== 'superadmin' && accessibleAreaIds.length > 0) {
+        allExpenses = allExpenses.filter(expense => accessibleAreaIds.includes(expense.area_id));
+      }
+
+      if (selectedAreaId) {
+        allExpenses = allExpenses.filter(expense => expense.area_id === selectedAreaId);
+      }
 
       setUserExpenses(allExpenses);
       setFilteredUserExpenses(allExpenses);
@@ -134,18 +233,37 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
       setTotalExpenses(total);
     } else {
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('user_expenses')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+          .select('*, area_master(area_name)')
+          .eq('user_id', user.id);
+
+        // Filter by accessible areas for regular users
+        if (userProfile?.user_type !== 'superadmin' && accessibleAreaIds.length > 0) {
+          query = query.in('area_id', accessibleAreaIds);
+        }
+
+        if (selectedAreaId) {
+          query = query.eq('area_id', selectedAreaId);
+        }
+
+        const { data, error } = await query.order('created_at', { ascending: false });
 
         if (error) {
           console.error('Error fetching user expenses:', error);
         }
 
         const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
-        const allExpenses = [...(data || []), ...offlineExpenses.map(e => ({...e, isOffline: true}))];
+        let allExpenses = [...(data || []), ...offlineExpenses.map(e => ({...e, isOffline: true}))];
+
+        // Filter offline expenses by accessible areas for regular users
+        if (userProfile?.user_type !== 'superadmin' && accessibleAreaIds.length > 0) {
+          allExpenses = allExpenses.filter(expense => accessibleAreaIds.includes(expense.area_id));
+        }
+
+        if (selectedAreaId) {
+          allExpenses = allExpenses.filter(expense => expense.area_id === selectedAreaId);
+        }
 
         setUserExpenses(allExpenses);
         setFilteredUserExpenses(allExpenses);
@@ -164,6 +282,7 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
         <Text style={styles.dateText}>{new Date(item.created_at).toLocaleDateString()}</Text>
       </View>
       <Text style={styles.rowText}>{item.expense_type}</Text>
+      <Text style={styles.rowText}>{item.area_master?.area_name || 'N/A'}</Text>
       <Text style={styles.rowText}>{item.remarks || 'N/A'}</Text>
       {item.isOffline && <MaterialIcons name="cloud-off" size={24} color="gray" />}
     </View>
@@ -182,6 +301,41 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
               <MaterialIcons name="close" size={24} color="black" />
             </TouchableOpacity>
             <Text style={styles.sectionHeader}>Add New Expense</Text>
+
+            {/* Area Search Input */}
+            <Text style={styles.inputLabel}>Area:</Text>
+            <TextInput
+              style={styles.input}
+              value={areaSearchText}
+              onChangeText={(text) => {
+                setAreaSearchText(text);
+                setShowAreaDropdown(true); // Show dropdown when typing
+                setSelectedAreaId(null); // Clear selected area when typing
+              }}
+              placeholder="Search Area by Name"
+              onFocus={() => setShowAreaDropdown(true)} // Show dropdown when input is focused
+            />
+            {showAreaDropdown && filteredAreas.length > 0 && (
+              <View style={styles.dropdownContainer}>
+                <FlatList
+                  data={filteredAreas}
+                  keyExtractor={(item) => item.id.toString()}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setSelectedAreaId(item.id);
+                        setAreaSearchText(item.area_name);
+                        setShowAreaDropdown(false);
+                      }}
+                    >
+                      <Text>{item.area_name}</Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              </View>
+            )}
+
             <Text style={styles.inputLabel}>Expense Amount</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
               <TextInput
@@ -239,6 +393,7 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
             <View style={styles.expenseHeader}>
               <Text style={styles.headerText}>Amount</Text>
               <Text style={styles.headerText}>Type</Text>
+              <Text style={styles.headerText}>Area</Text>
               <Text style={styles.headerText}>Remarks</Text>
             </View>
           </View>
@@ -359,6 +514,19 @@ const styles = StyleSheet.create({
   picker: {
     height: 50,
     width: '100%',
+  },
+  dropdownContainer: {
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    marginTop: 5,
+    backgroundColor: '#fff',
+  },
+  dropdownItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   closeButton: {
     position: 'absolute',
