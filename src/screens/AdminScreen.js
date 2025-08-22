@@ -969,8 +969,10 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       
       <View style={styles.pickerContainer}>
         <Text style={styles.label}>Select Areas:</Text>
-        <ScrollView style={styles.areaPicker}>
-          {areas.map((area) => (
+        <FlatList
+          data={areas}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item: area }) => (
             <TouchableOpacity
               key={area.id}
               style={[
@@ -994,8 +996,9 @@ export default function AdminScreen({ navigation, user, userProfile }) {
                 {area.area_name} ({area.area_type})
               </Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          )}
+          style={styles.areaPicker}
+        />
       </View>
       
       <View style={{ marginBottom: 12 }}>
@@ -1006,12 +1009,14 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           onChangeText={setUserSearch}
         />
       </View>
-      <ScrollView style={styles.userPicker}>
-        {users.filter(
+      <FlatList
+        data={users.filter(
           u =>
             u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
             u.email.toLowerCase().includes(userSearch.toLowerCase())
-        ).map(user => (
+        )}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item: user }) => (
           <TouchableOpacity
             key={user.id}
             style={[
@@ -1035,8 +1040,9 @@ export default function AdminScreen({ navigation, user, userProfile }) {
               {user.name} ({user.email})
             </Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+        )}
+        style={styles.userPicker}
+      />
       
       <TextInput
         style={styles.input}
@@ -1091,37 +1097,41 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     <View style={styles.container}>
       
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScrollViewContent}>
-        <View style={styles.tabContainer}>
+            <View style={styles.tabContainer}>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'users' && styles.activeTabButton]}
             onPress={() => setActiveTab('users')}
+            onLongPress={() => Alert.alert('Users', 'Manage user accounts and roles')}
           >
-            <Text style={[styles.tabButtonText, activeTab === 'users' && styles.activeTabButtonText]}>Users</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'users' && styles.activeTabButtonText]}>👤</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'areas' && styles.activeTabButton]}
             onPress={() => setActiveTab('areas')}
+            onLongPress={() => Alert.alert('Areas', 'Manage geographical areas')}
           >
-            <Text style={[styles.tabButtonText, activeTab === 'areas' && styles.activeTabButtonText]}>Areas</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'areas' && styles.activeTabButtonText]}>📍</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'groups' && styles.activeTabButton]}
             onPress={() => setActiveTab('groups')}
+            onLongPress={() => Alert.alert('Groups', 'Manage user groups and their assigned areas')}
           >
-            <Text style={[styles.tabButtonText, activeTab === 'groups' && styles.activeTabButtonText]}>Groups</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'groups' && styles.activeTabButtonText]}>👥</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'bankTransactions' && styles.activeTabButton]}
             onPress={() => setActiveTab('bankTransactions')}
+            onLongPress={() => Alert.alert('Bank Transactions', 'View and manage bank transactions')}
           >
-            <Text style={[styles.tabButtonText, activeTab === 'bankTransactions' && styles.tabButtonText]}>Bank Transactions</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'bankTransactions' && styles.tabButtonText]}>💳</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'bankAccounts' && styles.activeTabButton]}
             onPress={() => setActiveTab('bankAccounts')}
+            onLongPress={() => Alert.alert('Bank Accounts', 'Manage linked bank accounts')}
           >
-            <Text style={[styles.tabButtonText, activeTab === 'bankAccounts' && styles.tabButtonText]}>Bank Accounts</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'bankAccounts' && styles.tabButtonText]}>🏦</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'configuration' && styles.activeTabButton]}
@@ -1131,7 +1141,6 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             {/* Consider using a proper icon library (e.g., react-native-vector-icons) for better visual representation. */}
           </TouchableOpacity>
         </View>
-      </ScrollView>
 
       {activeTab === 'users' && (
         <View style={{ flex: 1, padding: 20 }}>
@@ -1395,11 +1404,7 @@ const styles = StyleSheet.create({
   activeTabButtonText: {
     color: '#FFFFFF',
   },
-  tabScrollViewContent: {
-    flexGrow: 1,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
+  
   
   listTitle: {
     fontSize: 20,

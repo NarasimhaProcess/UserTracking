@@ -57,6 +57,10 @@ export default function DashboardScreen({ user, userProfile }) {
   const [totalPaidCash, setTotalPaidCash] = useState(0);
   const [totalPaidUPI, setTotalPaidUPI] = useState(0);
   const [totalNotPaid, setTotalNotPaid] = useState(0);
+  const [cashOnHand, setCashOnHand] = useState(0);
+  const [areaCurrentBalance, setAreaCurrentBalance] = useState(0);
+  const [totalAmountGivenPending, setTotalAmountGivenPending] = useState(0);
+  const [totalExpenses, setTotalExpenses] = useState(0);
 
   const debounceTimeout = useRef(null);
 
@@ -238,6 +242,54 @@ export default function DashboardScreen({ user, userProfile }) {
     setCustomerList([]);
     setCustomerListTitle('');
 
+    // Fetch current_balance from area_master
+    const { data: areaData, error: areaError } = await supabase
+      .from('area_master')
+      .select('current_balance')
+      .eq('id', areaId)
+      .single();
+
+    if (areaError) {
+      console.error('Error fetching area_master current_balance:', areaError);
+      // Continue with other data even if areaData fails
+    }
+
+    const currentBalance = areaData?.current_balance || 0;
+    setAreaCurrentBalance(currentBalance);
+
+    // Fetch sum of amount_given for pending customers in this area
+    const { data: pendingCustomersData, error: pendingCustomersError } = await supabase
+      .from('customers') // Assuming 'customers' table
+      .select('amount_given')
+      .eq('area_id', areaId)
+      .eq('status', 'pending'); // Assuming 'status' column and 'pending' value
+
+    let totalAmountGivenPendingCalculated = 0;
+    if (pendingCustomersData) {
+      totalAmountGivenPendingCalculated = pendingCustomersData.reduce((sum, customer) => sum + (customer.amount_given || 0), 0);
+    }
+    setTotalAmountGivenPending(totalAmountGivenPendingCalculated);
+
+    if (pendingCustomersError) {
+      console.error('Error fetching pending customers amount_given:', pendingCustomersError);
+    }
+
+    // Fetch sum of expenses for this area
+    const { data: expensesData, error: expensesError } = await supabase
+      .from('user_expenses') // Corrected table name
+      .select('amount')
+      .eq('area_id', areaId);
+
+    let totalExpensesCalculated = 0;
+    if (expensesData) {
+      totalExpensesCalculated = expensesData.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+    }
+    setTotalExpenses(totalExpensesCalculated);
+
+    if (expensesError) {
+      console.error('Error fetching expenses:', expensesError);
+    }
+
     const { data, error } = await supabase.rpc('get_customer_payment_status_for_csv', { p_area_id: areaId });
 
     if (error) {
@@ -323,6 +375,11 @@ export default function DashboardScreen({ user, userProfile }) {
 
     const notPaidAmount = notPaidToday.reduce((acc, customer) => acc + (customer.expected_repayment_amount || 0), 0);
     setTotalNotPaid(notPaidAmount);
+
+    // Calculate Cash on Hand
+    // Assumption: 'amount given agreed of pending customers' is approximated by totalNotPaid
+    const calculatedCashOnHand = currentBalance + (cashTotal + upiTotal) - totalAmountGivenPending - totalExpenses;
+    setCashOnHand(calculatedCashOnHand);
 
     setPaidTodayCustomers(paidToday);
     setNotPaidTodayCustomers(notPaidToday);
@@ -446,7 +503,16 @@ export default function DashboardScreen({ user, userProfile }) {
                   <Text style={styles.totalText}>Paid by Cash: ₹{formatNumberWithCommas(totalPaidCash.toFixed(2))}</Text>
                   <Text style={styles.totalText}>Paid by UPI: ₹{formatNumberWithCommas(totalPaidUPI.toFixed(2))}</Text>
                   <Text style={[styles.totalText, styles.paidTotalText]}>Total Paid: ₹{formatNumberWithCommas((totalPaidCash + totalPaidUPI).toFixed(2))}</Text>
-                  <Text style={[styles.totalText, styles.notPaidTotalText]}>Not Paid: ₹{formatNumberWithCommas(totalNotPaid.toFixed(2))}</Text>
+                  <Text style={[styles.totalText, styles.notPaidTotalText]}>Not Paid (Today): ₹{formatNumberWithCommas(totalNotPaid.toFixed(2))}</Text>
+                </View>
+              )}
+              {!loadingChart && (
+                <View style={styles.totalsContainer}>
+                  <Text style={styles.totalText}>Area Current Balance: ₹{formatNumberWithCommas(areaCurrentBalance.toFixed(2))}</Text>
+                  <Text style={styles.totalText}>+ Total Paid Today: ₹{formatNumberWithCommas((totalPaidCash + totalPaidUPI).toFixed(2))}</Text>
+                  <Text style={styles.totalText}>- Pending Customer Amount: ₹{formatNumberWithCommas(totalAmountGivenPending.toFixed(2))}</Text>
+                  <Text style={styles.totalText}>- Total Expenses: ₹{formatNumberWithCommas(totalExpenses.toFixed(2))}</Text>
+                  <Text style={[styles.totalText, styles.cashOnHandText]}>Cash on Hand: ₹{formatNumberWithCommas(cashOnHand.toFixed(2))}</Text>
                 </View>
               )}
               <TouchableOpacity
@@ -854,5 +920,9 @@ const styles = StyleSheet.create({
   },
   notPaidTotalText: {
     color: 'red',
+  },
+  cashOnHandText: {
+    color: '#007AFF', // A distinct color for Cash on Hand
+    fontWeight: 'bold',
   },
 });
