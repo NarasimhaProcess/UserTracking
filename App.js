@@ -24,7 +24,7 @@ import LocationHistoryScreen from './src/screens/LocationHistoryScreen';
 import MapScreen from './src/screens/MapScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import AdminScreen from './src/screens/AdminScreen';
-import AreaManagementScreen from './src/screens/AreaManagementScreen';
+
 import CreateCustomerScreen from './src/screens/CreateCustomerScreen';
 import AstrologyWebviewScreen from './src/screens/AstrologyWebviewScreen';
 import NewsPaperScreen from './src/screens/NewsPaperScreen';
@@ -217,18 +217,7 @@ function TabNavigator({ route }) {
           {(props) => <AdminScreen {...props} user={user} userProfile={userProfile} />}
         </Tab.Screen>
       )}
-      {isAdmin && (
-        <Tab.Screen 
-          name="Area Management" 
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <Text style={{ color, fontSize: size }}>🗺️</Text>
-            ),
-          }}
-        >
-          {(props) => <AreaManagementScreen {...props} user={user} userProfile={userProfile} />}
-        </Tab.Screen>
-      )}
+      
       <Tab.Screen 
         name="Customers" 
         options={{
