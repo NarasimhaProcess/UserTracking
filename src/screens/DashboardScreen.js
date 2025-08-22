@@ -262,7 +262,7 @@ export default function DashboardScreen({ user, userProfile }) {
       .from('customers') // Assuming 'customers' table
       .select('amount_given')
       .eq('area_id', areaId)
-      .eq('status', 'pending'); // Assuming 'status' column and 'pending' value
+      .in('status', ['pending', 'Pending']); // Assuming 'status' column and 'pending' value, checking for case sensitivity
 
     let totalAmountGivenPendingCalculated = 0;
     if (pendingCustomersData) {
@@ -510,7 +510,7 @@ export default function DashboardScreen({ user, userProfile }) {
                 <View style={styles.totalsContainer}>
                   <Text style={styles.totalText}>Area Current Balance: ₹{formatNumberWithCommas(areaCurrentBalance.toFixed(2))}</Text>
                   <Text style={styles.totalText}>+ Total Paid Today: ₹{formatNumberWithCommas((totalPaidCash + totalPaidUPI).toFixed(2))}</Text>
-                  <Text style={styles.totalText}>- Pending Customer Amount: ₹{formatNumberWithCommas(totalAmountGivenPending.toFixed(2))}</Text>
+                  <Text style={styles.totalText}>- Pending Customer(s): ₹{formatNumberWithCommas(totalAmountGivenPending.toFixed(2))}</Text>
                   <Text style={styles.totalText}>- Total Expenses: ₹{formatNumberWithCommas(totalExpenses.toFixed(2))}</Text>
                   <Text style={[styles.totalText, styles.cashOnHandText]}>Cash on Hand: ₹{formatNumberWithCommas(cashOnHand.toFixed(2))}</Text>
                 </View>
