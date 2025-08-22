@@ -14,7 +14,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../services/supabase';
 import { NetInfoService } from '../services/NetInfoService';
 
-export default function BankAccountsScreen({ navigation }) {
+export default function BankAccountsScreen({ navigation, showAddFormInitially = false }) {
   const [bankAccounts, setBankAccounts] = useState([]);
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -22,7 +22,7 @@ export default function BankAccountsScreen({ navigation }) {
   const [branchName, setBranchName] = useState('');
   const [ifscCode, setIfscCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isAddingAccount, setIsAddingAccount] = useState(false); // State to control form visibility
+  const [isAddingAccount, setIsAddingAccount] = useState(showAddFormInitially); // State to control form visibility
 
   useEffect(() => {
     fetchBankAccounts();
@@ -118,25 +118,12 @@ export default function BankAccountsScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Removed closeButton as it's now part of a tab view */}
-      <Text style={styles.header}>Bank Accounts</Text>
+      
 
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
-        <TouchableOpacity
-          style={styles.toggleFormButton}
-          onPress={() => setIsAddingAccount(!isAddingAccount)}
-        >
-          <Text style={styles.toggleFormButtonText}>
-            {isAddingAccount ? 'Hide Add Account Form' : 'Add New Bank Account'}
-          </Text>
-        </TouchableOpacity>
+        
 
-        {/* New button to navigate to BankTransactionScreen */}
-        <TouchableOpacity
-          style={[styles.toggleFormButton, { backgroundColor: '#28a745' }]} // Green color for "Add Transaction"
-          onPress={() => navigation.navigate('BankTransaction')}
-        >
-          <Text style={styles.toggleFormButtonText}>Add Bank Transaction</Text>
-        </TouchableOpacity>
+        
 
         {isAddingAccount && (
           <View style={styles.formContainer}>

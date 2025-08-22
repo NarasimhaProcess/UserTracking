@@ -1205,7 +1205,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       )}
 
       {activeTab === 'bankAccounts' && (
-        <BankAccountsScreen navigation={navigation} />
+        <BankAccountsScreen navigation={navigation} showAddFormInitially={true} />
       )}
 
       {activeTab === 'configuration' && (
