@@ -276,6 +276,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  statusButton: {
+    backgroundColor: '#1976D2',
+    borderRadius: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginVertical: 5,
+    alignItems: 'center',
+  },
+  statusButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
 });
 
 export default styles; 

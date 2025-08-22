@@ -212,6 +212,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   const [accessibleUserIds, setAccessibleUserIds] = useState([]);
   const [accessibleAreaIds, setAccessibleAreaIds] = useState([]);
   const [masterCustomerTypes, setMasterCustomerTypes] = useState([]);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusChangeRemarks, setStatusChangeRemarks] = useState('');
   // Add transaction date state
   
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
@@ -315,34 +317,47 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   };
 
   useEffect(() => {
-    // Fetch areas for user's groups
     async function fetchAreas() {
-      console.log('fetchAreas: Fetching areas for user ID:', user?.id);
-      const { data, error } = await supabase
-        .from('user_groups')
-        .select('group_id, groups (group_areas (area_master (id, area_name)))')
-        .eq('user_id', user.id);
-      
-      if (error) {
-        console.error('fetchAreas: Error fetching user groups:', error);
-        return;
-      }
+      if (userProfile?.user_type === 'superadmin') {
+        // Superadmin fetches all areas
+        const { data, error } = await supabase
+          .from('area_master')
+          .select('id, area_name');
+        
+        if (error) {
+          console.error('fetchAreas (superadmin): Error fetching areas:', error);
+          return;
+        }
+        setAreas(data || []);
+      } else {
+        // Fetch areas for user's groups
+        console.log('fetchAreas: Fetching areas for user ID:', user?.id);
+        const { data, error } = await supabase
+          .from('user_groups')
+          .select('group_id, groups (group_areas (area_master (id, area_name)))')
+          .eq('user_id', user.id);
+        
+        if (error) {
+          console.error('fetchAreas: Error fetching user groups:', error);
+          return;
+        }
 
-      console.log('fetchAreas: User groups data:', data);
+        console.log('fetchAreas: User groups data:', data);
 
-      const areaList = [];
-      (data || []).forEach(g => {
-        (g.groups?.group_areas || []).forEach(ga => {
-          if (ga.area_master && !areaList.find(a => a.id === ga.area_master.id)) {
-            areaList.push(ga.area_master);
-          }
+        const areaList = [];
+        (data || []).forEach(g => {
+          (g.groups?.group_areas || []).forEach(ga => {
+            if (ga.area_master && !areaList.find(a => a.id === ga.area_master.id)) {
+              areaList.push(ga.area_master);
+            }
+          });
         });
-      });
-      console.log('fetchAreas: Constructed area list:', areaList);
-      setAreas(areaList);
+        console.log('fetchAreas: Constructed area list:', areaList);
+        setAreas(areaList);
+      }
     }
     if (user?.id) fetchAreas();
-  }, [user?.id]);
+  }, [user?.id, userProfile]);
 
   // Fetch accessible user IDs and area IDs based on group memberships
   useEffect(() => {
@@ -400,22 +415,23 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   }, [user?.id]);
 
   const fetchCustomers = useCallback(async () => {
-    if (accessibleUserIds.length === 0 && accessibleAreaIds.length === 0) {
-      setCustomers([]);
-      return;
-    }
-
     let query = supabase
       .from('customers')
       .select('*');
 
-    // Apply group-based access control
-    if (accessibleUserIds.length > 0 && accessibleAreaIds.length > 0) {
-      query = query.or(`user_id.in.(${accessibleUserIds.join(',')}),area_id.in.(${accessibleAreaIds.join(',')})`);
-    } else if (accessibleUserIds.length > 0) {
-      query = query.in('user_id', accessibleUserIds);
-    } else if (accessibleAreaIds.length > 0) {
-      query = query.in('area_id', accessibleAreaIds);
+    // If the user is not a superadmin, apply group-based access control
+    if (userProfile?.user_type !== 'superadmin') {
+      if (accessibleUserIds.length === 0 && accessibleAreaIds.length === 0) {
+        setCustomers([]);
+        return;
+      }
+      if (accessibleUserIds.length > 0 && accessibleAreaIds.length > 0) {
+        query = query.or(`user_id.in.(${accessibleUserIds.join(',')}),area_id.in.(${accessibleAreaIds.join(',')})`);
+      } else if (accessibleUserIds.length > 0) {
+        query = query.in('user_id', accessibleUserIds);
+      } else if (accessibleAreaIds.length > 0) {
+        query = query.in('area_id', accessibleAreaIds);
+      }
     }
 
     query = query
@@ -437,7 +453,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       );
     }
     setCustomers(filtered);
-  }, [user, search, areaSearch, areas, areaId, accessibleUserIds, accessibleAreaIds]); // Dependencies for useCallback
+  }, [user, search, areaSearch, areas, areaId, accessibleUserIds, accessibleAreaIds, userProfile]); // Dependencies for useCallback
 
   useEffect(() => {
     if (user?.id) fetchCustomers();
@@ -916,6 +932,83 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
 
   
 
+  
+
+  const handleChangeStatus = (customer) => {
+    if (userProfile?.user_type !== 'admin' && userProfile?.user_type !== 'superadmin') {
+      Alert.alert('Permission Denied', 'You do not have permission to change the customer status.');
+      return;
+    }
+    setSelectedCustomer(customer);
+    setShowStatusModal(true);
+  };
+
+  const checkCustomerHasOpenTransactions = async (customerId) => {
+    const { data: transactions, error } = await supabase
+      .from('transactions')
+      .select('amount, transaction_type')
+      .eq('customer_id', customerId);
+
+    if (error) {
+      console.error('Error checking transactions:', error);
+      return true; // Assume open transactions if there's an error
+    }
+
+    const { data: customer, error: customerError } = await supabase
+        .from('customers')
+        .select('repayment_amount, days_to_complete')
+        .eq('id', customerId)
+        .single();
+
+    if (customerError) {
+        console.error('Error fetching customer', customerError);
+        return true;
+    }
+
+    const totalRepaid = transactions
+      .filter(t => t.transaction_type === 'repayment')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    const expectedTotalRepayment = (Number(customer.repayment_amount || 0) * Number(customer.days_to_complete || 0));
+    const remainingAmount = expectedTotalRepayment - totalRepaid;
+
+    return remainingAmount > 0;
+  };
+
+  const updateCustomerStatus = (customerId, status, newRemarks) => {
+    return new Promise(async (resolve) => {
+      const { data: customer, error: fetchError } = await supabase
+        .from('customers')
+        .select('remarks')
+        .eq('id', customerId)
+        .single();
+
+      if (fetchError) {
+        Alert.alert('Error', 'Failed to fetch customer details.', [{ text: 'OK', onPress: resolve }]);
+        return;
+      }
+
+      const timestamp = new Date().toLocaleString();
+      const remarksToAppend = newRemarks ? `\n\n[${timestamp}] Status changed to ${status}: ${newRemarks}` : `\n\n[${timestamp}] Status changed to ${status}`;
+      const updatedRemarks = (customer.remarks || '') + remarksToAppend;
+
+      const { error } = await supabase
+        .from('customers')
+        .update({ status, remarks: updatedRemarks })
+        .eq('id', customerId);
+
+      if (error) {
+        Alert.alert('Error', 'Failed to update customer status.', [{ text: 'OK', onPress: resolve }]);
+      } else {
+        Alert.alert('Success', 'Customer status updated successfully.', [{ text: 'OK', onPress: resolve }]);
+        setStatusChangeRemarks(''); // Clear the remarks input
+        fetchCustomers();
+      }
+    });
+  };
+
+  
+
   const renderCustomerItem = ({ item }) => (
     <View style={{ borderBottomWidth: 1, borderColor: '#eee', paddingVertical: 12, backgroundColor: '#fff' }}>
       {/* Customer Info Row */}
@@ -955,6 +1048,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
           openTransactionModal={openTransactionModal}
           openLocationPicker={openLocationPicker}
           handleCloneCustomer={handleCloneCustomer}
+          handleChangeStatus={handleChangeStatus}
         />
       </View>
     </View>
@@ -2104,6 +2198,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
                 <Text style={styles.modalDetail}>Email: {selectedCustomer.email}</Text>
                 <Text style={styles.modalDetail}>Card No: {selectedCustomer.book_no}</Text>
                 <Text style={styles.modalDetail}>Type: {selectedCustomer.customer_type}</Text>
+                <Text style={styles.modalDetail}>Status: {selectedCustomer.status}</Text>
                 <Text style={styles.modalDetail}>Area ID: {selectedCustomer.area_id}</Text>
                 <Text style={styles.modalDetail}>Latitude: {selectedCustomer.latitude}</Text>
                 <Text style={styles.modalDetail}>Longitude: {selectedCustomer.longitude}</Text>
@@ -2226,11 +2321,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
                   <Picker.Item label="Select Type" value="" />
                   {CUSTOMER_TYPES.map(type => <Picker.Item key={type} label={type} value={type} />)}
                 </Picker>
-                <Text style={styles.formLabel}>Customer Type</Text>
-                <Picker selectedValue={selectedCustomer.customer_type} onValueChange={val => setSelectedCustomer({ ...selectedCustomer, customer_type: val })} style={styles.formPicker}>
-                  <Picker.Item label="Select Type" value="" />
-                  {CUSTOMER_TYPES.map(type => <Picker.Item key={type} label={type} value={type} />)}
-                </Picker>
+                <Text style={styles.formLabel}>Status</Text>
+                <TextInput value={selectedCustomer.status} editable={false} style={[styles.input, { backgroundColor: '#eee' }]} />
                 <Text style={styles.formLabel}>Area ID</Text>
                 <Picker selectedValue={selectedCustomer.area_id} onValueChange={val => setSelectedCustomer({ ...selectedCustomer, area_id: val })} style={styles.formPicker}>
                   <Picker.Item label="Select Area" value={null} />
@@ -2841,6 +2933,56 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
         daysToComplete={daysToComplete}
       />
 
+      <Modal
+        visible={showStatusModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowStatusModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Change Status</Text>
+            <TextInput
+              placeholder="Add remarks (optional)"
+              style={styles.input}
+              value={statusChangeRemarks}
+              onChangeText={setStatusChangeRemarks}
+            />
+            {selectedCustomer?.status !== 'Active' && (
+              <TouchableOpacity style={styles.statusButton} onPress={async () => { await updateCustomerStatus(selectedCustomer.id, 'Active', statusChangeRemarks); setShowStatusModal(false); }}>
+                <Text style={styles.statusButtonText}>Active</Text>
+              </TouchableOpacity>
+            )}
+            {selectedCustomer?.status !== 'Inactive' && (
+              <TouchableOpacity style={styles.statusButton} onPress={async () => { await updateCustomerStatus(selectedCustomer.id, 'Inactive', statusChangeRemarks); setShowStatusModal(false); }}>
+                <Text style={styles.statusButtonText}>Inactive</Text>
+              </TouchableOpacity>
+            )}
+            {selectedCustomer?.status !== 'Closed' && (
+              <TouchableOpacity style={styles.statusButton} onPress={async () => {
+                const hasOpenTransactions = await checkCustomerHasOpenTransactions(selectedCustomer.id);
+                if (hasOpenTransactions) {
+                  Alert.alert('Error', 'This customer has pending transactions and cannot be closed.');
+                  setShowStatusModal(false);
+                } else {
+                  await updateCustomerStatus(selectedCustomer.id, 'Closed', statusChangeRemarks);
+                  setShowStatusModal(false);
+                }
+              }}>
+                <Text style={styles.statusButtonText}>Closed</Text>
+              </TouchableOpacity>
+            )}
+            {selectedCustomer?.status !== 'Defaulted' && (
+              <TouchableOpacity style={styles.statusButton} onPress={async () => { await updateCustomerStatus(selectedCustomer.id, 'Defaulted', statusChangeRemarks); setShowStatusModal(false); }}>
+                <Text style={styles.statusButtonText}>Defaulted</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.cancelButton, {marginTop: 10}]} onPress={() => setShowStatusModal(false)}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       
     </View>
   );

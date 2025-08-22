@@ -9,10 +9,12 @@ import {
   Platform,
   ScrollView,
   TextInput,
+  Modal, // Ensure Modal is explicitly imported
 } from 'react-native';
 import * as Location from 'expo-location';
 import { supabase } from '../services/supabase';
 import LeafletMap from '../components/LeafletMap';
+import EnhancedDatePicker from '../components/EnhancedDatePicker'; // Reverted to default import
 
 const { width, height } = Dimensions.get('window');
 
@@ -23,12 +25,127 @@ export default function MapScreen({ user, userProfile }) {
   const [searchQuery, setSearchQuery] = useState('');
   const mapRef = useRef(null);
 
+  // New states for superadmin functionality
+  const [selectedUserForMap, setSelectedUserForMap] = useState(null); // User whose location history is being viewed
+  const [allUsersForMap, setAllUsersForMap] = useState([]); // All users for superadmin to select from
+  const [userSearchInput, setUserSearchInput] = useState(''); // For searching users in the superadmin view
+  const [showUserSelectionModal, setShowUserSelectionModal] = useState(false); // To show a modal for user selection
+
+  // New states for date filtering
+  const [showEnhancedDatePicker, setShowEnhancedDatePicker] = useState(false); // Control visibility of EnhancedDatePicker
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 7))); // Default to 7 days ago
+  const [endDate, setEndDate] = useState(new Date()); // Default to today
+
   useEffect(() => {
     if (user) {
       getCurrentLocation();
-      loadUserLocations();
+      if (userProfile?.user_type === 'superadmin') {
+        loadAllUsersForMap();
+      }
+      // Initial load for the current user or the default selected user for superadmin
+      loadUserLocations(selectedUserForMap?.id || user.id);
     }
-  }, [user]);
+  }, [user, userProfile, selectedUserForMap]); // Added userProfile and selectedUserForMap to dependencies
+
+  const loadAllUsersForMap = async () => {
+    try {
+      let usersToDisplay = [];
+      if (userProfile?.user_type === 'superadmin') {
+        // Superadmin: fetch all users
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, name, email')
+          .order('name', { ascending: true });
+        if (error) throw error;
+        usersToDisplay = data || [];
+      } else {
+        // Group Admin or regular user: fetch users from groups they administer
+        // First, find groups where the current user is a group admin
+        const { data: adminGroups, error: adminGroupsError } = await supabase
+          .from('user_groups')
+          .select('group_id')
+          .eq('user_id', user.id)
+          .eq('is_group_admin', true);
+
+        if (adminGroupsError) throw adminGroupsError;
+
+        if (adminGroups && adminGroups.length > 0) {
+          const groupIds = adminGroups.map(g => g.group_id);
+
+          // Then, fetch all users belonging to these groups
+          const { data: groupUsersData, error: groupUsersError } = await supabase
+            .from('user_groups')
+            .select('users(id, name, email)')
+            .in('group_id', groupIds);
+
+          if (groupUsersError) throw groupUsersError;
+
+          // Extract unique users
+          const uniqueUsers = new Map();
+          groupUsersData.forEach(ug => {
+            if (ug.users) {
+              uniqueUsers.set(ug.users.id, ug.users);
+            }
+          });
+          usersToDisplay = Array.from(uniqueUsers.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        }
+      }
+
+      setAllUsersForMap(usersToDisplay);
+      // Set the first user as default if no user is selected, or if the previously selected user is no longer in the list
+      if (!selectedUserForMap || !usersToDisplay.some(u => u.id === selectedUserForMap.id)) {
+        if (usersToDisplay.length > 0) {
+          setSelectedUserForMap(usersToDisplay[0]);
+        } else {
+          setSelectedUserForMap(null); // No users to display
+        }
+      }
+    } catch (error) {
+      console.error('Error loading users for map:', error);
+      Alert.alert('Error', 'Failed to load users for map.');
+    }
+  };
+
+  const loadUserLocations = async (userIdToLoad) => {
+    if (!userIdToLoad) return; // Ensure a user ID is provided
+
+    try {
+      let query = supabase
+        .from('location_history')
+        .select('*')
+        .eq('user_id', userIdToLoad);
+
+      if (startDate) {
+        // Ensure startDate is a Date object before calling toISOString
+        const startDateTime = new Date(startDate);
+        query = query.gte('timestamp', startDateTime.toISOString());
+      }
+      if (endDate) {
+        // Ensure endDate is a Date object before calling toISOString
+        const endDateTime = new Date(endDate);
+        // To include the whole end day, set time to end of day
+        endDateTime.setHours(23, 59, 59, 999);
+        query = query.lte('timestamp', endDateTime.toISOString());
+      }
+
+      const { data, error } = await query
+        .order('timestamp', { ascending: true })
+        .limit(100); // Keep limit for now, but date filter is primary
+
+      if (error) {
+        console.error('Error loading locations:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setUserLocations(data);
+      } else {
+        setUserLocations([]); // Clear locations if no data found for the selected user
+      }
+    } catch (error) {
+      console.error('Error loading user locations:', error);
+    }
+  };
 
   const getCurrentLocation = async () => {
     try {
@@ -56,30 +173,6 @@ export default function MapScreen({ user, userProfile }) {
       Alert.alert('Error', 'Could not get current location');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const loadUserLocations = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('location_history')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('timestamp', { ascending: true })
-        .limit(100);
-
-      if (error) {
-        console.error('Error loading locations:', error);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        setUserLocations(data);
-      }
-    } catch (error) {
-      console.error('Error loading user locations:', error);
     }
   };
 
@@ -242,6 +335,20 @@ export default function MapScreen({ user, userProfile }) {
         </TouchableOpacity>
       </View>
 
+      {/* Superadmin User Selection */}
+      {userProfile?.user_type === 'superadmin' && (
+        <View style={styles.superadminUserSelectContainer}>
+          <TouchableOpacity
+            style={styles.superadminUserSelectButton}
+            onPress={() => setShowUserSelectionModal(true)}
+          >
+            <Text style={styles.superadminUserSelectButtonText}>
+              Viewing: {selectedUserForMap?.name || user.name || 'Select User'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Map Container */}
       <View style={styles.mapContainer}>
         {renderMap()}
@@ -274,11 +381,36 @@ export default function MapScreen({ user, userProfile }) {
 
         <TouchableOpacity
           style={styles.controlButton}
-          onPress={loadUserLocations}
+          onPress={() => setShowEnhancedDatePicker(true)}
+        >
+          <Text style={styles.controlButtonText}>🗓️ Select Date Range</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => loadUserLocations(selectedUserForMap?.id || user.id)}
         >
           <Text style={styles.controlButtonText}>🔄 Refresh</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Enhanced Date Picker Modal */}
+      <EnhancedDatePicker
+        visible={showEnhancedDatePicker}
+        onClose={() => setShowEnhancedDatePicker(false)}
+        onDateSelect={({ startDate: selectedStart, endDate: selectedEnd }) => {
+          // EnhancedDatePicker returns YYYY-MM-DD strings for range mode
+          setStartDate(new Date(selectedStart));
+          setEndDate(new Date(selectedEnd));
+          loadUserLocations(selectedUserForMap?.id || user.id);
+        }}
+        startDate={startDate}
+        endDate={endDate}
+        selectionMode="range"
+        // repaymentFrequency and daysToComplete are not needed for MapScreen
+        repaymentFrequency={null}
+        daysToComplete={null}
+      />
 
       {/* Info panel */}
       <View style={styles.infoPanel}>
@@ -297,6 +429,53 @@ export default function MapScreen({ user, userProfile }) {
           </Text>
         )}
       </View>
+
+      {/* User Selection Modal for Superadmin */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showUserSelectionModal}
+        onRequestClose={() => setShowUserSelectionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select User</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search users..."
+              value={userSearchInput}
+              onChangeText={setUserSearchInput}
+            />
+            <ScrollView style={styles.userListScroll}>
+              {allUsersForMap
+                .filter(u =>
+                  u.name?.toLowerCase().includes(userSearchInput.toLowerCase()) ||
+                  u.email?.toLowerCase().includes(userSearchInput.toLowerCase())
+                )
+                .map(u => (
+                  <TouchableOpacity
+                    key={u.id}
+                    style={styles.userListItem}
+                    onPress={() => {
+                      setSelectedUserForMap(u);
+                      setShowUserSelectionModal(false);
+                      setUserSearchInput(''); // Clear search input
+                      loadUserLocations(u.id); // Load locations for the newly selected user
+                    }}
+                  >
+                    <Text style={styles.userListItemText}>{u.name || u.email}</Text>
+                  </TouchableOpacity>
+                ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.closeModalButton}
+              onPress={() => setShowUserSelectionModal(false)}
+            >
+              <Text style={styles.closeModalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -507,5 +686,74 @@ const styles = StyleSheet.create({
   locationTime: {
     fontSize: 12,
     color: '#8E8E93',
+  },
+  superadminUserSelectContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 100 : 80, // Adjust position below search bar
+    left: 20,
+    right: 20,
+    zIndex: 999, // Ensure it's above the map but below search
+  },
+  superadminUserSelectButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  superadminUserSelectButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    width: '90%',
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  userListScroll: {
+    maxHeight: 300, // Limit height of user list
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  userListItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  userListItemText: {
+    fontSize: 16,
+  },
+  closeModalButton: {
+    marginTop: 20,
+    backgroundColor: '#FF3B30',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  closeModalButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
