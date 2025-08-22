@@ -13,7 +13,8 @@ import {
   Modal,
 } from 'react-native';
 import { supabase } from '../services/supabase';
-import { Buffer } from 'buffer';
+import BankTransactionScreen from './BankTransactionScreen';
+import BankAccountsScreen from './BankAccountsScreen';
 import LocationSearchBar from '../components/AreaSearchBar';
 import LeafletMap from '../components/LeafletMap';
 
@@ -118,6 +119,8 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     } else if (activeTab === 'groups') {
       loadGroups();
       loadGroupUsers();
+    } else if (activeTab === 'bankTransactions') {
+      // No specific load function for bank transactions yet, will be handled in its own screen
     } else if (activeTab === 'configuration') {
       if (activeConfigTab === 'repaymentPlans') {
         loadRepaymentPlans();
@@ -1088,33 +1091,47 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     <View style={styles.container}>
       
 
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'users' && styles.activeTabButton]}
-          onPress={() => setActiveTab('users')}
-        >
-          <Text style={[styles.tabButtonText, activeTab === 'users' && styles.activeTabButtonText]}>Users</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'areas' && styles.activeTabButton]}
-          onPress={() => setActiveTab('areas')}
-        >
-          <Text style={[styles.tabButtonText, activeTab === 'areas' && styles.activeTabButtonText]}>Areas</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'groups' && styles.activeTabButton]}
-          onPress={() => setActiveTab('groups')}
-        >
-          <Text style={[styles.tabButtonText, activeTab === 'groups' && styles.activeTabButtonText]}>Groups</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'configuration' && styles.activeTabButton]}
-          onPress={() => setActiveTab('configuration')}
-        >
-          <Text style={[styles.tabButtonText, activeTab === 'configuration' && styles.activeTabButtonText]}>⚙️</Text>
-          {/* Consider using a proper icon library (e.g., react-native-vector-icons) for better visual representation. */}
-        </TouchableOpacity>
-      </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScrollViewContent}>
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'users' && styles.activeTabButton]}
+            onPress={() => setActiveTab('users')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'users' && styles.activeTabButtonText]}>Users</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'areas' && styles.activeTabButton]}
+            onPress={() => setActiveTab('areas')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'areas' && styles.activeTabButtonText]}>Areas</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'groups' && styles.activeTabButton]}
+            onPress={() => setActiveTab('groups')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'groups' && styles.activeTabButtonText]}>Groups</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'bankTransactions' && styles.activeTabButton]}
+            onPress={() => setActiveTab('bankTransactions')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'bankTransactions' && styles.tabButtonText]}>Bank Transactions</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'bankAccounts' && styles.activeTabButton]}
+            onPress={() => setActiveTab('bankAccounts')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'bankAccounts' && styles.tabButtonText]}>Bank Accounts</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'configuration' && styles.activeTabButton]}
+            onPress={() => setActiveTab('configuration')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'configuration' && styles.tabButtonText]}>⚙️</Text>
+            {/* Consider using a proper icon library (e.g., react-native-vector-icons) for better visual representation. */}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
 
       {activeTab === 'users' && (
         <View style={{ flex: 1, padding: 20 }}>
@@ -1172,6 +1189,14 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           />
           {renderGroupModal()}
         </View>
+      )}
+
+      {activeTab === 'bankTransactions' && (
+        <BankTransactionScreen navigation={navigation} user={user} userProfile={userProfile} />
+      )}
+
+      {activeTab === 'bankAccounts' && (
+        <BankAccountsScreen navigation={navigation} />
       )}
 
       {activeTab === 'configuration' && (
@@ -1278,6 +1303,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F2F2F7',
+    paddingTop: 0, // Explicitly set to 0
+    marginTop: 0,  // Explicitly set to 0
   },
   
   
@@ -1344,16 +1371,18 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     paddingVertical: 10,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
+    width: '100%', // Added this
   },
   tabButton: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
+    marginRight: 10, // Add some spacing between tabs
+    flex: 1, // Added this to make tabs take equal space
   },
   activeTabButton: {
     backgroundColor: '#007AFF',
@@ -1365,6 +1394,11 @@ const styles = StyleSheet.create({
   },
   activeTabButtonText: {
     color: '#FFFFFF',
+  },
+  tabScrollViewContent: {
+    flexGrow: 1,
+    justifyContent: 'space-around',
+    alignItems: 'center',
   },
   
   listTitle: {

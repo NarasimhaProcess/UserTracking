@@ -35,6 +35,7 @@ import MarriageScreen from './src/screens/MarriageScreen';
 import UserExpensesScreen from './src/screens/UserExpensesScreen';
 import QuickTransactionScreen from './src/screens/QuickTransactionScreen';
 import QuickTransactionButton from './src/components/QuickTransactionButton';
+import BankTransactionScreen from './src/screens/BankTransactionScreen';
 
 // Import services
 import { supabase } from './src/services/supabase';
@@ -526,6 +527,14 @@ export default function App() {
             >
               {(props) => (
                 <QuickTransactionScreen {...props} user={user} />
+              )}
+            </Stack.Screen>
+            <Stack.Screen
+              name="BankTransaction" 
+              options={({ navigation }) => renderHeader(navigation)}
+            >
+              {(props) => (
+                <BankTransactionScreen {...props} user={user} userProfile={userProfile} />
               )}
             </Stack.Screen>
           </>
