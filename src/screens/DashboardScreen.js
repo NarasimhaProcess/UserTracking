@@ -256,6 +256,7 @@ export default function DashboardScreen({ user, userProfile }) {
 
     const currentBalance = areaData?.current_balance || 0;
     setAreaCurrentBalance(currentBalance);
+    console.log('Dashboard - currentBalance:', currentBalance);
 
     // Fetch sum of amount_given for pending customers in this area
     const { data: pendingCustomersData, error: pendingCustomersError } = await supabase
@@ -269,6 +270,7 @@ export default function DashboardScreen({ user, userProfile }) {
       totalAmountGivenPendingCalculated = pendingCustomersData.reduce((sum, customer) => sum + (customer.amount_given || 0), 0);
     }
     setTotalAmountGivenPending(totalAmountGivenPendingCalculated);
+    console.log('Dashboard - totalAmountGivenPendingCalculated:', totalAmountGivenPendingCalculated);
 
     if (pendingCustomersError) {
       console.error('Error fetching pending customers amount_given:', pendingCustomersError);
@@ -285,6 +287,7 @@ export default function DashboardScreen({ user, userProfile }) {
       totalExpensesCalculated = expensesData.reduce((sum, expense) => sum + (expense.amount || 0), 0);
     }
     setTotalExpenses(totalExpensesCalculated);
+    console.log('Dashboard - totalExpensesCalculated:', totalExpensesCalculated);
 
     if (expensesError) {
       console.error('Error fetching expenses:', expensesError);
@@ -372,14 +375,17 @@ export default function DashboardScreen({ user, userProfile }) {
 
     setTotalPaidCash(cashTotal);
     setTotalPaidUPI(upiTotal);
+    console.log('Dashboard - cashTotal:', cashTotal);
+    console.log('Dashboard - upiTotal:', upiTotal);
 
     const notPaidAmount = notPaidToday.reduce((acc, customer) => acc + (customer.expected_repayment_amount || 0), 0);
     setTotalNotPaid(notPaidAmount);
 
     // Calculate Cash on Hand
     // Assumption: 'amount given agreed of pending customers' is approximated by totalNotPaid
-    const calculatedCashOnHand = currentBalance + (cashTotal + upiTotal) - totalAmountGivenPending - totalExpenses;
+    const calculatedCashOnHand = currentBalance + (cashTotal + upiTotal) - totalAmountGivenPendingCalculated - totalExpensesCalculated;
     setCashOnHand(calculatedCashOnHand);
+    console.log('Dashboard - calculatedCashOnHand:', calculatedCashOnHand);
 
     setPaidTodayCustomers(paidToday);
     setNotPaidTodayCustomers(notPaidToday);
@@ -512,7 +518,7 @@ export default function DashboardScreen({ user, userProfile }) {
                   <Text style={styles.totalText}>+ Total Paid Today: ₹{formatNumberWithCommas((totalPaidCash + totalPaidUPI).toFixed(2))}</Text>
                   <Text style={styles.totalText}>- Pending Customer(s): ₹{formatNumberWithCommas(totalAmountGivenPending.toFixed(2))}</Text>
                   <Text style={styles.totalText}>- Total Expenses: ₹{formatNumberWithCommas(totalExpenses.toFixed(2))}</Text>
-                  <Text style={[styles.totalText, styles.cashOnHandText]}>Cash on Hand: ₹{formatNumberWithCommas(cashOnHand.toFixed(2))}</Text>
+                  <Text style={[styles.totalText, styles.cashOnHandText]}>Cash on Hand: {cashOnHand >= 0 ? '+' : ''}₹{formatNumberWithCommas(cashOnHand.toFixed(2))}</Text>
                 </View>
               )}
               <TouchableOpacity

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { supabase } from '../services/supabase';
 
@@ -42,7 +42,7 @@ const BankTransactionScreen = ({ navigation }) => {
     }, []);
 
     // Effect for Area filtering
-    useEffect(() => {
+        useEffect(() => {
         console.log('Area search query changed:', areaSearchQuery);
         console.log('Current areaMasters:', areaMasters);
 
@@ -52,7 +52,6 @@ const BankTransactionScreen = ({ navigation }) => {
                 area.area_name.toLowerCase().includes(lowerCaseQuery)
             );
             setFilteredAreas(filtered);
-            setShowAreaSuggestions(true);
             console.log('Filtered areas:', filtered);
         } else {
             setFilteredAreas(areaMasters);
@@ -72,7 +71,6 @@ const BankTransactionScreen = ({ navigation }) => {
                 account.account_number.toLowerCase().includes(lowerCaseQuery)
             );
             setFilteredBankAccounts(filtered);
-            setShowBankAccountSuggestions(true);
             console.log('Filtered bank accounts:', filtered);
         } else {
             setFilteredBankAccounts(bankAccounts);
@@ -218,126 +216,134 @@ const BankTransactionScreen = ({ navigation }) => {
     );
 
 
-    return (
-        <View style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollViewContent}> 
+    const renderHeader = () => (
+        <View style={styles.scrollViewContent}>
+            <Text style={styles.label}>Select Area:</Text>
+            <TextInput
+                style={styles.input}
+                placeholder="Search or select area"
+                value={areaSearchQuery}
+                onChangeText={setAreaSearchQuery}
+                onFocus={() => setShowAreaSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowAreaSuggestions(false), 100)}
+            />
+            {showAreaSuggestions && (
+                <View>
+                    {filteredAreas.length > 0 ? (
+                        <FlatList
+                            data={filteredAreas}
+                            keyExtractor={(item) => item.id.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={styles.suggestionItem}
+                                    onPress={() => handleAreaSelect(item)}
+                                >
+                                    <Text>{item.area_name}</Text>
+                                </TouchableOpacity>
+                            )}
+                            style={styles.suggestionsList}
+                            scrollEnabled={false} // Disable scrolling for nested FlatList
+                        />
+                    ) : (
+                        <Text style={styles.noResultsText}>No matching areas found.</Text>
+                    )}
+                </View>
+            )}
 
-                <Text style={styles.label}>Select Area:</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Search or select area"
-                    value={areaSearchQuery}
-                    onChangeText={setAreaSearchQuery}
-                    onFocus={() => setShowAreaSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowAreaSuggestions(false), 100)}
-                />
-                {showAreaSuggestions && (
-                    <View>
-                        {filteredAreas.length > 0 ? (
-                            <FlatList
-                                data={filteredAreas}
-                                keyExtractor={(item) => item.id.toString()}
-                                renderItem={({ item }) => (
-                                    <TouchableOpacity
-                                        style={styles.suggestionItem}
-                                        onPress={() => handleAreaSelect(item)}
-                                    >
-                                        <Text>{item.area_name}</Text>
-                                    </TouchableOpacity>
-                                )}
-                                style={styles.suggestionsList}
-                            />
-                        ) : (
-                            <Text style={styles.noResultsText}>No matching areas found.</Text>
-                        )}
-                    </View>
-                )}
-
-                {/* New Bank Account Selection */}
-                <Text style={styles.label}>Select Bank Account:</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Search or select bank account"
-                    value={bankAccountSearchQuery}
-                    onChangeText={setBankAccountSearchQuery}
-                    onFocus={() => setShowBankAccountSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowBankAccountSuggestions(false), 100)}
-                />
-                {showBankAccountSuggestions && (
-                    <View>
-                        {filteredBankAccounts.length > 0 ? (
-                            <FlatList
-                                data={filteredBankAccounts}
-                                keyExtractor={(item) => item.id.toString()}
-                                renderItem={({ item }) => (
-                                    <TouchableOpacity
-                                        style={styles.suggestionItem}
-                                        onPress={() => handleBankAccountSelect(item)}
-                                    >
-                                        <Text>{item.bank_name} - {item.account_number}</Text>
-                                    </TouchableOpacity>
-                                )}
-                                style={styles.suggestionsList}
-                            />
-                        ) : (
-                            <Text style={styles.noResultsText}>No matching bank accounts found.</Text>
-                        )}
-                    </View>
-                )}
+            {/* New Bank Account Selection */}
+            <Text style={styles.label}>Select Bank Account:</Text>
+            <TextInput
+                style={styles.input}
+                placeholder="Search or select bank account"
+                value={bankAccountSearchQuery}
+                onChangeText={setBankAccountSearchQuery}
+                onFocus={() => setShowBankAccountSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowBankAccountSuggestions(false), 100)}
+            />
+            {showBankAccountSuggestions && (
+                <View>
+                    {filteredBankAccounts.length > 0 ? (
+                        <FlatList
+                            data={filteredBankAccounts}
+                            keyExtractor={(item) => item.id.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={styles.suggestionItem}
+                                    onPress={() => handleBankAccountSelect(item)}
+                                >
+                                    <Text>{item.bank_name} - {item.account_number}</Text>
+                                </TouchableOpacity>
+                            )}
+                            style={styles.suggestionsList}
+                            scrollEnabled={false} // Disable scrolling for nested FlatList
+                        />
+                    ) : (
+                        <Text style={styles.noResultsText}>No matching bank accounts found.</Text>
+                    )}
+                </View>
+            )}
 
 
-                <TextInput
-                    style={styles.input}
-                    placeholder="Amount"
-                    keyboardType="numeric"
-                    value={amount}
-                    onChangeText={setAmount}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Description"
-                    value={description}
-                    onChangeText={setDescription}
-                />
+            <TextInput
+                style={styles.input}
+                placeholder="Amount"
+                keyboardType="numeric"
+                value={amount}
+                onChangeText={setAmount}
+            />
+            <TextInput
+                style={styles.input}
+                placeholder="Description"
+                value={description}
+                onChangeText={setDescription}
+            />
 
-                <Text style={styles.label}>Transaction Type:</Text>
-                <Picker
-                    selectedValue={transactionType}
-                    style={styles.picker}
-                    onValueChange={(itemValue) => setTransactionType(itemValue)}
-                >
-                    <Picker.Item label="-- Select Transaction Type --" value={null} />
-                    {transactionTypes.map((type) => (
-                        <Picker.Item key={type} label={type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} value={type} />
-                    ))}
+            <Text style={styles.label}>Transaction Type:</Text>
+            <Picker
+                selectedValue={transactionType}
+                style={styles.picker}
+                onValueChange={(itemValue) => setTransactionType(itemValue)}
+            >
+                <Picker.Item label="-- Select Transaction Type --" value={null} />
+                {transactionTypes.map((type) => (
+                    <Picker.Item key={type} label={type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} value={type} />
+                ))}
                 </Picker>
 
-                <Button
-                    title={loading ? "Adding..." : "Add Transaction"}
-                    onPress={handleAddTransaction}
-                    disabled={loading}
-                />
+            <Button
+                title={loading ? "Adding..." : "Add Transaction"}
+                onPress={handleAddTransaction}
+                disabled={loading}
+            />
 
-                {/* Display Bank Transactions for the selected area */}
-                {areaMasterId && (
-                    <View style={styles.transactionsSection}>
-                        <Text style={styles.sectionTitle}>Transactions for Selected Area</Text>
-                        {loadingTransactions ? (
-                            <Text>Loading transactions...</Text>
-                        ) : bankTransactions.length > 0 ? (
-                            <FlatList
-                                data={bankTransactions}
-                                keyExtractor={(item) => item.id.toString()}
-                                renderItem={renderTransactionItem}
-                                style={styles.transactionsList}
-                            />
-                        ) : (
-                            <Text style={styles.noResultsText}>No transactions found for this area.</Text>
-                        )}
-                    </View>
+            {/* Section title for transactions */}
+            {areaMasterId && (
+                <View style={styles.transactionsSection}>
+                    <Text style={styles.sectionTitle}>Transactions for Selected Area</Text>
+                </View>
+            )}
+        </View>
+    );
+
+    return (
+        <View style={styles.container}>
+            <FlatList
+                data={bankTransactions}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={renderTransactionItem}
+                ListHeaderComponent={renderHeader}
+                ListEmptyComponent={() => (
+                    !areaMasterId ?
+                    <Text style={styles.noResultsText}>Please select an area to view transactions.</Text> :
+                    <Text style={styles.noResultsText}>No transactions found for this area.</Text>
                 )}
-
-            </ScrollView>
+                refreshControl={
+                    <RefreshControl
+                        refreshing={loadingTransactions}
+                        onRefresh={() => areaMasterId && fetchBankTransactions(areaMasterId)}
+                    />
+                }
+            />
         </View>
     );
 };
@@ -399,6 +405,15 @@ const styles = StyleSheet.create({
     scrollViewContent: {
         flexGrow: 1,
         paddingVertical: 20,
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        paddingHorizontal: 15,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
     },
     transactionsSection: {
         marginTop: 20,
