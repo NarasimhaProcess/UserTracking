@@ -23,6 +23,7 @@ import { Picker } from '@react-native-picker/picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Clipboard, Linking } from 'react-native'; // Added Linking
 import { MaterialIcons } from '@expo/vector-icons'; // Added MaterialIcons import
+import Icon from 'react-native-vector-icons/FontAwesome'; // Added FontAwesome Icon import
 
 
 const getDayName = () => {
@@ -126,11 +127,19 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [intervals, setIntervals] = useState({});
   const [userSearchQuery, setUserSearchQuery] = useState(''); // New state for user search
 
+  // Customer tab search states
+  const [selectedCustomerAreaId, setSelectedCustomerAreaId] = useState(null);
+  const [customerAreaSearchText, setCustomerAreaSearchText] = useState('');
+  const [filteredCustomerAreas, setFilteredCustomerAreas] = useState([]);
+  const [showCustomerAreaDropdown, setShowCustomerAreaDropdown] = useState(false);
+  const [customerDetailSearchQuery, setCustomerDetailSearchQuery] = useState('');
+
   // Area management state
   const [areas, setAreas] = useState([]);
   const [showAreaModal, setShowAreaModal] = useState(false);
   const [editingArea, setEditingArea] = useState(null);
   const [areaName, setAreaName] = useState('');
+  const [areaSearchQuery, setAreaSearchQuery] = useState(''); // New state for area search
   const [areaType, setAreaType] = useState('city');
   const [pinCode, setPinCode] = useState('');
   const [state, setState] = useState('');
@@ -195,12 +204,18 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [uploadedCustomers, setUploadedCustomers] = useState([]); // New state for parsed CSV data
 
   useEffect(() => {
+    // Update the navigation header title based on the active tab
+    navigation.setOptions({
+      title: `Admin - ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`,
+    });
+
     if (activeTab === 'users') {
       loadUsers();
     } else if (activeTab === 'areas') {
       loadAreas();
     } else if (activeTab === 'customers') {
       loadCustomers();
+      loadAreas(); // Load areas for the customer area search filter
     } else if (activeTab === 'groups') {
       loadGroups();
       loadGroupUsers();
@@ -216,7 +231,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       loadAreas(); // Load all areas for selection
       loadRepaymentPlans(); // Load all repayment plans for selection
     }
-  }, [userProfile, activeTab, activeConfigTab]);
+  }, [userProfile, activeTab, activeConfigTab, navigation]); // Add navigation to dependency array
 
   const loadCustomerTypes = async () => {
     setLoadingCustomerTypes(true);
@@ -294,10 +309,17 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const loadCustomers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('customers')
-        .select('*, repayment_plans(name, frequency)') // Fetch repayment plan details
+        .select('*, repayment_plans(name, frequency), area_master(area_name)') // Fetch repayment plan and area details
         .order('created_at', { ascending: false });
+
+      // Filter by selected area if an area is selected
+      if (selectedCustomerAreaId) {
+        query = query.eq('area_id', selectedCustomerAreaId);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         throw error;
@@ -501,13 +523,13 @@ export default function AdminScreen({ navigation, user, userProfile }) {
               <Text style={[styles.userMobile, { color: '#1C1C1E' }]}>Mobile: {item.mobile}</Text>
               <View style={styles.mobileActions}>
                 <TouchableOpacity onPress={() => makeCall(item.mobile)} style={styles.mobileActionButton}>
-                  <MaterialIcons name="phone" size={20} color="#007AFF" />
+                  <Icon name="phone" size={20} color="#007AFF" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => sendSMS(item.mobile)} style={styles.mobileActionButton}>
-                  <MaterialIcons name="message" size={20} color="#007AFF" />
+                  <Icon name="envelope" size={20} color="#007AFF" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => sendWhatsApp(item.mobile)} style={styles.mobileActionButton}>
-                  <MaterialIcons name="whatsapp" size={20} color="#25D366" />
+                  <Icon name="whatsapp" size={20} color="#25D366" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -561,9 +583,24 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       <View style={styles.itemCard}>
         <View style={styles.itemInfo}>
           <Text style={styles.itemName}>{item.name}</Text>
-          <Text style={styles.itemDetail}>Mobile: {item.mobile}</Text>
+          {item.mobile && (
+            <View style={styles.mobileContainer}>
+              <Text style={[styles.itemDetail, { color: '#1C1C1E' }]}>Mobile: {item.mobile}</Text>
+              <View style={styles.mobileActions}>
+                <TouchableOpacity onPress={() => makeCall(item.mobile)} style={styles.mobileActionButton}>
+                  <Icon name="phone" size={20} color="#007AFF" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => sendSMS(item.mobile)} style={styles.mobileActionButton}>
+                  <Icon name="envelope" size={20} color="#007AFF" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => sendWhatsApp(item.mobile)} style={styles.mobileActionButton}>
+                  <Icon name="whatsapp" size={20} color="#25D366" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
           <Text style={styles.itemDetail}>Email: {item.email}</Text>
-          <Text style={styles.itemDetail}>Card No: {item.cardno}</Text>
+          <Text style={styles.itemDetail}>Card No: {item.book_no}</Text>
           <Text style={styles.itemDetail}>Type: {item.customer_type}</Text>
           <Text style={styles.itemDetail}>Status: {item.status}</Text>
           {item.repayment_plans && (
@@ -582,12 +619,14 @@ export default function AdminScreen({ navigation, user, userProfile }) {
               <Text style={styles.editButtonText}>Activate</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => handleDeleteItem(item, 'customers', 'Customer', loadCustomers)}
-          >
-            <Text style={styles.deleteButtonText}>Delete</Text>
-          </TouchableOpacity>
+          {userProfile?.user_type === 'superadmin' && (
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => handleDeleteItem(item, 'customers', 'Customer', loadCustomers)}
+            >
+              <Text style={styles.deleteButtonText}>Delete</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -1599,12 +1638,36 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     </AdminModal>
   );
 
+  const filteredCustomersData = customers.filter(customer => {
+    const query = customerDetailSearchQuery.toLowerCase();
+    if (!query) return true; // If no search query, return all customers
+
+    return (
+      (customer.book_no && customer.book_no.toLowerCase().includes(query)) ||
+      (customer.name && customer.name.toLowerCase().includes(query)) ||
+      (customer.email && customer.email.toLowerCase().includes(query)) ||
+      (customer.mobile && customer.mobile.includes(query))
+    );
+  });
+
   const filteredUsers = users.filter(user => {
     const query = userSearchQuery.toLowerCase();
     return (
       (user.name && user.name.toLowerCase().includes(query)) ||
       (user.email && user.email.toLowerCase().includes(query)) ||
       (user.mobile && user.mobile.includes(query)) // Assuming 'mobile' field exists
+    );
+  });
+
+  const filteredAreasData = areas.filter(area => {
+    const query = areaSearchQuery.toLowerCase();
+    if (!query) return true; // If no search query, return all areas
+
+    return (
+      (area.area_name && area.area_name.toLowerCase().includes(query)) ||
+      (area.area_type && area.area_type.toLowerCase().includes(query)) ||
+      (area.pin_code && area.pin_code.toLowerCase().includes(query)) ||
+      (area.state && area.state.toLowerCase().includes(query))
     );
   });
 
@@ -1704,8 +1767,57 @@ export default function AdminScreen({ navigation, user, userProfile }) {
 
       {activeTab === 'customers' && (
         <View style={{ flex: 1, padding: 20 }}>
+          {/* Area Search Input */}
+          <Text style={styles.formLabel}>Filter by Area:</Text>
+          <TextInput
+            style={styles.input}
+            value={customerAreaSearchText}
+            onChangeText={(text) => {
+              setCustomerAreaSearchText(text);
+              setShowCustomerAreaDropdown(true);
+              setSelectedCustomerAreaId(null); // Clear selected area when typing
+              // Filter areas for dropdown suggestions
+              const filtered = areas.filter(area =>
+                area.area_name.toLowerCase().includes(text.toLowerCase())
+              );
+              setFilteredCustomerAreas(filtered);
+            }}
+            placeholder="Search Area by Name"
+            onFocus={() => setShowCustomerAreaDropdown(true)}
+          />
+          {showCustomerAreaDropdown && filteredCustomerAreas.length > 0 && (
+            <View style={styles.dropdownContainer}>
+              <FlatList
+                data={filteredCustomerAreas}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setSelectedCustomerAreaId(item.id);
+                      setCustomerAreaSearchText(item.area_name);
+                      setShowCustomerAreaDropdown(false);
+                      loadCustomers(); // Reload customers based on selected area
+                    }}
+                  >
+                    <Text>{item.area_name}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          )}
+
+          {/* Customer Detail Search Input */}
+          <Text style={styles.formLabel}>Search Customers:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Search by Card No, Name, Email, or Mobile"
+            value={customerDetailSearchQuery}
+            onChangeText={setCustomerDetailSearchQuery}
+          />
+
           <FlatList
-            data={customers}
+            data={filteredCustomersData} // Will define filteredCustomersData below
             renderItem={renderCustomerItem}
             keyExtractor={(item) => item.id}
             refreshControl={
@@ -1721,11 +1833,17 @@ export default function AdminScreen({ navigation, user, userProfile }) {
 
       {activeTab === 'areas' && (
         <View style={{ flex: 1, padding: 20 }}>
+          <TextInput
+            style={styles.input}
+            placeholder="Search areas by name, type, PIN, or state"
+            value={areaSearchQuery}
+            onChangeText={setAreaSearchQuery}
+          />
           <TouchableOpacity style={styles.addButton} onPress={handleAddArea}>
             <Text style={styles.addButtonText}>+ Add Area</Text>
           </TouchableOpacity>
           <FlatList
-            data={areas}
+            data={filteredAreasData} // Will define filteredAreasData below
             renderItem={renderAreaItem}
             keyExtractor={(item) => item.id.toString()}
             refreshControl={
@@ -1885,6 +2003,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
     paddingTop: 0, // Explicitly set to 0
     marginTop: 0,  // Explicitly set to 0
+  },
+  screenTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'left', // Changed to left
+    marginVertical: 10,
+    color: '#333',
+    marginLeft: 20, // Add some left margin for better alignment
   },
   
   
