@@ -1535,7 +1535,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             onPress={() => setActiveTab('customers')}
             onLongPress={() => Alert.alert('Customers', 'Manage customer accounts and their status')}
           >
-            <Text style={[styles.tabButtonText, activeTab === 'customers' && styles.activeTabButtonText]}>👥</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'customers' && styles.activeTabButtonText]}>🧑‍💼</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'areas' && styles.activeTabButton]}
