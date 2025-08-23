@@ -19,6 +19,10 @@ import BankAccountsScreen from './BankAccountsScreen';
 import LocationSearchBar from '../components/AreaSearchBar';
 import LeafletMap from '../components/LeafletMap';
 import { Picker } from '@react-native-picker/picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { Clipboard } from 'react-native';
+
+
 
 const AdminModal = ({ visible, onClose, title, children, onSave, saveButtonText = 'Save' }) => (
   <Modal
@@ -86,6 +90,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
 
   // User management state (existing)
   const [users, setUsers] = useState([]);
+  const [customers, setCustomers] = useState([]); // New state for customers
   const [loading, setLoading] = useState(false);
   const [intervals, setIntervals] = useState({});
 
@@ -152,11 +157,18 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [customerTypeName, setCustomerTypeName] = useState('');
   const [customerTypeDescription, setCustomerTypeDescription] = useState('');
 
+  // Customer Upload state
+  const [showCustomerUploadModal, setShowCustomerUploadModal] = useState(false);
+  const [selectedUploadAreaId, setSelectedUploadAreaId] = useState('');
+  const [uploadedCustomers, setUploadedCustomers] = useState([]); // New state for parsed CSV data
+
   useEffect(() => {
     if (activeTab === 'users') {
       loadUsers();
     } else if (activeTab === 'areas') {
       loadAreas();
+    } else if (activeTab === 'customers') {
+      loadCustomers();
     } else if (activeTab === 'groups') {
       loadGroups();
       loadGroupUsers();
@@ -168,6 +180,9 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       } else if (activeConfigTab === 'customerTypes') {
         loadCustomerTypes();
       }
+    } else if (activeTab === 'upload') {
+      loadAreas(); // Load all areas for selection
+      loadRepaymentPlans(); // Load all repayment plans for selection
     }
   }, [userProfile, activeTab, activeConfigTab]);
 
@@ -232,6 +247,26 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     } catch (error) {
       console.error('Error loading users:', error);
       Alert.alert('Error', 'Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadCustomers = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*, repayment_plans(name, frequency)') // Fetch repayment plan details
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+      setCustomers(data || []);
+    } catch (error) {
+      console.error('Error loading customers:', error);
+      Alert.alert('Error', 'Failed to load customers');
     } finally {
       setLoading(false);
     }
@@ -374,6 +409,36 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     }
   };
 
+  const handleActivateCustomer = async (customerId) => {
+    Alert.alert(
+      'Activate Customer',
+      'Are you sure you want to activate this customer?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Activate',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('customers')
+                .update({ status: 'Active' })
+                .eq('id', customerId);
+
+              if (error) {
+                throw error;
+              }
+              Alert.alert('Success', 'Customer activated successfully!');
+              loadCustomers(); // Refresh the list
+            } catch (error) {
+              console.error('Error activating customer:', error);
+              Alert.alert('Error', 'Failed to activate customer.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderUserItem = ({ item }) => {
     return (
       <View style={styles.userItemCard}>
@@ -414,6 +479,43 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             <Text style={styles.editButtonText}>
               {item.location_status === 1 ? 'Set Inactive' : 'Set Active'}
             </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderCustomerItem = ({ item }) => {
+    return (
+      <View style={styles.itemCard}>
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName}>{item.name}</Text>
+          <Text style={styles.itemDetail}>Mobile: {item.mobile}</Text>
+          <Text style={styles.itemDetail}>Email: {item.email}</Text>
+          <Text style={styles.itemDetail}>Card No: {item.cardno}</Text>
+          <Text style={styles.itemDetail}>Type: {item.customer_type}</Text>
+          <Text style={styles.itemDetail}>Status: {item.status}</Text>
+          {item.repayment_plans && (
+            <Text style={styles.itemDetail}>Plan: {item.repayment_plans.name} ({item.repayment_plans.frequency})</Text>
+          )}
+          {item.start_date && <Text style={styles.itemDetail}>Start Date: {new Date(item.start_date).toLocaleDateString()}</Text>}
+          {item.end_date && <Text style={styles.itemDetail}>End Date: {new Date(item.end_date).toLocaleDateString()}</Text>}
+          {item.repayment_amount && <Text style={styles.itemDetail}>Repayment Amount: ₹{item.repayment_amount}</Text>}
+        </View>
+        <View style={styles.itemActions}>
+          {item.status === 'bulkupload' && (
+            <TouchableOpacity
+              style={[styles.editButton, { backgroundColor: '#007AFF' }]}
+              onPress={() => handleActivateCustomer(item.id)} // Call activate function
+            >
+              <Text style={styles.editButtonText}>Activate</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDeleteItem(item, 'customers', 'Customer', loadCustomers)}
+          >
+            <Text style={styles.deleteButtonText}>Delete</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -712,6 +814,236 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     });
     setShowPlanModal(true);
   };
+
+  const handleUploadCustomers = async () => {
+    if (!selectedUploadAreaId) {
+      Alert.alert('Error', 'Please select an Area.');
+      return;
+    }
+    if (uploadedCustomers.length === 0) {
+      Alert.alert('Error', 'No customer data to upload. Please select a CSV file.');
+      return;
+    }
+
+    // Fetch all repayment plans for lookup
+    const { data: allRepaymentPlans, error: plansError } = await supabase
+      .from('repayment_plans')
+      .select('id, name, frequency, periods');
+
+    if (plansError) {
+      Alert.alert('Error', 'Failed to fetch repayment plans for lookup.');
+      console.error('Plans fetch error:', plansError);
+      return;
+    }
+
+    Alert.alert(
+      'Confirm Upload',
+      `Are you sure you want to upload ${uploadedCustomers.length} customers to the selected Area?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Upload',
+          onPress: async () => {
+            try {
+              const customersToInsert = uploadedCustomers.map(customer => {
+                const matchedPlan = allRepaymentPlans.find(plan => {
+                  console.log(`Attempting to match: CSV Frequency=${customer.repayment_frequency}, CSV Periods=${customer.periods}, Plan Frequency=${plan.frequency}, Plan Periods=${plan.periods}`);
+                  return plan.frequency === customer.repayment_frequency.toLowerCase() &&
+                  plan.periods === parseInt(customer.periods.trim());
+                });
+
+                if (!matchedPlan) {
+                  throw new Error(`Repayment plan not found for: ${customer.repayment_frequency} with ${customer.periods} periods`);
+                }
+
+                // Calculate end_date in the app
+                const startDate = new Date(customer.start_date);
+                let endDate = new Date(startDate);
+                const periods = parseInt(customer.periods);
+
+                if (isNaN(periods)) {
+                  throw new Error(`Invalid periods value for ${customer.name}: ${customer.periods}`);
+                }
+
+                switch (customer.repayment_frequency.toLowerCase()) {
+                  case 'daily':
+                    endDate.setDate(startDate.getDate() + periods);
+                    break;
+                  case 'weekly':
+                    endDate.setDate(startDate.getDate() + (periods * 7));
+                    break;
+                  case 'monthly':
+                    endDate.setMonth(startDate.getMonth() + periods);
+                    break;
+                  case 'yearly':
+                    endDate.setFullYear(startDate.getFullYear() + periods);
+                    break;
+                  default:
+                    throw new Error(`Unknown repayment frequency for ${customer.name}: ${customer.repayment_frequency}`);
+                }
+
+                // Format end_date to YYYY-MM-DD string
+                const formattedEndDate = endDate.toISOString().split('T')[0];
+
+                return {
+                  name: customer.name,
+                  mobile: customer.mobile,
+                  email: customer.email,
+                  book_no: customer.cardno, // Map cardno from CSV to book_no in DB
+                  customer_type: customer.customer_type,
+                  start_date: customer.start_date,
+                  amount_given: parseFloat(customer.amount_given),
+                  repayment_amount: parseFloat(customer.repayment_amount),
+                  end_date: formattedEndDate, // Calculated in app
+                  area_id: selectedUploadAreaId,
+                  repayment_plan_id: matchedPlan.id,
+                  days_to_complete: parseInt(customer.periods),
+                  user_id: user.id,
+                  repayment_frequency: customer.repayment_frequency,
+                  remarks: "bulkupload",
+                  user_id: user.id,
+                };
+              });
+
+              const { error } = await supabase
+                .from('customers') // Assuming your customer table is named 'customers'
+                .insert(customersToInsert);
+
+              if (error) {
+                throw error;
+              }
+
+              Alert.alert('Success', `${uploadedCustomers.length} customers uploaded successfully!`);
+              setShowCustomerUploadModal(false);
+              setUploadedCustomers([]); // Clear uploaded data after successful upload
+              setSelectedUploadAreaId('');
+            } catch (error) {
+              console.error('Error uploading customers:', error);
+              Alert.alert('Upload Error', `Failed to upload customers: ${error.message}`);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handlePickCsvFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled === false && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0].uri;
+        const fileContent = await fetch(uri);
+        const text = await fileContent.text();
+
+        // Simple CSV parsing (assumes no commas within fields and first row is header)
+        const lines = text.trim().split('\n');
+        if (lines.length === 0) {
+          Alert.alert('Error', 'CSV file is empty.');
+          return;
+        }
+
+        const headers = lines[0].split(',').map(header => header.trim());
+        const parsedData = [];
+
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(value => value.trim());
+          if (values.length !== headers.length) {
+            console.warn(`Skipping row ${i + 1} due to column mismatch.`);
+            continue;
+          }
+          const rowData = {};
+          for (let j = 0; j < headers.length; j++) {
+            rowData[headers[j]] = values[j];
+          }
+          parsedData.push(rowData);
+        }
+
+        setUploadedCustomers(parsedData);
+        Alert.alert('File Selected', `${parsedData.length} rows parsed from CSV.`);
+      } else {
+        Alert.alert('File Selection Cancelled', 'No file was selected.');
+      }
+    } catch (err) {
+      console.error('Error picking document:', err);
+      Alert.alert('Error', 'Failed to pick document.');
+    }
+  };
+
+  const renderCustomerUploadModal = () => {
+    const csvColumns = "name, mobile, email, cardno, customer_type, start_date (YYYY-MM-DD), amount_given, repayment_amount, repayment_frequency, periods";
+    const copyToClipboard = () => {
+      Clipboard.setString(csvColumns);
+      Alert.alert('Copied', 'CSV columns copied to clipboard.');
+    };
+
+    return (
+      <AdminModal
+        visible={showCustomerUploadModal}
+        onClose={() => setShowCustomerUploadModal(false)}
+        title="Upload Customers"
+        onSave={handleUploadCustomers}
+        saveButtonText="Upload"
+      >
+        <Text style={styles.formLabel}>Select Area:</Text>
+        <Picker
+          selectedValue={selectedUploadAreaId}
+          onValueChange={setSelectedUploadAreaId}
+          style={styles.input}
+        >
+          <Picker.Item label="Select Area" value="" />
+          {areas.map((area) => (
+            <Picker.Item key={area.id} label={area.area_name} value={area.id} />
+          ))}
+        </Picker>
+
+        <View style={{ marginVertical: 10 }}>
+          <Text style={styles.csvInstructionText}>
+            Please select a CSV file with the following columns:
+          </Text>
+          <Text style={styles.columnText}>{csvColumns}</Text>
+          <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
+            <Text style={styles.copyButtonText}>Copy Columns</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Placeholder for file picker */}
+        <TouchableOpacity style={styles.locationButton} onPress={handlePickCsvFile}>
+          <Text style={styles.locationButtonText}>Select CSV File</Text>
+        </TouchableOpacity>
+
+        {uploadedCustomers.length > 0 && (
+          <View style={styles.csvPreviewContainer}>
+            <Text style={styles.formLabel}>CSV Preview ({uploadedCustomers.length} rows):</Text>
+            <ScrollView horizontal>
+              <View>
+                <View style={styles.csvHeaderRow}>
+                  {Object.keys(uploadedCustomers[0]).map((header, index) => (
+                    <Text key={index} style={styles.csvHeaderCell}>{header}</Text>
+                  ))}
+                </View>
+                {uploadedCustomers.slice(0, 5).map((row, rowIndex) => (
+                  <View key={rowIndex} style={styles.csvDataRow}>
+                    {Object.values(row).map((value, colIndex) => (
+                      <Text key={colIndex} style={styles.csvDataCell}>{value}</Text>
+                    ))}
+                  </View>
+                ))}
+                {uploadedCustomers.length > 5 && (
+                  <Text style={styles.csvMoreText}>... {uploadedCustomers.length - 5} more rows</Text>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        )}
+
+      </AdminModal>
+    );
+  };
+
   const handleEditPlan = (plan) => {
     setEditingPlan(plan);
     setPlanForm({
@@ -1202,6 +1534,13 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             <Text style={[styles.tabButtonText, activeTab === 'users' && styles.activeTabButtonText]}>👤</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'customers' && styles.activeTabButton]}
+            onPress={() => setActiveTab('customers')}
+            onLongPress={() => Alert.alert('Customers', 'Manage customer accounts and their status')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'customers' && styles.activeTabButtonText]}>👥</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.tabButton, activeTab === 'areas' && styles.activeTabButton]}
             onPress={() => setActiveTab('areas')}
             onLongPress={() => Alert.alert('Areas', 'Manage geographical areas')}
@@ -1236,6 +1575,13 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             <Text style={[styles.tabButtonText, activeTab === 'configuration' && styles.tabButtonText]}>⚙️</Text>
             {/* Consider using a proper icon library (e.g., react-native-vector-icons) for better visual representation. */}
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'upload' && styles.activeTabButton]}
+            onPress={() => setActiveTab('upload')}
+            onLongPress={() => Alert.alert('Upload Customers', 'Upload customer data via CSV/Excel')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'upload' && styles.activeTabButtonText]}>☁️</Text>
+          </TouchableOpacity>
         </View>
 
       {activeTab === 'users' && (
@@ -1247,6 +1593,23 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             keyExtractor={(item) => item.id}
             refreshControl={
               <RefreshControl refreshing={loading} onRefresh={loadUsers} />
+            }
+            contentContainerStyle={styles.listContainer}
+          />
+        </View>
+      )}
+
+      {activeTab === 'customers' && (
+        <View style={{ flex: 1, padding: 20 }}>
+          <FlatList
+            data={customers}
+            renderItem={renderCustomerItem}
+            keyExtractor={(item) => item.id}
+            refreshControl={
+              <RefreshControl refreshing={loading} onRefresh={loadCustomers} />
+            }
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>No customers found.</Text>
             }
             contentContainerStyle={styles.listContainer}
           />
@@ -1398,6 +1761,15 @@ export default function AdminScreen({ navigation, user, userProfile }) {
               </AdminModal>
             </View>
           )}
+        </View>
+      )}
+
+      {activeTab === 'upload' && (
+        <View style={{ flex: 1, padding: 20 }}>
+          <TouchableOpacity style={styles.addButton} onPress={() => setShowCustomerUploadModal(true)}>
+            <Text style={styles.addButtonText}>Upload Customers</Text>
+          </TouchableOpacity>
+          {renderCustomerUploadModal()}
         </View>
       )}
     </View>
@@ -1648,6 +2020,150 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     marginBottom: 8,
   },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
   pickerRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1690,5 +2206,50 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  csvPreviewContainer: {
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    padding: 10,
+    maxHeight: 200,
+  },
+  csvHeaderRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F2F2F7',
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  csvHeaderCell: {
+    fontWeight: 'bold',
+    paddingHorizontal: 10,
+    flex: 1,
+    minWidth: 80,
+  },
+  csvDataRow: {
+    flexDirection: 'row',
+    paddingVertical: 5,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#F2F2F7',
+  },
+  csvDataCell: {
+    paddingHorizontal: 10,
+    flex: 1,
+    minWidth: 80,
+  },
+  csvMoreText: {
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: 5,
+    color: '#8E8E93',
+  },
+  csvInstructionText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 15,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 }); 
