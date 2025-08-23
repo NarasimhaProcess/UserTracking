@@ -11,12 +11,14 @@ import {
   RefreshControl,
   TextInput,
   Modal,
+  Switch,
 } from 'react-native';
 import { supabase } from '../services/supabase';
 import BankTransactionScreen from './BankTransactionScreen';
 import BankAccountsScreen from './BankAccountsScreen';
 import LocationSearchBar from '../components/AreaSearchBar';
 import LeafletMap from '../components/LeafletMap';
+import { Picker } from '@react-native-picker/picker';
 
 const AdminModal = ({ visible, onClose, title, children, onSave, saveButtonText = 'Save' }) => (
   <Modal
@@ -28,7 +30,9 @@ const AdminModal = ({ visible, onClose, title, children, onSave, saveButtonText 
     <View style={styles.modalOverlay}>
       <View style={styles.modalContent}>
         <Text style={styles.modalTitle}>{title}</Text>
-        {children}
+        <ScrollView keyboardShouldPersistTaps="handled">
+          {children}
+        </ScrollView>
         <View style={styles.modalActions}>
           <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
             <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -41,6 +45,39 @@ const AdminModal = ({ visible, onClose, title, children, onSave, saveButtonText 
     </View>
   </Modal>
 );
+
+const convert12HourTo24Hour = (time12h) => {
+  if (!time12h) return null;
+  const [time, ampm] = time12h.split(' ');
+  let [hours, minutes] = time.split(':');
+  hours = parseInt(hours);
+  if (ampm === 'PM' && hours < 12) hours += 12;
+  if (ampm === 'AM' && hours === 12) hours = 0;
+  return `${String(hours).padStart(2, '0')}:${minutes}`;
+};
+
+const convert24HourTo12Hour = (time24h) => {
+  if (!time24h) return '';
+  const [hours, minutes] = time24h.split(':');
+  let h = parseInt(hours);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  h = h === 0 ? 12 : h; // The hour '0' should be '12 AM'
+  return `${h}:${minutes} ${ampm}`;
+};
+
+const generateTimeOptions = () => {
+  const times = [];
+  for (let i = 0; i < 24; i++) {
+    for (let j = 0; j < 60; j += 30) {
+      const hour = i === 0 ? 12 : (i > 12 ? i - 12 : i);
+      const ampm = i < 12 ? 'AM' : 'PM';
+      const minute = j === 0 ? '00' : '30';
+      times.push(`${hour}:${minute} ${ampm}`);
+    }
+  }
+  return times;
+};
 
 export default function AdminScreen({ navigation, user, userProfile }) {
   // Tab state
@@ -61,6 +98,10 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [pinCode, setPinCode] = useState('');
   const [state, setState] = useState('');
   const [description, setDescription] = useState('');
+  const [enableDay, setEnableDay] = useState(false);
+  const [dayOfWeek, setDayOfWeek] = useState('');
+  const [startTimeFilter, setStartTimeFilter] = useState('');
+  const [endTimeFilter, setEndTimeFilter] = useState('');
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [mapRegion, setMapRegion] = useState({
@@ -502,6 +543,10 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     setPinCode('');
     setState('');
     setDescription('');
+    setEnableDay(false);
+    setDayOfWeek('');
+    setStartTimeFilter('');
+    setEndTimeFilter('');
     setSelectedLocation(null); // Reset location
     setShowAreaModal(true);
   };
@@ -513,6 +558,10 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     setPinCode(area.pin_code || '');
     setState(area.state || '');
     setDescription(area.description || '');
+    setEnableDay(area.enable_day || false);
+    setDayOfWeek(area.day_of_week || '');
+    setStartTimeFilter(convert24HourTo12Hour(area.start_time_filter) || '');
+    setEndTimeFilter(convert24HourTo12Hour(area.end_time_filter) || '');
     if (area.latitude && area.longitude) {
       setSelectedLocation({ latitude: area.latitude, longitude: area.longitude });
       setMapRegion({
@@ -539,6 +588,10 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       pin_code: pinCode.trim() || null,
       state: state.trim() || null,
       description: description.trim() || null,
+      enable_day: enableDay,
+      day_of_week: dayOfWeek || null,
+      start_time_filter: convert12HourTo24Hour(startTimeFilter),
+      end_time_filter: convert12HourTo24Hour(endTimeFilter),
       latitude: selectedLocation ? selectedLocation.latitude : null,
       longitude: selectedLocation ? selectedLocation.longitude : null,
     };
@@ -936,6 +989,49 @@ export default function AdminScreen({ navigation, user, userProfile }) {
         multiline
         numberOfLines={3}
       />
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+        <Text style={styles.formLabel}>Enable Day Filter:</Text>
+        <Switch
+          onValueChange={setEnableDay}
+          value={enableDay}
+        />
+      </View>
+      {enableDay && (
+        <>
+          <Text style={styles.formLabel}>Day of Week:</Text>
+          <Picker selectedValue={dayOfWeek} onValueChange={setDayOfWeek} style={styles.input}>
+            <Picker.Item label="Select Day" value="" />
+            <Picker.Item label="Monday" value="Monday" />
+            <Picker.Item label="Tuesday" value="Tuesday" />
+            <Picker.Item label="Wednesday" value="Wednesday" />
+            <Picker.Item label="Thursday" value="Thursday" />
+            <Picker.Item label="Friday" value="Friday" />
+            <Picker.Item label="Saturday" value="Saturday" />
+            <Picker.Item label="Sunday" value="Sunday" />
+          </Picker>
+          <Text style={styles.formLabel}>Start Time Filter:</Text>
+          <Picker
+            selectedValue={startTimeFilter}
+            onValueChange={setStartTimeFilter}
+            style={styles.input}
+          >
+            {generateTimeOptions().map((time) => (
+              <Picker.Item key={time} label={time} value={time} />
+            ))}
+          </Picker>
+          <Text style={styles.formLabel}>End Time Filter:</Text>
+          <Picker
+            selectedValue={endTimeFilter}
+            onValueChange={setEndTimeFilter}
+            style={styles.input}
+          >
+            {generateTimeOptions().map((time) => (
+              <Picker.Item key={time} label={time} value={time} />
+            ))}
+          </Picker>
+        </>
+      )}
 
       <TouchableOpacity style={styles.locationButton} onPress={openLocationPicker}>
         <Text style={styles.locationButtonText}>
