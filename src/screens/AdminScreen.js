@@ -17,6 +17,7 @@ import { supabase } from '../services/supabase';
 import BankTransactionScreen from './BankTransactionScreen';
 import BankAccountsScreen from './BankAccountsScreen';
 import LocationSearchBar from '../components/AreaSearchBar';
+import SearchableDropdown from '../components/SearchableDropdown';
 import LeafletMap from '../components/LeafletMap';
 import { Picker } from '@react-native-picker/picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -901,7 +902,6 @@ export default function AdminScreen({ navigation, user, userProfile }) {
                   user_id: user.id,
                   repayment_frequency: customer.repayment_frequency,
                   remarks: "bulkupload",
-                  user_id: user.id,
                 };
               });
 
@@ -915,7 +915,6 @@ export default function AdminScreen({ navigation, user, userProfile }) {
 
               Alert.alert('Success', `${uploadedCustomers.length} customers uploaded successfully!`);
               setShowCustomerUploadModal(false);
-              setUploadedCustomers([]); // Clear uploaded data after successful upload
               setSelectedUploadAreaId('');
             } catch (error) {
               console.error('Error uploading customers:', error);
@@ -989,16 +988,14 @@ export default function AdminScreen({ navigation, user, userProfile }) {
         saveButtonText="Upload"
       >
         <Text style={styles.formLabel}>Select Area:</Text>
-        <Picker
+        <SearchableDropdown
+          data={areas}
+          onSelect={setSelectedUploadAreaId}
           selectedValue={selectedUploadAreaId}
-          onValueChange={setSelectedUploadAreaId}
-          style={styles.input}
-        >
-          <Picker.Item label="Select Area" value="" />
-          {areas.map((area) => (
-            <Picker.Item key={area.id} label={area.area_name} value={area.id} />
-          ))}
-        </Picker>
+          placeholder="Select Area"
+          labelField="area_name"
+          valueField="id"
+        />
 
         <View style={{ marginVertical: 10 }}>
           <Text style={styles.csvInstructionText}>
@@ -2019,6 +2016,102 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1C1C1E',
     marginBottom: 8,
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  columnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
   columnText: {
     fontSize: 16,

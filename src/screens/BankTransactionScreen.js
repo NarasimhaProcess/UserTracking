@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import SearchableDropdown from '../components/SearchableDropdown';
 import { supabase } from '../services/supabase';
 
 const BankTransactionScreen = ({ navigation }) => {
@@ -16,11 +17,9 @@ const BankTransactionScreen = ({ navigation }) => {
     const [showAreaSuggestions, setShowAreaSuggestions] = useState(false);
 
     // New state for Bank Accounts
+        // New state for Bank Accounts
     const [bankAccountId, setBankAccountId] = useState(null);
     const [bankAccounts, setBankAccounts] = useState([]);
-    const [bankAccountSearchQuery, setBankAccountSearchQuery] = useState('');
-    const [filteredBankAccounts, setFilteredBankAccounts] = useState([]);
-    const [showBankAccountSuggestions, setShowBankAccountSuggestions] = useState(false);
 
     // New state for Bank Transactions (for display)
     const [bankTransactions, setBankTransactions] = useState([]);
@@ -40,43 +39,6 @@ const BankTransactionScreen = ({ navigation }) => {
         fetchAreaMasters();
         fetchBankAccounts(); // Fetch bank accounts on component mount
     }, []);
-
-    // Effect for Area filtering
-        useEffect(() => {
-        console.log('Area search query changed:', areaSearchQuery);
-        console.log('Current areaMasters:', areaMasters);
-
-        if (areaSearchQuery.length > 0) {
-            const lowerCaseQuery = areaSearchQuery.toLowerCase();
-            const filtered = areaMasters.filter(area =>
-                area.area_name.toLowerCase().includes(lowerCaseQuery)
-            );
-            setFilteredAreas(filtered);
-            console.log('Filtered areas:', filtered);
-        } else {
-            setFilteredAreas(areaMasters);
-            console.log('Area search query empty, showing all areas if suggestions active.');
-        }
-    }, [areaSearchQuery, areaMasters]);
-
-    // Effect for Bank Account filtering
-    useEffect(() => {
-        console.log('Bank account search query changed:', bankAccountSearchQuery);
-        console.log('Current bankAccounts:', bankAccounts);
-
-        if (bankAccountSearchQuery.length > 0) {
-            const lowerCaseQuery = bankAccountSearchQuery.toLowerCase();
-            const filtered = bankAccounts.filter(account =>
-                account.bank_name.toLowerCase().includes(lowerCaseQuery) ||
-                account.account_number.toLowerCase().includes(lowerCaseQuery)
-            );
-            setFilteredBankAccounts(filtered);
-            console.log('Filtered bank accounts:', filtered);
-        } else {
-            setFilteredBankAccounts(bankAccounts);
-            console.log('Bank account search query empty, showing all accounts if suggestions active.');
-        }
-    }, [bankAccountSearchQuery, bankAccounts]);
 
     // Effect to fetch transactions when areaMasterId changes
     useEffect(() => {
@@ -219,69 +181,25 @@ const BankTransactionScreen = ({ navigation }) => {
     const renderHeader = () => (
         <View style={styles.scrollViewContent}>
             <Text style={styles.label}>Select Area:</Text>
-            <TextInput
-                style={styles.input}
-                placeholder="Search or select area"
-                value={areaSearchQuery}
-                onChangeText={setAreaSearchQuery}
-                onFocus={() => setShowAreaSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowAreaSuggestions(false), 100)}
+            <SearchableDropdown
+                data={areaMasters}
+                onSelect={setAreaMasterId}
+                selectedValue={areaMasterId}
+                placeholder="Select Area"
+                labelField="area_name"
+                valueField="id"
             />
-            {showAreaSuggestions && (
-                <View>
-                    {filteredAreas.length > 0 ? (
-                        <FlatList
-                            data={filteredAreas}
-                            keyExtractor={(item) => item.id.toString()}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={styles.suggestionItem}
-                                    onPress={() => handleAreaSelect(item)}
-                                >
-                                    <Text>{item.area_name}</Text>
-                                </TouchableOpacity>
-                            )}
-                            style={styles.suggestionsList}
-                            scrollEnabled={false} // Disable scrolling for nested FlatList
-                        />
-                    ) : (
-                        <Text style={styles.noResultsText}>No matching areas found.</Text>
-                    )}
-                </View>
-            )}
 
             {/* New Bank Account Selection */}
             <Text style={styles.label}>Select Bank Account:</Text>
-            <TextInput
-                style={styles.input}
-                placeholder="Search or select bank account"
-                value={bankAccountSearchQuery}
-                onChangeText={setBankAccountSearchQuery}
-                onFocus={() => setShowBankAccountSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowBankAccountSuggestions(false), 100)}
+            <SearchableDropdown
+                data={bankAccounts}
+                onSelect={setBankAccountId}
+                selectedValue={bankAccountId}
+                placeholder="Select Bank Account"
+                labelField="bank_name" // Assuming bank_name is the primary display field
+                valueField="id"
             />
-            {showBankAccountSuggestions && (
-                <View>
-                    {filteredBankAccounts.length > 0 ? (
-                        <FlatList
-                            data={filteredBankAccounts}
-                            keyExtractor={(item) => item.id.toString()}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={styles.suggestionItem}
-                                    onPress={() => handleBankAccountSelect(item)}
-                                >
-                                    <Text>{item.bank_name} - {item.account_number}</Text>
-                                </TouchableOpacity>
-                            )}
-                            style={styles.suggestionsList}
-                            scrollEnabled={false} // Disable scrolling for nested FlatList
-                        />
-                    ) : (
-                        <Text style={styles.noResultsText}>No matching bank accounts found.</Text>
-                    )}
-                </View>
-            )}
 
 
             <TextInput
