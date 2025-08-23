@@ -166,6 +166,8 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [groupDescription, setGroupDescription] = useState('');
   const [groupAreaSearchQuery, setGroupAreaSearchQuery] = useState(''); // New state for group area search
   const [userSearch, setUserSearch] = useState('');
+  const [groupSearchQuery, setGroupSearchQuery] = useState(''); // New state for group search
+  const [groupAreaFilterQuery, setGroupAreaFilterQuery] = useState(''); // New state for filtering groups by area
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [groupUsers, setGroupUsers] = useState([]);
 
@@ -1698,6 +1700,26 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     );
   });
 
+  const filteredGroups = groups.filter(group => {
+    const groupQuery = groupSearchQuery.toLowerCase();
+    const areaFilterQuery = groupAreaFilterQuery.toLowerCase();
+
+    const matchesGroupSearch = (
+      !groupQuery ||
+      (group.name && group.name.toLowerCase().includes(groupQuery)) ||
+      (group.description && group.description.toLowerCase().includes(groupQuery))
+    );
+
+    const matchesAreaFilter = (
+      !areaFilterQuery ||
+      (group.group_areas && group.group_areas.some(ga => 
+        ga.area_master && ga.area_master.area_name.toLowerCase().includes(areaFilterQuery)
+      ))
+    );
+
+    return matchesGroupSearch && matchesAreaFilter;
+  });
+
   const getRoleColor = (role) => {
     switch (role) {
       case 'superadmin':
@@ -1713,7 +1735,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     <View style={styles.container}>
       
 
-            <View style={styles.tabContainer}>
+                        <View style={styles.tabContainer}>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'users' && styles.activeTabButton]}
             onPress={() => setActiveTab('users')}
@@ -1722,39 +1744,50 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             <Text style={[styles.tabButtonText, activeTab === 'users' && styles.activeTabButtonText]}>👤</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'customers' && styles.activeTabButton]}
-            onPress={() => setActiveTab('customers')}
-            onLongPress={() => Alert.alert('Customers', 'Manage customer accounts and their status')}
-          >
-            <Text style={[styles.tabButtonText, activeTab === 'customers' && styles.activeTabButtonText]}>🧑‍💼</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
             style={[styles.tabButton, activeTab === 'areas' && styles.activeTabButton]}
             onPress={() => setActiveTab('areas')}
             onLongPress={() => Alert.alert('Areas', 'Manage geographical areas')}
           >
-            <Text style={[styles.tabButtonText, activeTab === 'areas' && styles.activeTabButtonText]}>📍</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'areas' && styles.tabButtonText]}>📍</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'groups' && styles.activeTabButton]}
             onPress={() => setActiveTab('groups')}
             onLongPress={() => Alert.alert('Groups', 'Manage user groups and their assigned areas')}
           >
-            <Text style={[styles.tabButtonText, activeTab === 'groups' && styles.activeTabButtonText]}>👥</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'groups' && styles.tabButtonText]}>👥</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'bankTransactions' && styles.activeTabButton]}
-            onPress={() => setActiveTab('bankTransactions')}
-            onLongPress={() => Alert.alert('Bank Transactions', 'View and manage bank transactions')}
+            style={[styles.tabButton, activeTab === 'customers' && styles.activeTabButton]}
+            onPress={() => setActiveTab('customers')}
+            onLongPress={() => Alert.alert('Customers', 'Manage customer accounts and their status')}
           >
-            <Text style={[styles.tabButtonText, activeTab === 'bankTransactions' && styles.tabButtonText]}>💳</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'customers' && styles.tabButtonText]}>🧑‍💼</Text>
           </TouchableOpacity>
+          {userProfile?.user_type === 'superadmin' && (
+            <TouchableOpacity
+              style={[styles.tabButton, activeTab === 'bankTransactions' && styles.activeTabButton]}
+              onPress={() => setActiveTab('bankTransactions')}
+              onLongPress={() => Alert.alert('Bank Transactions', 'View and manage bank transactions')}
+            >
+              <Text style={[styles.tabButtonText, activeTab === 'bankTransactions' && styles.tabButtonText]}>💳</Text>
+            </TouchableOpacity>
+          )}
+          {userProfile?.user_type === 'superadmin' && (
+            <TouchableOpacity
+              style={[styles.tabButton, activeTab === 'bankAccounts' && styles.activeTabButton]}
+              onPress={() => setActiveTab('bankAccounts')}
+              onLongPress={() => Alert.alert('Bank Accounts', 'Manage linked bank accounts')}
+            >
+              <Text style={[styles.tabButtonText, activeTab === 'bankAccounts' && styles.tabButtonText]}>🏦</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'bankAccounts' && styles.activeTabButton]}
-            onPress={() => setActiveTab('bankAccounts')}
-            onLongPress={() => Alert.alert('Bank Accounts', 'Manage linked bank accounts')}
+            style={[styles.tabButton, activeTab === 'upload' && styles.activeTabButton]}
+            onPress={() => setActiveTab('upload')}
+            onLongPress={() => Alert.alert('Upload Customers', 'Upload customer data via CSV/Excel')}
           >
-            <Text style={[styles.tabButtonText, activeTab === 'bankAccounts' && styles.tabButtonText]}>🏦</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'upload' && styles.tabButtonText]}>☁️</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'configuration' && styles.activeTabButton]}
@@ -1762,13 +1795,6 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           >
             <Text style={[styles.tabButtonText, activeTab === 'configuration' && styles.tabButtonText]}>⚙️</Text>
             {/* Consider using a proper icon library (e.g., react-native-vector-icons) for better visual representation. */}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'upload' && styles.activeTabButton]}
-            onPress={() => setActiveTab('upload')}
-            onLongPress={() => Alert.alert('Upload Customers', 'Upload customer data via CSV/Excel')}
-          >
-            <Text style={[styles.tabButtonText, activeTab === 'upload' && styles.activeTabButtonText]}>☁️</Text>
           </TouchableOpacity>
         </View>
 
@@ -1888,11 +1914,23 @@ export default function AdminScreen({ navigation, user, userProfile }) {
 
       {activeTab === 'groups' && (
         <View style={{ flex: 1, padding: 20 }}>
+          <TextInput
+            style={styles.input}
+            placeholder="Search Groups by Name or Description"
+            value={groupSearchQuery}
+            onChangeText={setGroupSearchQuery}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Filter Groups by Area Name"
+            value={groupAreaFilterQuery}
+            onChangeText={setGroupAreaFilterQuery}
+          />
           <TouchableOpacity style={styles.addButton} onPress={handleAddGroup}>
             <Text style={styles.addButtonText}>+ Add Group</Text>
           </TouchableOpacity>
           <FlatList
-            data={groups}
+            data={filteredGroups} // Use filteredGroups
             renderItem={renderGroupItem}
             keyExtractor={(item) => item.id.toString()}
             refreshControl={
