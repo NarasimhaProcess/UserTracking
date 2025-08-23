@@ -66,9 +66,7 @@ const AdminModal = ({ visible, onClose, title, children, onSave, saveButtonText 
     <View style={styles.modalOverlay}>
       <View style={styles.modalContent}>
         <Text style={styles.modalTitle}>{title}</Text>
-        <ScrollView keyboardShouldPersistTaps="handled">
-          {children}
-        </ScrollView>
+        {children}
         <View style={styles.modalActions}>
           <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
             <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -166,6 +164,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [groupName, setGroupName] = useState('');
   const [selectedAreaIds, setSelectedAreaIds] = useState([]);
   const [groupDescription, setGroupDescription] = useState('');
+  const [groupAreaSearchQuery, setGroupAreaSearchQuery] = useState(''); // New state for group area search
   const [userSearch, setUserSearch] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [groupUsers, setGroupUsers] = useState([]);
@@ -698,12 +697,15 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     try {
       const { data, error } = await supabase
         .from('area_master')
-        .select('id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter') // Select all necessary columns
+        .select('id, area_name, area_type, enable_day, day_of_week, start_time_filter, end_time_filter') // Select all necessary columns, including area_type
         .order('area_name', { ascending: true });
 
       if (error) {
+        console.error('Supabase error loading areas:', error);
         throw error;
       }
+
+      console.log('Areas loaded from Supabase:', data); // Add this line for debugging
 
       let filteredAreas = data || [];
 
@@ -728,6 +730,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       }
 
       setAreas(filteredAreas);
+      setAllAreas(data || []); // Populate allAreas for group selection
     } catch (error) {
       console.error('Error loading areas:', error);
       Alert.alert('Error', 'Failed to load areas');
@@ -1118,56 +1121,57 @@ export default function AdminScreen({ navigation, user, userProfile }) {
         onSave={handleUploadCustomers}
         saveButtonText="Upload"
       >
-        <Text style={styles.formLabel}>Select Area:</Text>
-        <SearchableDropdown
-          data={areas}
-          onSelect={setSelectedUploadAreaId}
-          selectedValue={selectedUploadAreaId}
-          placeholder="Select Area"
-          labelField="area_name"
-          valueField="id"
-        />
+        <ScrollView keyboardShouldPersistTaps="handled">
+          <Text style={styles.formLabel}>Select Area:</Text>
+          <SearchableDropdown
+            data={areas}
+            onSelect={setSelectedUploadAreaId}
+            selectedValue={selectedUploadAreaId}
+            placeholder="Select Area"
+            labelField="area_name"
+            valueField="id"
+          />
 
-        <View style={{ marginVertical: 10 }}>
-          <Text style={styles.csvInstructionText}>
-            Please select a CSV file with the following columns:
-          </Text>
-          <Text style={styles.columnText}>{csvColumns}</Text>
-          <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
-            <Text style={styles.copyButtonText}>Copy Columns</Text>
+          <View style={{ marginVertical: 10 }}>
+            <Text style={styles.csvInstructionText}>
+              Please select a CSV file with the following columns:
+            </Text>
+            <Text style={styles.columnText}>{csvColumns}</Text>
+            <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
+              <Text style={styles.copyButtonText}>Copy Columns</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Placeholder for file picker */}
+          <TouchableOpacity style={styles.locationButton} onPress={handlePickCsvFile}>
+            <Text style={styles.locationButtonText}>Select CSV File</Text>
           </TouchableOpacity>
-        </View>
 
-        {/* Placeholder for file picker */}
-        <TouchableOpacity style={styles.locationButton} onPress={handlePickCsvFile}>
-          <Text style={styles.locationButtonText}>Select CSV File</Text>
-        </TouchableOpacity>
-
-        {uploadedCustomers.length > 0 && (
-          <View style={styles.csvPreviewContainer}>
-            <Text style={styles.formLabel}>CSV Preview ({uploadedCustomers.length} rows):</Text>
-            <ScrollView horizontal>
-              <View>
-                <View style={styles.csvHeaderRow}>
-                  {Object.keys(uploadedCustomers[0]).map((header, index) => (
-                    <Text key={index} style={styles.csvHeaderCell}>{header}</Text>
-                  ))}
-                </View>
-                {uploadedCustomers.slice(0, 5).map((row, rowIndex) => (
-                  <View key={rowIndex} style={styles.csvDataRow}>
-                    {Object.values(row).map((value, colIndex) => (
-                      <Text key={colIndex} style={styles.csvDataCell}>{value}</Text>
+          {uploadedCustomers.length > 0 && (
+            <View style={styles.csvPreviewContainer}>
+              <Text style={styles.formLabel}>CSV Preview ({uploadedCustomers.length} rows):</Text>
+              <ScrollView horizontal>
+                <View>
+                  <View style={styles.csvHeaderRow}>
+                    {Object.keys(uploadedCustomers[0]).map((header, index) => (
+                      <Text key={index} style={styles.csvHeaderCell}>{header}</Text>
                     ))}
                   </View>
-                ))}
-                {uploadedCustomers.length > 5 && (
-                  <Text style={styles.csvMoreText}>... {uploadedCustomers.length - 5} more rows</Text>
-                )}
-              </View>
-            </ScrollView>
-          </View>
-        )}
-
+                  {uploadedCustomers.slice(0, 5).map((row, rowIndex) => (
+                    <View key={rowIndex} style={styles.csvDataRow}>
+                      {Object.values(row).map((value, colIndex) => (
+                        <Text key={colIndex} style={styles.csvDataCell}>{value}</Text>
+                      ))}
+                    </View>
+                  ))}
+                  {uploadedCustomers.length > 5 && (
+                    <Text style={styles.csvMoreText}>... {uploadedCustomers.length - 5} more rows</Text>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
+          )}
+        </ScrollView>
       </AdminModal>
     );
   };
@@ -1396,218 +1400,230 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       title={editingArea ? 'Edit Area' : 'Add New Area'}
       onSave={handleSaveArea}
     >
-      <TextInput
-        style={styles.input}
-        placeholder="Area Name"
-        value={areaName}
-        onChangeText={setAreaName}
-      />
-      
-      <View style={styles.pickerContainer}>
-        <Text style={styles.label}>Area Type:</Text>
-        <View style={styles.pickerRow}>
-          {['village', 'town', 'city', 'district'].map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={[
-                styles.pickerOption,
-                areaType === type && styles.pickerOptionSelected
-              ]}
-              onPress={() => setAreaType(type)}
-            >
-              <Text style={[
-                styles.pickerOptionText,
-                areaType === type && styles.pickerOptionTextSelected
-              ]}>
-                {type.charAt(0).toUpperCase() + type.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-      
-      <TextInput
-        style={styles.input}
-        placeholder="PIN Code (optional)"
-        value={pinCode}
-        onChangeText={setPinCode}
-        keyboardType="numeric"
-      />
-      
-      <TextInput
-        style={styles.input}
-        placeholder="State (optional)"
-        value={state}
-        onChangeText={setState}
-      />
-      
-      <TextInput
-        style={styles.input}
-        placeholder="Description (optional)"
-        value={description}
-        onChangeText={setDescription}
-        multiline
-        numberOfLines={3}
-      />
-
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-        <Text style={styles.formLabel}>Enable Day Filter:</Text>
-        <Switch
-          onValueChange={setEnableDay}
-          value={enableDay}
+      <ScrollView keyboardShouldPersistTaps="handled">
+        <TextInput
+          style={styles.input}
+          placeholder="Area Name"
+          value={areaName}
+          onChangeText={setAreaName}
         />
-      </View>
-      {enableDay && (
-        <>
-          <Text style={styles.formLabel}>Day of Week:</Text>
-          <Picker selectedValue={dayOfWeek} onValueChange={setDayOfWeek} style={styles.input}>
-            <Picker.Item label="Select Day" value="" />
-            <Picker.Item label="Monday" value="Monday" />
-            <Picker.Item label="Tuesday" value="Tuesday" />
-            <Picker.Item label="Wednesday" value="Wednesday" />
-            <Picker.Item label="Thursday" value="Thursday" />
-            <Picker.Item label="Friday" value="Friday" />
-            <Picker.Item label="Saturday" value="Saturday" />
-            <Picker.Item label="Sunday" value="Sunday" />
-          </Picker>
-          <Text style={styles.formLabel}>Start Time Filter:</Text>
-          <Picker
-            selectedValue={startTimeFilter}
-            onValueChange={setStartTimeFilter}
-            style={styles.input}
-          >
-            {generateTimeOptions().map((time) => (
-              <Picker.Item key={time} label={time} value={time} />
+        
+        <View style={styles.pickerContainer}>
+          <Text style={styles.label}>Area Type:</Text>
+          <View style={styles.pickerRow}>
+            {['village', 'town', 'city', 'district'].map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={[
+                  styles.pickerOption,
+                  areaType === type && styles.pickerOptionSelected
+                ]}
+                onPress={() => setAreaType(type)}
+              >
+                <Text style={[
+                  styles.pickerOptionText,
+                  areaType === type && styles.pickerOptionTextSelected
+                ]}>
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                </Text>
+              </TouchableOpacity>
             ))}
-          </Picker>
-          <Text style={styles.formLabel}>End Time Filter:</Text>
-          <Picker
-            selectedValue={endTimeFilter}
-            onValueChange={setEndTimeFilter}
-            style={styles.input}
-          >
-            {generateTimeOptions().map((time) => (
-              <Picker.Item key={time} label={time} value={time} />
-            ))}
-          </Picker>
-        </>
-      )}
+          </View>
+        </View>
+        
+        <TextInput
+          style={styles.input}
+          placeholder="PIN Code (optional)"
+          value={pinCode}
+          onChangeText={setPinCode}
+          keyboardType="numeric"
+        />
+        
+        <TextInput
+          style={styles.input}
+          placeholder="State (optional)"
+          value={state}
+          onChangeText={setState}
+        />
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Description (optional)"
+          value={description}
+          onChangeText={setDescription}
+          multiline
+          numberOfLines={3}
+        />
 
-      <TouchableOpacity style={styles.locationButton} onPress={openLocationPicker}>
-        <Text style={styles.locationButtonText}>
-            {selectedLocation ? 'Change Location' : 'Select Location'}
-        </Text>
-      </TouchableOpacity>
-
-        {selectedLocation && (
-            <View style={{ marginBottom: 16 }}>
-            <Text style={{ fontSize: 14, fontWeight: 'bold' }}>Selected Location:</Text>
-            <Text>Latitude: {selectedLocation.latitude.toFixed(6)}</Text>
-            <Text>Longitude: {selectedLocation.longitude.toFixed(6)}</Text>
-            </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={styles.formLabel}>Enable Day Filter:</Text>
+          <Switch
+            onValueChange={setEnableDay}
+            value={enableDay}
+          />
+        </View>
+        {enableDay && (
+          <>
+            <Text style={styles.formLabel}>Day of Week:</Text>
+            <Picker selectedValue={dayOfWeek} onValueChange={setDayOfWeek} style={styles.input}>
+              <Picker.Item label="Select Day" value="" />
+              <Picker.Item label="Monday" value="Monday" />
+              <Picker.Item label="Tuesday" value="Tuesday" />
+              <Picker.Item label="Wednesday" value="Wednesday" />
+              <Picker.Item label="Thursday" value="Thursday" />
+              <Picker.Item label="Friday" value="Friday" />
+              <Picker.Item label="Saturday" value="Saturday" />
+              <Picker.Item label="Sunday" value="Sunday" />
+            </Picker>
+            <Text style={styles.formLabel}>Start Time Filter:</Text>
+            <Picker
+              selectedValue={startTimeFilter}
+              onValueChange={setStartTimeFilter}
+              style={styles.input}
+            >
+              {generateTimeOptions().map((time) => (
+                <Picker.Item key={time} label={time} value={time} />
+              ))}
+            </Picker>
+            <Text style={styles.formLabel}>End Time Filter:</Text>
+            <Picker
+              selectedValue={endTimeFilter}
+              onValueChange={setEndTimeFilter}
+              style={styles.input}
+            >
+              {generateTimeOptions().map((time) => (
+                <Picker.Item key={time} label={time} value={time} />
+              ))}
+            </Picker>
+          </>
         )}
+
+        <TouchableOpacity style={styles.locationButton} onPress={openLocationPicker}>
+          <Text style={styles.locationButtonText}>
+              {selectedLocation ? 'Change Location' : 'Select Location'}
+          </Text>
+        </TouchableOpacity>
+
+          {selectedLocation && (
+              <View style={{ marginBottom: 16 }}>
+              <Text style={{ fontSize: 14, fontWeight: 'bold' }}>Selected Location:</Text>
+              <Text>Latitude: {selectedLocation.latitude.toFixed(6)}</Text>
+              <Text>Longitude: {selectedLocation.longitude.toFixed(6)}</Text>
+              </View>
+          )}
+      </ScrollView>
     </AdminModal>
   );
 
   const renderGroupModal = () => (
     <AdminModal
       visible={showGroupModal}
-      onClose={() => setShowGroupModal(false)}
+      onClose={handleCancelGroupEdit}
       title={editingGroup ? 'Edit Group' : 'Add New Group'}
       onSave={handleSaveGroup}
     >
-      <TextInput
-        style={styles.input}
-        placeholder="Group Name"
-        value={groupName}
-        onChangeText={setGroupName}
-      />
-      
-      <View style={styles.pickerContainer}>
-        <Text style={styles.label}>Select Areas:</Text>
+      <ScrollView keyboardShouldPersistTaps="handled">
+        <TextInput
+          style={styles.input}
+          placeholder="Group Name"
+          value={groupName}
+          onChangeText={setGroupName}
+        />
+        
+        <View style={styles.pickerContainer}>
+          <Text style={styles.label}>Select Areas:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Search Areas"
+            value={groupAreaSearchQuery}
+            onChangeText={setGroupAreaSearchQuery}
+          />
+          <FlatList
+            data={filteredGroupAreas}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item: area }) => (
+              <TouchableOpacity
+                key={area.id}
+                style={[
+                  styles.pickerOption,
+                  selectedAreaIds.includes(area.id) && styles.pickerOptionSelected
+                ]}
+                onPress={() => {
+                  setSelectedAreaIds((prev) =>
+                    prev.includes(area.id)
+                      ? prev.filter((id) => id !== area.id)
+                      : [...prev, area.id]
+                  );
+                }}
+              >
+                <Text
+                  style={[
+                    styles.pickerOptionText,
+                    selectedAreaIds.includes(area.id) && styles.pickerOptionTextSelected
+                  ]}
+                >
+                  {area.area_name} ({area.area_type})
+                </Text>
+              </TouchableOpacity>
+            )}
+            style={styles.areaPicker}
+            scrollEnabled={false} // Disable FlatList's internal scrolling
+          />
+        </View>
+        
+        <View style={{ marginBottom: 12 }}>
+          <TextInput
+            style={styles.input}
+            placeholder="Search Users"
+            value={userSearch}
+            onChangeText={setUserSearch}
+          />
+        </View>
         <FlatList
-          data={areas}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item: area }) => (
+          data={users.filter(
+            u =>
+              u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+              u.email.toLowerCase().includes(userSearch.toLowerCase())
+          )}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item: user }) => (
             <TouchableOpacity
-              key={area.id}
+              key={user.id}
               style={[
                 styles.pickerOption,
-                selectedAreaIds.includes(area.id) && styles.pickerOptionSelected
+                selectedUserIds.includes(user.id) && styles.pickerOptionSelected
               ]}
               onPress={() => {
-                setSelectedAreaIds((prev) =>
-                  prev.includes(area.id)
-                    ? prev.filter((id) => id !== area.id)
-                    : [...prev, area.id]
+                setSelectedUserIds(prev =>
+                  prev.includes(user.id)
+                    ? prev.filter(id => id !== user.id)
+                    : [...prev, user.id]
                 );
               }}
             >
               <Text
                 style={[
                   styles.pickerOptionText,
-                  selectedAreaIds.includes(area.id) && styles.pickerOptionTextSelected
+                  selectedUserIds.includes(user.id) && styles.pickerOptionTextSelected
                 ]}
               >
-                {area.area_name} ({area.area_type})
+                {user.name} ({user.email})
               </Text>
             </TouchableOpacity>
           )}
-          style={styles.areaPicker}
+          style={styles.userPicker}
+          scrollEnabled={false} // Disable FlatList's internal scrolling
         />
-      </View>
-      
-      <View style={{ marginBottom: 12 }}>
+        
         <TextInput
           style={styles.input}
-          placeholder="Search Users"
-          value={userSearch}
-          onChangeText={setUserSearch}
+          placeholder="Description (optional)"
+          value={groupDescription}
+          onChangeText={setGroupDescription}
+          multiline
+          numberOfLines={3}
         />
-      </View>
-      <FlatList
-        data={users.filter(
-          u =>
-            u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-            u.email.toLowerCase().includes(userSearch.toLowerCase())
-        )}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item: user }) => (
-          <TouchableOpacity
-            key={user.id}
-            style={[
-              styles.pickerOption,
-              selectedUserIds.includes(user.id) && styles.pickerOptionSelected
-            ]}
-            onPress={() => {
-              setSelectedUserIds(prev =>
-                prev.includes(user.id)
-                  ? prev.filter(id => id !== user.id)
-                  : [...prev, user.id]
-              );
-            }}
-          >
-            <Text
-              style={[
-                styles.pickerOptionText,
-                selectedUserIds.includes(user.id) && styles.pickerOptionTextSelected
-              ]}
-            >
-              {user.name} ({user.email})
-            </Text>
-          </TouchableOpacity>
-        )}
-        style={styles.userPicker}
-      />
-      
-      <TextInput
-        style={styles.input}
-        placeholder="Description (optional)"
-        value={groupDescription}
-        onChangeText={setGroupDescription}
-        multiline
-        numberOfLines={3}
-      />
+      </ScrollView>
     </AdminModal>
   );
 
@@ -1618,23 +1634,25 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       title={editingPlan ? 'Edit Repayment Plan' : 'Add Repayment Plan'}
       onSave={handleSavePlan}
     >
-      <TextInput style={styles.input} placeholder="Plan Name" value={planForm.name} onChangeText={v => setPlanForm(f => ({ ...f, name: v }))} />
-      <View style={styles.pickerContainer}>
-        <Text style={styles.label}>Frequency:</Text>
-        <View style={styles.pickerRow}>
-          {['daily', 'weekly', 'monthly', 'yearly'].map(freq => (
-            <TouchableOpacity key={freq} style={[styles.pickerOption, planForm.frequency === freq && styles.pickerOptionSelected]} onPress={() => setPlanForm(f => ({ ...f, frequency: freq }))}>
-              <Text style={[styles.pickerOptionText, planForm.frequency === freq && styles.pickerOptionTextSelected]}>{freq.charAt(0).toUpperCase() + freq.slice(1)}</Text>
-            </TouchableOpacity>
-          ))}
+      <ScrollView keyboardShouldPersistTaps="handled">
+        <TextInput style={styles.input} placeholder="Plan Name" value={planForm.name} onChangeText={v => setPlanForm(f => ({ ...f, name: v }))} />
+        <View style={styles.pickerContainer}>
+          <Text style={styles.label}>Frequency:</Text>
+          <View style={styles.pickerRow}>
+            {['daily', 'weekly', 'monthly', 'yearly'].map(freq => (
+              <TouchableOpacity key={freq} style={[styles.pickerOption, planForm.frequency === freq && styles.pickerOptionSelected]} onPress={() => setPlanForm(f => ({ ...f, frequency: freq }))}>
+                <Text style={[styles.pickerOptionText, planForm.frequency === freq && styles.pickerOptionTextSelected]}>{freq.charAt(0).toUpperCase() + freq.slice(1)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
-      </View>
-      <TextInput style={styles.input} placeholder="Number of Periods" value={planForm.periods} onChangeText={v => setPlanForm(f => ({ ...f, periods: v.replace(/[^0-9]/g, '') }))} keyboardType="numeric" />
-      <TextInput style={styles.input} placeholder="Base Amount" value={planForm.base_amount} onChangeText={v => setPlanForm(f => ({ ...f, base_amount: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
-      <TextInput style={styles.input} placeholder="Repayment Per Period" value={planForm.repayment_per_period} onChangeText={v => setPlanForm(f => ({ ...f, repayment_per_period: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
-      <TextInput style={styles.input} placeholder="Advance Amount (optional)" value={planForm.advance_amount} onChangeText={v => setPlanForm(f => ({ ...f, advance_amount: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
-      <TextInput style={styles.input} placeholder="Late Fee Per Period (optional)" value={planForm.late_fee_per_period} onChangeText={v => setPlanForm(f => ({ ...f, late_fee_per_period: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
-      <TextInput style={styles.input} placeholder="Description (optional)" value={planForm.description} onChangeText={v => setPlanForm(f => ({ ...f, description: v }))} multiline numberOfLines={2} />
+        <TextInput style={styles.input} placeholder="Number of Periods" value={planForm.periods} onChangeText={v => setPlanForm(f => ({ ...f, periods: v.replace(/[^0-9]/g, '') }))} keyboardType="numeric" />
+        <TextInput style={styles.input} placeholder="Base Amount" value={planForm.base_amount} onChangeText={v => setPlanForm(f => ({ ...f, base_amount: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
+        <TextInput style={styles.input} placeholder="Repayment Per Period" value={planForm.repayment_per_period} onChangeText={v => setPlanForm(f => ({ ...f, repayment_per_period: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
+        <TextInput style={styles.input} placeholder="Advance Amount (optional)" value={planForm.advance_amount} onChangeText={v => setPlanForm(f => ({ ...f, advance_amount: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
+        <TextInput style={styles.input} placeholder="Late Fee Per Period (optional)" value={planForm.late_fee_per_period} onChangeText={v => setPlanForm(f => ({ ...f, late_fee_per_period: v.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" />
+        <TextInput style={styles.input} placeholder="Description (optional)" value={planForm.description} onChangeText={v => setPlanForm(f => ({ ...f, description: v }))} multiline numberOfLines={2} />
+      </ScrollView>
     </AdminModal>
   );
 
@@ -1668,6 +1686,15 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       (area.area_type && area.area_type.toLowerCase().includes(query)) ||
       (area.pin_code && area.pin_code.toLowerCase().includes(query)) ||
       (area.state && area.state.toLowerCase().includes(query))
+    );
+  });
+
+  const filteredGroupAreas = allAreas.filter(area => {
+    const query = groupAreaSearchQuery.toLowerCase();
+    if (!query) return true;
+    return (
+      (area.area_name && area.area_name.toLowerCase().includes(query)) ||
+      (area.area_type && area.area_type.toLowerCase().includes(query))
     );
   });
 
@@ -1963,22 +1990,24 @@ export default function AdminScreen({ navigation, user, userProfile }) {
                 title={editingCustomerType ? 'Edit Customer Type' : 'Add Customer Type'}
                 onSave={handleSaveCustomerType}
               >
-                <Text style={styles.formLabel}>Status Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={customerTypeName}
-                  onChangeText={setCustomerTypeName}
-                  placeholder="e.g., VIP, Regular, New"
-                />
-                <Text style={styles.formLabel}>Description</Text>
-                <TextInput
-                  style={styles.input}
-                  value={customerTypeDescription}
-                  onChangeText={setCustomerTypeDescription}
-                  placeholder="Optional description"
-                  multiline
-                  numberOfLines={3}
-                />
+                <ScrollView keyboardShouldPersistTaps="handled">
+                  <Text style={styles.formLabel}>Status Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={customerTypeName}
+                    onChangeText={setCustomerTypeName}
+                    placeholder="e.g., VIP, Regular, New"
+                  />
+                  <Text style={styles.formLabel}>Description</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={customerTypeDescription}
+                    onChangeText={setCustomerTypeDescription}
+                    placeholder="Optional description"
+                    multiline
+                    numberOfLines={3}
+                  />
+                </ScrollView>
               </AdminModal>
             </View>
           )}
@@ -2534,10 +2563,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   areaPicker: {
-    maxHeight: 150,
   },
   userPicker: {
-    maxHeight: 150,
   },
   locationButton: {
     backgroundColor: '#007AFF',
