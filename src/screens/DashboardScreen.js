@@ -26,6 +26,20 @@ import CalculatorModal from '../components/CalculatorModal';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
+const getDayName = () => {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const d = new Date();
+  return days[d.getDay()];
+};
+
+const getCurrentTime = () => {
+  const d = new Date();
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  // Assuming DB time format is HH:MM:SS or HH:MM. Using HH:MM for comparison.
+  return `${hours}:${minutes}`;
+};
+
 const formatNumberWithCommas = (number) => {
   return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 };
@@ -110,9 +124,12 @@ export default function DashboardScreen({ user, userProfile }) {
         error = fetchError;
       } else {
         // Regular users/admins view areas based on their groups
+        const currentDayName = getDayName();
+        const currentTime = getCurrentTime();
+
         const { data, error: fetchError } = await supabase
           .from('user_groups')
-          .select('groups(group_areas(area_master(id, area_name)))')
+          .select('groups(group_areas(area_master(id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter)))') // Select new columns
           .eq('user_id', user.id);
 
         if (data) {
@@ -121,14 +138,37 @@ export default function DashboardScreen({ user, userProfile }) {
             userGroup.groups?.group_areas?.forEach(groupArea => {
               const area = groupArea.area_master;
               if (area && !areaIdSet.has(area.id)) {
-                areaIdSet.add(area.id);
-                areaList.push(area);
+                // Apply client-side filtering for 'user' type if conditions are met
+                if (userProfile?.user_type === 'user') {
+                  const areaStartTime = area.start_time_filter ? area.start_time_filter.substring(0, 5) : ''; // Assuming HH:MM:SS or HH:MM
+                  const areaEndTime = area.end_time_filter ? area.end_time_filter.substring(0, 5) : '';
+
+                  if (
+                    !area.enable_day || // If enable_day is false, always include
+                    (area.enable_day && // If enable_day is true, check other conditions
+                    area.day_of_week === currentDayName &&
+                    (
+                      (areaStartTime === '00:00' && areaEndTime === '00:00') || // Special case for 24 hours
+                      (areaStartTime <= areaEndTime && currentTime >= areaStartTime && currentTime <= areaEndTime) || // Case 1: Does not cross midnight
+                      (areaStartTime > areaEndTime && (currentTime >= areaStartTime || currentTime <= areaEndTime))   // Case 2: Crosses midnight
+                    ))
+                  ) {
+                    areaIdSet.add(area.id);
+                    areaList.push(area);
+                  }
+                } else {
+                  // For other user types, add without time filtering
+                  areaIdSet.add(area.id);
+                  areaList.push(area);
+                }
               }
             });
           });
         }
         error = fetchError;
       }
+
+        
 
       if (error) {
         console.error("Error fetching areas:", error);

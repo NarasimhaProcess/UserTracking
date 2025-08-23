@@ -21,6 +21,19 @@ import CustomerItemActions from '../components/CustomerItemActions';
 import LeafletMap from '../components/LeafletMap';
 import CalculatorModal from '../components/CalculatorModal';
 
+const getDayName = () => {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const d = new Date();
+  return days[d.getDay()];
+};
+
+const getCurrentTime = () => {
+  const d = new Date();
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
 function LocationSearchBar({ onLocationFound }) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -332,9 +345,12 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       } else {
         // Fetch areas for user's groups
         console.log('fetchAreas: Fetching areas for user ID:', user?.id);
+        const currentDayName = getDayName();
+        const currentTime = getCurrentTime();
+
         const { data, error } = await supabase
           .from('user_groups')
-          .select('group_id, groups (group_areas (area_master (id, area_name)))')
+          .select('group_id, groups (group_areas (area_master (id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter)))') // Select new columns
           .eq('user_id', user.id);
         
         if (error) {
@@ -347,8 +363,29 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
         const areaList = [];
         (data || []).forEach(g => {
           (g.groups?.group_areas || []).forEach(ga => {
-            if (ga.area_master && !areaList.find(a => a.id === ga.area_master.id)) {
-              areaList.push(ga.area_master);
+            const area = ga.area_master;
+            if (area && !areaList.find(a => a.id === area.id)) {
+              // Apply client-side filtering for 'user' type if conditions are met
+              if (userProfile?.user_type === 'user') {
+                const areaStartTime = area.start_time_filter ? area.start_time_filter.substring(0, 5) : '';
+                const areaEndTime = area.end_time_filter ? area.end_time_filter.substring(0, 5) : '';
+
+                if (
+                  !area.enable_day || // If enable_day is false, always include
+                  (area.enable_day && // If enable_day is true, check other conditions
+                  area.day_of_week === currentDayName &&
+                  (
+                    (areaStartTime === '00:00' && areaEndTime === '00:00') || // Special case for 24 hours
+                    (areaStartTime <= areaEndTime && currentTime >= areaStartTime && currentTime <= areaEndTime) || // Case 1: Does not cross midnight
+                    (areaStartTime > areaEndTime && (currentTime >= areaStartTime || currentTime <= areaEndTime))   // Case 2: Crosses midnight
+                  ))
+                ) {
+                  areaList.push(area);
+                }
+              } else {
+                // For other user types, add without time filtering
+                areaList.push(area);
+              }
             }
           });
         });

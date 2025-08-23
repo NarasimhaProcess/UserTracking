@@ -20,6 +20,19 @@ import { NetInfoService } from '../services/NetInfoService';
 import { OfflineStorageService } from '../services/OfflineStorageService';
 import { v4 as uuidv4 } from 'uuid';
 
+const getDayName = () => {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const d = new Date();
+  return days[d.getDay()];
+};
+
+const getCurrentTime = () => {
+  const d = new Date();
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
 export default function QuickTransactionScreen({ navigation, user }) {
   // console.log('QuickTransactionScreen: user prop:', user);
   const [amount, setAmount] = useState('');
@@ -70,9 +83,12 @@ export default function QuickTransactionScreen({ navigation, user }) {
               areaList = data || [];
             }
           } else { // For other user types, fetch areas based on user groups
+            const currentDayName = getDayName();
+            const currentTime = getCurrentTime();
+
             const { data: userGroupsData, error: userGroupsError } = await supabase
               .from('user_groups')
-              .select('groups(group_areas(area_master(id, area_name)))')
+              .select('groups(group_areas(area_master(id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter)))') // Select new columns
               .eq('user_id', user?.id);
 
             if (userGroupsError) {
@@ -83,8 +99,29 @@ export default function QuickTransactionScreen({ navigation, user }) {
                 userGroup.groups?.group_areas?.forEach(groupArea => {
                   const area = groupArea.area_master;
                   if (area && !areaIdSet.has(area.id)) {
-                    areaIdSet.add(area.id);
-                    areaList.push({ id: area.id, area_name: area.area_name }); // Ensure area_name is used here
+                    // Apply client-side filtering for 'user' type if conditions are met
+                    if (user?.user_type === 'user') { // Using user.user_type here
+                      const areaStartTime = area.start_time_filter ? area.start_time_filter.substring(0, 5) : '';
+                      const areaEndTime = area.end_time_filter ? area.end_time_filter.substring(0, 5) : '';
+
+                                            if (
+                        !area.enable_day || // If enable_day is false, always include
+                        (area.enable_day && // If enable_day is true, check other conditions
+                        area.day_of_week === currentDayName &&
+                        (
+                          (areaStartTime === '00:00' && areaEndTime === '00:00') || // Special case for 24 hours
+                          (areaStartTime <= areaEndTime && currentTime >= areaStartTime && currentTime <= areaEndTime) || // Case 1: Does not cross midnight
+                          (areaStartTime > areaEndTime && (currentTime >= areaStartTime || currentTime <= areaEndTime))   // Case 2: Crosses midnight
+                        ))
+                      ) {
+                        areaIdSet.add(area.id);
+                        areaList.push({ id: area.id, area_name: area.area_name });
+                      }
+                    } else {
+                      // For other user types, add without time filtering
+                      areaIdSet.add(area.id);
+                      areaList.push({ id: area.id, area_name: area.area_name });
+                    }
                   }
                 });
               });

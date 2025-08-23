@@ -394,6 +394,12 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
             <Text style={styles.infoLabel}>Email:</Text>
             <Text style={styles.infoValue}>{userProfile?.email || user?.email || 'Loading...'}</Text>
           </View>
+          {userProfile?.mobile && ( // Conditionally render if mobile exists
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Mobile:</Text>
+              <Text style={styles.infoValue}>{userProfile.mobile}</Text>
+            </View>
+          )}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>User Type:</Text>
             <Text style={styles.infoValue}>{userProfile?.user_type || 'user'}</Text>

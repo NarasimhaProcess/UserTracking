@@ -17,11 +17,12 @@ export default function SignupScreen({ navigation, route }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
+  const [mobile, setMobile] = useState(''); // New state for mobile number
   const [loading, setLoading] = useState(false);
   const onAuthSuccess = route.params?.onAuthSuccess;
 
   const handleSignup = async () => {
-    if (!email || !password || !confirmPassword || !name) {
+    if (!email || !password || !confirmPassword || !name || !mobile) { // Add mobile to validation
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -58,7 +59,8 @@ export default function SignupScreen({ navigation, route }) {
         options: {
           data: {
             name: name,
-            user_type: 'user'
+            user_type: 'user',
+            mobile: mobile // Add mobile to auth metadata
           }
         }
       });
@@ -73,6 +75,7 @@ export default function SignupScreen({ navigation, route }) {
             id: data.user.id,
             email: email,
             name: name,
+            mobile: mobile, // Add mobile to users table
             user_type: 'user',
             location_status: 0
           })
@@ -121,6 +124,19 @@ export default function SignupScreen({ navigation, route }) {
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Mobile Number</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your mobile number"
+              value={mobile}
+              onChangeText={setMobile}
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 

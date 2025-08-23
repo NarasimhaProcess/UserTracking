@@ -21,9 +21,39 @@ import SearchableDropdown from '../components/SearchableDropdown';
 import LeafletMap from '../components/LeafletMap';
 import { Picker } from '@react-native-picker/picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Clipboard } from 'react-native';
+import { Clipboard, Linking } from 'react-native'; // Added Linking
+import { MaterialIcons } from '@expo/vector-icons'; // Added MaterialIcons import
 
 
+const getDayName = () => {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const d = new Date();
+  return days[d.getDay()];
+};
+
+const getCurrentTime = () => {
+  const d = new Date();
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
+// Helper functions for direct communication
+const makeCall = (phoneNumber) => {
+  Linking.openURL(`tel:${phoneNumber}`);
+};
+
+const sendSMS = (phoneNumber) => {
+  Linking.openURL(`sms:${phoneNumber}?body=${encodeURIComponent(defaultMessageHeader)}`);
+};
+
+const sendWhatsApp = (phoneNumber) => {
+  // WhatsApp URL scheme. Requires phone number with country code.
+  // Example: +919876543210
+  Linking.openURL(`whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(defaultMessageHeader)}`);
+};
+
+const defaultMessageHeader = "Hello from LocalWala App:\n\n"; // Define a default header message
 
 const AdminModal = ({ visible, onClose, title, children, onSave, saveButtonText = 'Save' }) => (
   <Modal
@@ -94,6 +124,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [customers, setCustomers] = useState([]); // New state for customers
   const [loading, setLoading] = useState(false);
   const [intervals, setIntervals] = useState({});
+  const [userSearchQuery, setUserSearchQuery] = useState(''); // New state for user search
 
   // Area management state
   const [areas, setAreas] = useState([]);
@@ -228,17 +259,24 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      // Only load users if current user is admin or superadmin
+      // Access control for viewing the users tab itself
       if (userProfile?.user_type !== 'admin' && userProfile?.user_type !== 'superadmin') {
         Alert.alert('Access Denied', 'You do not have permission to view this page');
         navigation.goBack();
         return;
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*, mobile'); // Explicitly select mobile
+
+      // Admins can only see users with user_type 'user'
+      if (userProfile?.user_type === 'admin') {
+        query = query.eq('user_type', 'user');
+      }
+      // Superadmins see all users (no additional filter needed)
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) {
         throw error;
@@ -282,6 +320,13 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   };
 
   const handleUserAction = async (userId, action) => {
+    // Only superadmin can delete or change roles
+    if (action === 'delete' || action === 'change_role') {
+      if (userProfile?.user_type !== 'superadmin') {
+        Alert.alert('Permission Denied', 'Only superadmins can perform this action.');
+        return;
+      }
+    }
     try {
       switch (action) {
         case 'delete':
@@ -356,6 +401,11 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   };
 
   const updateUserRole = async (userId, newRole) => {
+    // Ensure only superadmin can update user roles
+    if (userProfile?.user_type !== 'superadmin') {
+      Alert.alert('Permission Denied', 'Only superadmins can change user roles.');
+      return;
+    }
     try {
       const { error } = await supabase
         .from('users')
@@ -446,6 +496,22 @@ export default function AdminScreen({ navigation, user, userProfile }) {
         <View style={styles.userItemInfo}>
           <Text style={styles.userName}>{item.name || 'No Name'}</Text>
           <Text style={styles.userEmail}>{item.email}</Text>
+          {item.mobile && (
+            <View style={styles.mobileContainer}>
+              <Text style={[styles.userMobile, { color: '#1C1C1E' }]}>Mobile: {item.mobile}</Text>
+              <View style={styles.mobileActions}>
+                <TouchableOpacity onPress={() => makeCall(item.mobile)} style={styles.mobileActionButton}>
+                  <MaterialIcons name="phone" size={20} color="#007AFF" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => sendSMS(item.mobile)} style={styles.mobileActionButton}>
+                  <MaterialIcons name="message" size={20} color="#007AFF" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => sendWhatsApp(item.mobile)} style={styles.mobileActionButton}>
+                  <MaterialIcons name="whatsapp" size={20} color="#25D366" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
           <Text style={[styles.userRole, { color: getRoleColor(item.user_type) }]}> {item.user_type || 'user'} </Text>
           <Text style={[styles.userStatus, { color: item.location_status === 1 ? '#34C759' : '#FF3B30' }]}> Location: {item.location_status === 1 ? 'Active' : 'Inactive'} </Text>
           <Text style={styles.userDate}> Created: {new Date(item.created_at).toLocaleDateString()} </Text>
@@ -461,18 +527,22 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           </View>
         </View>
         <View style={styles.itemActions}>
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => handleUserAction(item.id, 'change_role')}
-          >
-            <Text style={styles.editButtonText}>Change Role</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => handleUserAction(item.id, 'delete')}
-          >
-            <Text style={styles.deleteButtonText}>Delete</Text>
-          </TouchableOpacity>
+          {userProfile?.user_type === 'superadmin' && (
+            <>
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() => handleUserAction(item.id, 'change_role')}
+              >
+                <Text style={styles.editButtonText}>Change Role</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleUserAction(item.id, 'delete')}
+              >
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </>
+          )}
           <TouchableOpacity
             style={[styles.editButton, { backgroundColor: item.location_status === 1 ? '#FF3B30' : '#34C759' }]}
             onPress={() => handleToggleLocationStatus(item.id, item.location_status)}
@@ -589,14 +659,36 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     try {
       const { data, error } = await supabase
         .from('area_master')
-        .select('*')
+        .select('id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter') // Select all necessary columns
         .order('area_name', { ascending: true });
 
       if (error) {
         throw error;
       }
 
-      setAreas(data || []);
+      let filteredAreas = data || [];
+
+      // Apply filtering logic only if user is of type 'user'
+      if (userProfile?.user_type === 'user') {
+        const currentDayName = getDayName();
+        const currentTime = getCurrentTime();
+
+        filteredAreas = filteredAreas.filter(area => {
+          const areaStartTime = area.start_time_filter ? area.start_time_filter.substring(0, 5) : '';
+          const areaEndTime = area.end_time_filter ? area.end_time_filter.substring(0, 5) : '';
+
+          // Logic: if enable_day is false, always include.
+          // If enable_day is true, include only if day and time match.
+          return !area.enable_day || (
+            area.enable_day &&
+            area.day_of_week === currentDayName &&
+            currentTime >= areaStartTime &&
+            currentTime <= areaEndTime
+          );
+        });
+      }
+
+      setAreas(filteredAreas);
     } catch (error) {
       console.error('Error loading areas:', error);
       Alert.alert('Error', 'Failed to load areas');
@@ -1507,6 +1599,15 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     </AdminModal>
   );
 
+  const filteredUsers = users.filter(user => {
+    const query = userSearchQuery.toLowerCase();
+    return (
+      (user.name && user.name.toLowerCase().includes(query)) ||
+      (user.email && user.email.toLowerCase().includes(query)) ||
+      (user.mobile && user.mobile.includes(query)) // Assuming 'mobile' field exists
+    );
+  });
+
   const getRoleColor = (role) => {
     switch (role) {
       case 'superadmin':
@@ -1583,9 +1684,14 @@ export default function AdminScreen({ navigation, user, userProfile }) {
 
       {activeTab === 'users' && (
         <View style={{ flex: 1, padding: 20 }}>
-          
+          <TextInput
+            style={styles.input} // Using existing input style
+            placeholder="Search users by Name, Email, or Mobile"
+            value={userSearchQuery}
+            onChangeText={setUserSearchQuery}
+          />
           <FlatList
-            data={users}
+            data={filteredUsers} // Use filteredUsers
             renderItem={renderUserItem}
             keyExtractor={(item) => item.id}
             refreshControl={
@@ -1813,6 +1919,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8E8E93',
     marginBottom: 4,
+  },
+  userMobile: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginBottom: 4,
+  },
+  mobileContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between', // Distribute space
+    marginBottom: 4,
+  },
+  mobileActions: {
+    flexDirection: 'row',
+    marginLeft: 10,
+  },
+  mobileActionButton: {
+    padding: 5,
+    marginLeft: 5,
   },
   userRole: {
     fontSize: 14,
