@@ -4,16 +4,21 @@ import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, StyleSheet, Platform, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity, Image, Alert, Linking } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import { MaterialIcons } from '@expo/vector-icons';
 import { registerRootComponent } from 'expo';
 import { AppRegistry } from 'react-native';
 import CalculatorModal from './src/components/CalculatorModal';
 import { Buffer } from 'buffer';
+import * as Notifications from 'expo-notifications';
+import { registerForPushNotificationsAsync } from './src/services/notificationService';
+import * as LocalAuthentication from 'expo-local-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer;
 }
+
 
 
 // Import screens
@@ -38,8 +43,9 @@ import QuickTransactionButton from './src/components/QuickTransactionButton';
 import BankTransactionScreen from './src/screens/BankTransactionScreen';
 
 // Import services
-import { supabase } from './src/services/supabase';
+import { supabase, initializeSupabase } from './src/services/supabase';
 import { locationTracker } from './src/services/locationTracker';
+console.log('locationTracker after import:', locationTracker);
 
 
 let Storage;
@@ -258,31 +264,147 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
+  
   const [showCalculatorModal, setShowCalculatorModal] = useState(false);
+  const [expoPushToken, setExpoPushToken] = useState('');
+  const notificationListener = React.useRef();
+  const responseListener = React.useRef();
 
   useEffect(() => {
-    checkAuthStatus();
-    setupLocationTracker();
-    
-    // Listen to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event, session);
-        if (session) {
-          setUser(session.user);
-          await loadUserProfile(session.user.id);
-          setIsAuthenticated(true);
-        } else {
-          setUser(null);
-          setUserProfile(null);
-          setIsAuthenticated(false);
-        }
-        setIsLoading(false);
-      }
-    );
+    const initializeApp = async () => {
+      console.log('Starting app initialization...');
+      await initializeSupabase();
+      console.log('Supabase initialized, proceeding with auth.');
 
-    return () => subscription.unsubscribe();
+      
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          console.log('Auth state changed:', event, session);
+          if (session) {
+            // Only run the welcome logic on initial SIGN_IN
+            if (event === 'SIGNED_IN') {
+              setUser(session.user);
+              const profile = await loadUserProfile(session.user.id);
+              setIsAuthenticated(true);
+              
+              // --- START: Welcome Alert Logic ---
+              if (profile) {
+                await showWelcomeAlert(session, profile);
+              }
+              // --- END: Welcome Alert Logic ---
+
+            } else if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+              // Don't show alert on token refresh, just update user state
+              setUser(session.user);
+              if (!userProfile) { // Only load profile if it's not already there
+                await loadUserProfile(session.user.id);
+              }
+              setIsAuthenticated(true);
+            }
+
+          } else if (event === 'SIGNED_OUT') {
+            setUser(null);
+            setUserProfile(null);
+            setIsAuthenticated(false);
+            // Clear biometric data on sign out
+            await AsyncStorage.removeItem('BIOMETRICS_ENABLED');
+            await AsyncStorage.removeItem('BIOMETRICS_EMAIL');
+          }
+        }
+      );
+
+      await handleBiometricLogin();
+      await checkAuthStatus();
+      await setupLocationTracker();
+      setIsLoading(false);
+      console.log('App initialization complete.');
+
+      // --- DEEP LINKING LOGIC ---
+      const handleDeepLink = (url) => {
+        if (!url) return;
+        console.log('Received deep link:', url);
+        const params = new URLSearchParams(url.split('#')[1]);
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          console.log('Found tokens in URL, setting session.');
+          supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          }).then(({ data, error }) => {
+            if (error) {
+              console.error('Error setting session from deep link:', error);
+              Alert.alert('Login Error', 'Failed to log in from the confirmation link.');
+            } else {
+              console.log('Session successfully set from deep link.');
+              // The onAuthStateChange listener will handle the rest.
+            }
+          });
+        }
+      };
+
+      // Check if the app was opened from a deep link
+      Linking.getInitialURL().then(url => {
+        if (url) {
+          handleDeepLink(url);
+        }
+      });
+
+      // Listen for incoming deep links while the app is open
+      const linkingSubscription = Linking.addEventListener('url', ({ url }) => {
+        handleDeepLink(url);
+      });
+      // --- END DEEP LINKING LOGIC ---
+
+      return () => {
+        subscription.unsubscribe();
+        linkingSubscription.remove();
+      };
+    };
+
+    initializeApp();
   }, []);
+
+  const showWelcomeAlert = async (session, profile) => {
+    try {
+      // 1. Get Last Login Time
+      const lastLogin = profile.previous_last_login_at 
+        ? new Date(profile.previous_last_login_at).toLocaleString()
+        : 'this is your first login!';
+      
+      let alertMessage = `Welcome back!\nYour last login was: ${lastLogin}.`;
+
+      // 2. Get Area Wise Amount
+      const currentLocation = await locationTracker.getCurrentLocation(); // Assuming this function exists
+      if (currentLocation) {
+        const { coords } = currentLocation;
+        const { data: total, error } = await supabase.rpc('get_area_wise_summary', {
+          user_id_param: session.user.id,
+          latitude_param: coords.latitude,
+          longitude_param: coords.longitude,
+        });
+
+        if (error) {
+          console.error('Error fetching area summary:', error);
+        } else {
+          alertMessage += `\n\nYour total collections in the current area (5km radius) are: ${total.toFixed(2)}.`;
+        }
+      }
+
+      Alert.alert('Login Summary', alertMessage, [{ text: 'OK' }]);
+
+      // 3. Update the previous_last_login_at for the next login
+      await supabase
+        .from('users')
+        .update({ previous_last_login_at: session.user.last_sign_in_at })
+        .eq('id', session.user.id);
+
+    } catch (error) {
+      console.error('Error in showWelcomeAlert:', error);
+    }
+  };
 
   // Update route params when user data changes
   useEffect(() => {
@@ -421,11 +543,54 @@ export default function App() {
     }
   };
 
-  const handleAuthSuccess = async (userData) => {
+  const handleAuthSuccess = async (userData, navigation) => {
     setUser(userData);
     await loadUserProfile(userData.id);
     setIsAuthenticated(true);
     setShowCalculatorModal(false); // Ensure calculator is hidden on successful auth
+    if (navigation) {
+      navigation.replace('Main');
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    try {
+      const isBiometricsEnabled = await AsyncStorage.getItem('BIOMETRICS_ENABLED');
+      const userEmail = await AsyncStorage.getItem('BIOMETRICS_EMAIL');
+
+      if (isBiometricsEnabled === 'true' && userEmail) {
+        const { success } = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Log in with your fingerprint or Face ID',
+          cancelLabel: 'Use Password',
+        });
+
+        if (success) {
+          console.log('Biometric authentication successful');
+          // NOTE: This is a simplified login flow.
+          // A more secure implementation would use a securely stored refresh token
+          // to get a new session from Supabase instead of just loading the profile.
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', userEmail)
+            .single();
+
+          if (error || !userData) {
+            console.error('Failed to fetch user profile after biometric login:', error);
+            Alert.alert('Error', 'Could not log you in. Please use your password.');
+            return;
+          }
+          
+          // We have the user profile, now we can set the app state to authenticated
+          handleAuthSuccess(userData);
+
+        } else {
+          console.log('Biometric authentication failed or was cancelled.');
+        }
+      }
+    } catch (error) {
+      console.error('Error during biometric login attempt:', error);
+    }
   };
 
   // Header component for authenticated screens

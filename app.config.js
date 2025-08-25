@@ -4,6 +4,7 @@ export default {
   "expo": {
     "name": "Location Tracker",
     "slug": "UserTracking",
+    "scheme": "usertracking",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",

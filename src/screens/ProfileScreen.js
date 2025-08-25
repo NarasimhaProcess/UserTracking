@@ -156,7 +156,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
             onPress: async () => {
               await OfflineStorageService.clearOfflineExpenses();
               await supabase.auth.signOut();
-              navigation.replace('Login');
+              navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
             },
           },
           {

@@ -199,6 +199,8 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [customerTypeName, setCustomerTypeName] = useState('');
   const [customerTypeDescription, setCustomerTypeDescription] = useState('');
 
+  
+
   // Customer Upload state
   const [showCustomerUploadModal, setShowCustomerUploadModal] = useState(false);
   const [selectedUploadAreaId, setSelectedUploadAreaId] = useState('');
@@ -231,6 +233,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     } else if (activeTab === 'upload') {
       loadAreas(); // Load all areas for selection
       loadRepaymentPlans(); // Load all repayment plans for selection
+    
     }
   }, [userProfile, activeTab, activeConfigTab, navigation]); // Add navigation to dependency array
 
@@ -775,6 +778,26 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     }
   };
 
+  const loadTenants = async () => {
+    setLoadingTenants(true);
+    try {
+      const { data, error } = await supabase
+        .from('tenants')
+        .select('*, tenant_config(*)')
+        .order('name', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+      setTenants(data || []);
+    } catch (error) {
+      console.error('Error loading tenants:', error);
+      Alert.alert('Error', 'Failed to load tenants');
+    } finally {
+      setLoadingTenants(false);
+    }
+  };
+
   const handleAddArea = () => {
     setEditingArea(null);
     setAreaName('');
@@ -1213,7 +1236,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     handleDeleteItem(plan, 'repayment_plans', 'Repayment Plan', loadRepaymentPlans);
   };
 
-  
+   
 
   const handleCancelGroupEdit = () => {
     setShowGroupModal(false);
@@ -1796,6 +1819,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             <Text style={[styles.tabButtonText, activeTab === 'configuration' && styles.tabButtonText]}>⚙️</Text>
             {/* Consider using a proper icon library (e.g., react-native-vector-icons) for better visual representation. */}
           </TouchableOpacity>
+                    
         </View>
 
       {activeTab === 'users' && (
@@ -2058,6 +2082,93 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             <Text style={styles.addButtonText}>Upload Customers</Text>
           </TouchableOpacity>
           {renderCustomerUploadModal()}
+        </View>
+      )}
+
+      {activeTab === 'tenants' && (
+        <View style={{ flex: 1, padding: 20 }}>
+          <TouchableOpacity style={styles.addButton} onPress={handleAddTenant}>
+            <Text style={styles.addButtonText}>+ Add Tenant</Text>
+          </TouchableOpacity>
+          <FlatList
+            data={tenants}
+            renderItem={({ item }) => (
+              <View style={styles.itemCard}>
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemDetail}>ID: {item.id}</Text>
+                  {item.tenant_config[0] ? (
+                    <>
+                      <Text style={styles.itemDetail}>URL: {item.tenant_config[0].supabase_url}</Text>
+                      <Text style={styles.itemDetail}>Key: {item.tenant_config[0].supabase_anon_key}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.itemDetail}>Not configured</Text>
+                  )}
+                </View>
+                <View style={styles.itemActions}>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => handleConfigureTenant(item)}
+                  >
+                    <Text style={styles.editButtonText}>Configure</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => handleEditTenant(item)}
+                  >
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDeleteTenant(item)}
+                  >
+                    <Text style={styles.deleteButtonText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+            keyExtractor={(item) => item.id.toString()}
+            refreshControl={
+              <RefreshControl refreshing={loadingTenants} onRefresh={loadTenants} />
+            }
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>No tenants found. Add your first tenant!</Text>
+            }
+            contentContainerStyle={styles.listContainer}
+          />
+          <AdminModal
+            visible={showTenantModal}
+            onClose={() => setShowTenantModal(false)}
+            title={editingTenant ? 'Edit Tenant' : 'Add New Tenant'}
+            onSave={handleSaveTenant}
+          >
+            <TextInput
+              style={styles.input}
+              placeholder="Tenant Name"
+              value={tenantName}
+              onChangeText={setTenantName}
+            />
+          </AdminModal>
+          <AdminModal
+            visible={showTenantConfigModal}
+            onClose={() => setShowTenantConfigModal(false)}
+            title={`Configure Tenant: ${editingTenant?.name}`}
+            onSave={handleSaveTenantConfig}
+          >
+            <TextInput
+              style={styles.input}
+              placeholder="Supabase URL"
+              value={tenantConfigForm.supabase_url}
+              onChangeText={(text) => setTenantConfigForm({ ...tenantConfigForm, supabase_url: text })}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Supabase Anon Key"
+              value={tenantConfigForm.supabase_anon_key}
+              onChangeText={(text) => setTenantConfigForm({ ...tenantConfigForm, supabase_anon_key: text })}
+            />
+          </AdminModal>
         </View>
       )}
     </View>

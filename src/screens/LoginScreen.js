@@ -10,7 +10,10 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { supabase } from '../services/supabase';
+import { supabase, reinitializeSupabase } from '../services/supabase';
+import * as LocalAuthentication from 'expo-local-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 
 export default function LoginScreen({ navigation, route }) {
@@ -30,7 +33,7 @@ export default function LoginScreen({ navigation, route }) {
       // First, check if user exists in users table
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('id, email, name, user_type, location_status')
+        .select('id, email, name, user_type, location_status, tenant_id')
         .eq('email', email)
         .single();
 
@@ -50,6 +53,35 @@ export default function LoginScreen({ navigation, route }) {
         Alert.alert('Login Error', error.message);
       } else {
         console.log('Login successful:', data.user);
+
+        let tenantId = userData.tenant_id;
+
+        if (!tenantId) {
+          // This is an old user, assign them to the default tenant
+          const { data: defaultTenant, error: tenantError } = await supabase
+            .from('tenants')
+            .select('id')
+            .eq('name', 'Default')
+            .single();
+
+          if (tenantError || !defaultTenant) {
+            Alert.alert('Error', 'Could not find the default tenant. Please contact support.');
+            setLoading(false);
+            return;
+          }
+
+          tenantId = defaultTenant.id;
+
+          // Update the user with the new tenant_id
+          await supabase
+            .from('users')
+            .update({ tenant_id: tenantId })
+            .eq('id', userData.id);
+        }
+
+        if (tenantId) {
+          await reinitializeSupabase(tenantId);
+        }
         
         // Use the user data from users table instead of auth user
         const authenticatedUser = {
@@ -58,32 +90,16 @@ export default function LoginScreen({ navigation, route }) {
           name: userData.name,
           user_type: userData.user_type,
           location_status: userData.location_status,
+          tenant_id: tenantId,
         };
         
         // Call the auth success callback if provided
         if (onAuthSuccess) {
-          onAuthSuccess(authenticatedUser);
+          onAuthSuccess(authenticatedUser, navigation);
         }
 
-        // Push Notification Integration
-        /*
-        const pushToken = await registerForPushNotificationsAsync(authenticatedUser.id);
-
-        if (pushToken) {
-          // Call your Supabase Edge Function to send the login notification
-          const { data: edgeFunctionData, error: edgeFunctionError } = await supabase.functions.invoke('send-login-notification', {
-            body: { user_id: authenticatedUser.id },
-          });
-
-          if (edgeFunctionError) {
-            console.error('Error invoking Edge Function:', edgeFunctionError);
-          } else {
-            console.log('Edge Function invoked successfully:', edgeFunctionData);
-          }
-        }
-        */
-
-        // Navigate to Dashboard or other screen
+        // After successful login, ask to enable biometrics
+        await promptForBiometrics(authenticatedUser.email);
         
       }
     } catch (error) {
@@ -91,6 +107,52 @@ export default function LoginScreen({ navigation, route }) {
       console.error('Login error:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const promptForBiometrics = async (userEmail) => {
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      if (!hasHardware) {
+        console.log('Biometric hardware not available.');
+        return;
+      }
+
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!isEnrolled) {
+        Alert.alert(
+          'No Biometrics Enrolled',
+          'You have not enrolled any fingerprints or Face ID on this device.'
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Enable Biometric Login',
+        'Would you like to use your fingerprint or Face ID for faster logins?',
+        [
+          { text: 'No', style: 'cancel' },
+          {
+            text: 'Yes, Enable',
+            onPress: async () => {
+              try {
+                // Securely store the fact that biometrics are enabled for this user
+                await AsyncStorage.setItem('BIOMETRICS_ENABLED', 'true');
+                await AsyncStorage.setItem('BIOMETRICS_EMAIL', userEmail);
+                Alert.alert(
+                  'Biometrics Enabled',
+                  'You can now use your fingerprint or Face ID to log in.'
+                );
+              } catch (e) {
+                console.error('Error saving biometric preference:', e);
+                Alert.alert('Error', 'Could not save your biometric preference.');
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error with biometrics prompt:', error);
     }
   };
 

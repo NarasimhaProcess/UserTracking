@@ -8,6 +8,67 @@ import { NetInfoService } from './NetInfoService';
 import { OfflineStorageService } from './OfflineStorageService';
 import NetInfo from '@react-native-community/netinfo';
 
+const BACKGROUND_LOCATION_TASK = 'background-location-task';
+
+// Define the background task
+TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
+  if (error) {
+    console.error('Background location task error:', error);
+    return;
+  }
+  if (data) {
+    const { locations } = data;
+    const latestLocation = locations[0];
+    console.log('📍 Background location update received:', latestLocation.coords);
+
+    // Retrieve user info from storage for background updates
+    const userId = await OfflineStorageService.getUserId();
+    const userEmail = await OfflineStorageService.getUserEmail();
+
+    if (!userId || !userEmail) {
+      console.warn('User ID or Email not found in background task. Cannot save location.');
+      return;
+    }
+
+    const { coords, timestamp } = latestLocation;
+    const deviceName = Device.deviceName || 'MobileApp';
+    const deviceId = Application.androidId || 'unknownid';
+    const deviceInfo = `${deviceName}_${deviceId}`;
+
+    const locationData = {
+      user_id: userId,
+      user_email: userEmail,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      accuracy: coords.accuracy,
+      timestamp: new Date(timestamp).toISOString(),
+      device_name: deviceInfo,
+    };
+
+    const isNetworkAvailable = await NetInfoService.isNetworkAvailable();
+
+    if (isNetworkAvailable) {
+      try {
+        const { error: insertError } = await supabase
+          .from('location_history')
+          .insert([locationData]);
+
+        if (insertError) {
+          console.error('❌ Background: Error inserting into location_history:', insertError);
+          await OfflineStorageService.saveOfflineLocation(locationData); // Save if online insert fails
+        } else {
+          console.log('✅ Background: Location successfully stored in location_history table.');
+        }
+      } catch (e) {
+        console.error('❌ Background: Exception during Supabase insert:', e);
+        await OfflineStorageService.saveOfflineLocation(locationData); // Save if exception occurs
+      }
+    } else {
+      await OfflineStorageService.saveOfflineLocation(locationData);
+      console.log('💾 Background: Storing location offline due to no network.');
+    }
+  }
+});
 
 class LocationTracker {
   constructor() {
@@ -24,9 +85,17 @@ class LocationTracker {
     });
   }
 
-  
-
-  
+  async init() {
+    console.log('Initializing LocationTracker...');
+    // Ensure the background task is registered
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+    if (!isRegistered) {
+      console.log('Registering background location task...');
+      // TaskManager.defineTask is called outside the class, so we just need to ensure it's registered.
+      // No explicit registration call needed here beyond defining it globally.
+    }
+    console.log('LocationTracker initialized.');
+  }
 
   async setupNotifications() {
     // Notifications are not supported in Expo Go with SDK 53
@@ -44,6 +113,10 @@ class LocationTracker {
     this.currentUser = userId;
     this.currentUserEmail = userEmail;
     
+    // Store user info for background task access
+    await OfflineStorageService.saveUserId(userId);
+    await OfflineStorageService.saveUserEmail(userEmail);
+
     // Fetch location_update_interval from users table
     let interval = 30; // default
     if (!await NetInfoService.isNetworkAvailable()) {
@@ -180,7 +253,7 @@ class LocationTracker {
 
       // Stop foreground tracking
       if (this.watchId) {
-        this.watchId.remove();
+        Location.stopLocationUpdatesAsync(this.watchId); // Correct way to stop watchPositionAsync
         this.watchId = null;
       }
 
@@ -329,8 +402,6 @@ class LocationTracker {
   getTrackingStatus() {
     return this.isTracking;
   }
-
-  
 }
 
-export const locationTracker = new LocationTracker(); 
+export const locationTracker = new LocationTracker();
