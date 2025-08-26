@@ -64,6 +64,76 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
     fetchAreas(); // Fetch areas on component mount
   }, []);
 
+  // Define callProxyRequest function here (or import it if it's in a separate file)
+  async function callProxyRequest(resourcePath, tenantId, queryParams = {}, yourAuthToken) {
+    const baseUrl = 'https://wtcxhhbigmqrmqdyhzcz.supabase.co/functions/v1/proxy-request';
+    const url = new URL(`${baseUrl}/${resourcePath}`);
+
+    Object.keys(queryParams).forEach(key => url.searchParams.append(key, queryParams[key]));
+
+    console.log(`Initiating call to proxy-request: ${url.toString()} with tenant-id: ${tenantId}`);
+
+    try {
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'tenant-id': tenantId,
+          'Authorization': `Bearer ${yourAuthToken}`, // IMPORTANT: Replace yourAuthToken with the actual JWT
+        },
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json();
+        console.error(`Error from proxy-request/${resourcePath}:`, response.status, errorBody);
+        throw new Error(`Proxy request to ${resourcePath} failed with status ${response.status}: ${errorBody.message || JSON.stringify(errorBody)}`);
+      }
+
+      const data = await response.json();
+      console.log(`Data from proxy-request/${resourcePath}:`, data);
+      return data;
+
+    } catch (error) {
+      console.error(`Network or parsing error calling proxy-request/${resourcePath}:`, error);
+      throw error;
+    }
+  }
+
+  // NEW useEffect to call proxy-request for tenant-specific expenses
+  useEffect(() => {
+    const fetchTenantExpenses = async () => {
+      if (userProfile?.tenant_id && user) {
+        try {
+          // You'll need to get the user's JWT for the Authorization header
+          // Example: const { data: { session } } = await supabase.auth.getSession();
+          // const yourAuthToken = session?.access_token;
+          const yourAuthToken = 'YOUR_USER_JWT_TOKEN'; // <<< IMPORTANT: REPLACE THIS WITH THE ACTUAL JWT
+
+          if (yourAuthToken) {
+            // Assuming your proxy-request edge function has an endpoint like '/user_expenses'
+            // that returns expenses for the given tenant.
+            const tenantExpenses = await callProxyRequest(
+              'user_expenses', // Resource path for expenses
+              userProfile.tenant_id,
+              {}, // No query parameters for now
+              yourAuthToken
+            );
+            console.log('Tenant-specific expenses from proxy-request:', tenantExpenses);
+            // You can then process these expenses, e.g., display them or merge with existing data
+          } else {
+            console.warn('User JWT token not available for proxy-request call.');
+          }
+        } catch (error) {
+          console.error('Failed to fetch tenant-specific expenses via proxy-request:', error);
+        }
+      } else {
+        console.log('userProfile.tenant_id or user not available for proxy-request call.');
+      }
+    };
+
+    fetchTenantExpenses();
+  }, [user, userProfile]); // Re-run when user or userProfile changes
+
   // Fetch areas logic
   const fetchAreas = async () => {
     try {
