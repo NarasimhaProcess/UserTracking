@@ -10,11 +10,14 @@ import {
   ScrollView,
   TextInput,
   Modal, // Ensure Modal is explicitly imported
+  Linking, // Added Linking
 } from 'react-native';
 import * as Location from 'expo-location';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 import LeafletMap from '../components/LeafletMap';
 import EnhancedDatePicker from '../components/EnhancedDatePicker'; // Reverted to default import
+
+import { MaterialIcons } from '@expo/vector-icons'; // Add this import
 
 const { width, height } = Dimensions.get('window');
 
@@ -35,6 +38,7 @@ export default function MapScreen({ user, userProfile }) {
   const [showEnhancedDatePicker, setShowEnhancedDatePicker] = useState(false); // Control visibility of EnhancedDatePicker
   const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 7))); // Default to 7 days ago
   const [endDate, setEndDate] = useState(new Date()); // Default to today
+  const [showControlsMenu, setShowControlsMenu] = useState(false); // New state for controls menu visibility
 
   useEffect(() => {
     if (user) {
@@ -256,9 +260,7 @@ export default function MapScreen({ user, userProfile }) {
       {/* Location History Display */}
       <View style={styles.locationHistory}>
         <Text style={styles.locationHistoryTitle}>Location History</Text>
-        <Text style={styles.locationHistoryText}>
-          Total Points: {userLocations.length}
-        </Text>
+        
         {userLocations.length > 0 && (
           <Text style={styles.locationHistoryText}>
             Last Update: {new Date(userLocations[userLocations.length - 1].timestamp).toLocaleString()}
@@ -291,6 +293,15 @@ export default function MapScreen({ user, userProfile }) {
       )}
     </View>
   );
+
+  const handleGetDirections = (location) => {
+    if (!location || !location.latitude || !location.longitude) {
+      Alert.alert('Error', 'No location selected for directions.');
+      return;
+    }
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${location.latitude},${location.longitude}`;
+    Linking.openURL(url).catch(err => console.error('Failed to open Google Maps:', err));
+  };
 
   const renderMap = () => {
     // Show fallback for web or if no location
@@ -354,43 +365,61 @@ export default function MapScreen({ user, userProfile }) {
         {renderMap()}
       </View>
 
-      {/* Control buttons */}
-      <View style={styles.controls}>
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={centerOnCurrentLocation}
-          disabled={!currentLocation}
-        >
-          <Text style={styles.controlButtonText}>📍 Current</Text>
-        </TouchableOpacity>
+      {/* Control buttons and 3 dots menu */}
+      <View style={styles.controlsContainer}>
+        {showControlsMenu && (
+          <View style={styles.controls}>
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={centerOnCurrentLocation}
+              disabled={!currentLocation}
+            >
+              <MaterialIcons name="my-location" size={24} color="white" />
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={fitMapToRoute}
-          disabled={userLocations.length === 0}
-        >
-          <Text style={styles.controlButtonText}>🗺️ Route</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={fitMapToRoute}
+              disabled={userLocations.length === 0}
+            >
+              <MaterialIcons name="alt-route" size={24} color="white" />
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={clearMap}
-        >
-          <Text style={styles.controlButtonText}>🗑️ Clear</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={clearMap}
+            >
+              <MaterialIcons name="clear" size={24} color="white" />
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={() => setShowEnhancedDatePicker(true)}
-        >
-          <Text style={styles.controlButtonText}>🗓️ Select Date Range</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={() => setShowEnhancedDatePicker(true)}
+            >
+              <MaterialIcons name="date-range" size={24} color="white" />
+            </TouchableOpacity>
 
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={() => loadUserLocations(selectedUserForMap?.id || user.id)}
+            >
+              <MaterialIcons name="refresh" size={24} color="white" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={() => handleGetDirections(selectedUserForMap ? userLocations[userLocations.length - 1] : currentLocation)}
+              disabled={!selectedUserForMap && !currentLocation}
+            >
+              <MaterialIcons name="directions" size={24} color="white" />
+            </TouchableOpacity>
+          </View>
+        )}
         <TouchableOpacity
-          style={styles.controlButton}
-          onPress={() => loadUserLocations(selectedUserForMap?.id || user.id)}
+          style={styles.threeDotsButton}
+          onPress={() => setShowControlsMenu(!showControlsMenu)}
         >
-          <Text style={styles.controlButtonText}>🔄 Refresh</Text>
+          <MaterialIcons name="more-vert" size={24} color="white" />
         </TouchableOpacity>
       </View>
 
@@ -415,9 +444,7 @@ export default function MapScreen({ user, userProfile }) {
       {/* Info panel */}
       <View style={styles.infoPanel}>
         <Text style={styles.infoTitle}>Location History</Text>
-        <Text style={styles.infoText}>
-          Total Points: {userLocations.length}
-        </Text>
+        
         {userLocations.length > 0 && (
           <Text style={styles.infoText}>
             Last Update: {new Date(userLocations[userLocations.length - 1].timestamp).toLocaleString()}
@@ -755,5 +782,26 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  controlsContainer: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    zIndex: 1000,
+    alignItems: 'flex-end', // Align items to the right
+  },
+  threeDotsButton: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 28, // Make it circular
+    marginTop: 8, // Space between controls and dots button
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });

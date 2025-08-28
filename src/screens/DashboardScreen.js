@@ -14,7 +14,7 @@ import {
   FlatList,
   TextInput,
 } from 'react-native';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 import { locationTracker } from '../services/locationTracker';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import Icon from 'react-native-vector-icons/FontAwesome';

@@ -13,7 +13,7 @@ import {
   Modal,
   Switch,
 } from 'react-native';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 import BankTransactionScreen from './BankTransactionScreen';
 import BankAccountsScreen from './BankAccountsScreen';
 import LocationSearchBar from '../components/AreaSearchBar';
@@ -56,6 +56,15 @@ const sendWhatsApp = (phoneNumber) => {
 
 const defaultMessageHeader = "Hello from LocalWala App:\n\n"; // Define a default header message
 
+const handleGetDirections = (latitude, longitude) => {
+  if (!latitude || !longitude) {
+    Alert.alert('Error', 'Location data missing for directions.');
+    return;
+  }
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
+  Linking.openURL(url).catch(err => console.error('Failed to open Google Maps:', err));
+};
+
 const AdminModal = ({ visible, onClose, title, children, onSave, saveButtonText = 'Save' }) => (
   <Modal
     animationType="slide"
@@ -63,6 +72,7 @@ const AdminModal = ({ visible, onClose, title, children, onSave, saveButtonText 
     visible={visible}
     onRequestClose={onClose}
   >
+
     <View style={styles.modalOverlay}>
       <View style={styles.modalContent}>
         <Text style={styles.modalTitle}>{title}</Text>
@@ -287,7 +297,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
 
       let query = supabase
         .from('users')
-        .select('*, mobile'); // Explicitly select mobile
+        .select('*, mobile, latitude, longitude'); // Added latitude and longitude
 
       // Admins can only see users with user_type 'user'
       if (userProfile?.user_type === 'admin') {
@@ -315,7 +325,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     try {
       let query = supabase
         .from('customers')
-        .select('*, repayment_plans(name, frequency), area_master(area_name)') // Fetch repayment plan and area details
+        .select('*, repayment_plans(name, frequency), area_master(area_name), latitude, longitude') // Added latitude and longitude
         .order('created_at', { ascending: false });
 
       // Filter by selected area if an area is selected
@@ -540,6 +550,14 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           )}
           <Text style={[styles.userRole, { color: getRoleColor(item.user_type) }]}> {item.user_type || 'user'} </Text>
           <Text style={[styles.userStatus, { color: item.location_status === 1 ? '#34C759' : '#FF3B30' }]}> Location: {item.location_status === 1 ? 'Active' : 'Inactive'} </Text>
+          {item.latitude && item.longitude && ( // Only show if lat/lon exist
+            <TouchableOpacity
+              style={styles.directionsButton} // You'll need to define this style
+              onPress={() => handleGetDirections(item.latitude, item.longitude)}
+            >
+              <Text style={styles.directionsButtonText}>Get Directions</Text>
+            </TouchableOpacity>
+          )}
           <Text style={styles.userDate}> Created: {new Date(item.created_at).toLocaleDateString()} </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
             <Text style={{ fontSize: 14, marginRight: 8 }}>Interval (sec):</Text>
@@ -613,6 +631,14 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           {item.start_date && <Text style={styles.itemDetail}>Start Date: {new Date(item.start_date).toLocaleDateString()}</Text>}
           {item.end_date && <Text style={styles.itemDetail}>End Date: {new Date(item.end_date).toLocaleDateString()}</Text>}
           {item.repayment_amount && <Text style={styles.itemDetail}>Repayment Amount: ₹{item.repayment_amount}</Text>}
+          {item.latitude && item.longitude && ( // Only show if lat/lon exist
+            <TouchableOpacity
+              style={styles.directionsButton} // Reusing the same style as for users
+              onPress={() => handleGetDirections(item.latitude, item.longitude)}
+            >
+              <Text style={styles.directionsButtonText}>Get Directions</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.itemActions}>
           {item.status === 'bulkupload' && (

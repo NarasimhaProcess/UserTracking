@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, TouchableOpacity, RefreshControl, Modal } from 'react-native';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 import BankTransactionFormModal from './BankTransactionFormModal'; // Import the new modal component
 import TransactionDetailModal from '../components/TransactionDetailModal'; // Import the details modal
 import TransactionTotalsModal from '../components/TransactionTotalsModal'; // Import the totals modal
 
-const BankTransactionScreen = ({ navigation }) => {
+const BankTransactionScreen = ({ navigation, user, userProfile }) => {
+    console.log('BankTransactionScreen: userProfile:', userProfile); // Added log
+    console.log('BankTransactionScreen: userProfile.user_type:', userProfile?.user_type); // Added log
+
     // State for bank transactions list
     const [bankTransactions, setBankTransactions] = useState([]);
     const [transactionTotals, setTransactionTotals] = useState({}); // State for totals
@@ -164,6 +167,8 @@ const BankTransactionScreen = ({ navigation }) => {
             </View>
         </TouchableOpacity>
     ), []);
+
+    
 
     return (
         <View style={styles.container}>
@@ -390,6 +395,19 @@ const styles = StyleSheet.create({
         fontSize: 15,
         marginBottom: 3,
         color: '#333',
+    },
+    accessDeniedText: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginTop: 50,
+        color: '#FF3B30', // Red color for denial
+    },
+    accessDeniedSubText: {
+        fontSize: 16,
+        textAlign: 'center',
+        marginTop: 10,
+        color: '#8E8E93',
     },
 });
 

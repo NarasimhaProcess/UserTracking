@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, TouchableOpacity, Modal } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 
 const BankTransactionFormModal = ({ isVisible, onClose, onSaveSuccess, initialAreaId, initialBankAccountId }) => {
     const [amount, setAmount] = useState('');

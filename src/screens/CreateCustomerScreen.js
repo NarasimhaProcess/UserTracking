@@ -4,7 +4,7 @@ import { WebView } from 'react-native-webview';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { StackActions } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -15,11 +16,13 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 import { locationTracker } from '../services/locationTracker';
 import { Buffer } from 'buffer';
 import LeafletMap from '../components/LeafletMap';
 import { OfflineStorageService } from '../services/OfflineStorageService';
+import { registerForPushNotificationsAsync } from '../services/notificationService'; // New import
+import * as Notifications from 'expo-notifications'; // New import
 
 // Utility function to convert BYTEA hex to base64
 function hexToBase64(hexString) {
@@ -128,6 +131,12 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     latitudeDelta: 0.01,
     longitudeDelta: 0.01,
   });
+  const [notificationStatus, setNotificationStatus] = useState('undetermined'); // New state
+
+  const checkNotificationStatus = useCallback(async () => {
+    const { status } = await Notifications.getPermissionsAsync();
+    setNotificationStatus(status);
+  }, []);
 
   useEffect(() => {
     if (userProfile?.profile_photo_data) {
@@ -135,7 +144,8 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     } else {
       setProfileImage(null);
     }
-  }, [userProfile]);
+    checkNotificationStatus(); // Check status on mount
+  }, [userProfile, checkNotificationStatus]);
 
   // Using useCallback to ensure function reference stability
   const handleLogout = async () => {
@@ -156,7 +166,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
             onPress: async () => {
               await OfflineStorageService.clearOfflineExpenses();
               await supabase.auth.signOut();
-              navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+              navigation.dispatch(StackActions.replace('Login'));
             },
           },
           {
@@ -170,7 +180,7 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
       try {
         await supabase.auth.signOut();
         Alert.alert('Success', 'Logged out successfully!');
-        navigation.replace('Login'); // Assuming 'Login' is the name of your login screen route
+        navigation.dispatch(StackActions.replace('Login'));
       } catch (error) {
         Alert.alert('Error', 'Failed to log out: ' + error.message);
         console.error('Logout error:', error);
@@ -450,6 +460,22 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
               thumbColor={settings.highAccuracy ? '#FFFFFF' : '#FFFFFF'}
             />
           </View>
+          {notificationStatus !== 'granted' && (
+            <TouchableOpacity
+              style={styles.enableNotificationsButton}
+              onPress={async () => {
+                const token = await registerForPushNotificationsAsync(user); // Pass the user prop
+                if (token) {
+                  Alert.alert('Success', 'Notifications enabled!');
+                  checkNotificationStatus(); // Re-check status after enabling
+                } else {
+                  Alert.alert('Error', 'Failed to enable notifications. Please check app settings.');
+                }
+              }}
+            >
+              <Text style={styles.enableNotificationsButtonText}>Enable Notifications</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

@@ -11,10 +11,12 @@ import {
   ScrollView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 import { NetInfoService } from '../services/NetInfoService';
 
-export default function BankAccountsScreen({ navigation, showAddFormInitially = false }) {
+export default function BankAccountsScreen({ navigation, user, userProfile, showAddFormInitially = false }) {
+  console.log('BankAccountsScreen: userProfile:', userProfile); // Added log
+  console.log('BankAccountsScreen: userProfile.user_type:', userProfile?.user_type); // Added log
   const [bankAccounts, setBankAccounts] = useState([]);
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -285,5 +287,18 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
     color: '#888',
+  },
+  accessDeniedText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 50,
+    color: '#FF3B30', // Red color for denial
+  },
+  accessDeniedSubText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 10,
+    color: '#8E8E93',
   },
 });

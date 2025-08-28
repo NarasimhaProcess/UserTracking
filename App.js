@@ -631,6 +631,7 @@ export default function App() {
     );
   }
 
+  console.log('App render: isAuthenticated =', isAuthenticated);
   return (
     <NavigationContainer>
       <StatusBar style="auto" />

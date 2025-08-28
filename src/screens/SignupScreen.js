@@ -10,7 +10,8 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
+import { registerForPushNotificationsAsync } from '../services/notificationService'; // New import
 
 export default function SignupScreen({ navigation, route }) {
   const [email, setEmail] = useState('');
@@ -87,10 +88,20 @@ export default function SignupScreen({ navigation, route }) {
           Alert.alert('Warning', 'Account created but profile setup failed. Please contact support.');
         } else {
           console.log('User profile created:', userData);
+          // Register for push notifications and save token for new user
+          try {
+            const pushToken = await registerForPushNotificationsAsync(data.user); // Pass data.user
+            if (pushToken) {
+              console.log('Push Token obtained for new user:', pushToken);
+              // The notificationService.js already handles saving to Supabase
+            }
+          } catch (e) {
+            console.error('Error during push notification registration for new user:', e);
+          }
         }
 
         Alert.alert(
-          'Success', 
+          'Success',
           'Account created successfully! Please check your email for verification.',
           [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
         );

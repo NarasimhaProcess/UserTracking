@@ -3,7 +3,7 @@ import * as TaskManager from 'expo-task-manager';
 import * as Device from 'expo-device';
 import * as Application from 'expo-application';
 import { Platform } from 'react-native';
-import { supabase } from './supabase';
+import { supabase } from './supabaseClient';
 import { NetInfoService } from './NetInfoService';
 import { OfflineStorageService } from './OfflineStorageService';
 import NetInfo from '@react-native-community/netinfo';

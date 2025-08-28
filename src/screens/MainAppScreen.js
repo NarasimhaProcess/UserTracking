@@ -2,19 +2,10 @@
 // src/screens/MainAppScreen.js
 import React, { useState, useEffect } from 'react';
 import { View, Text, Button, Alert, ActivityIndicator, StyleSheet } from 'react-native';
-import { supabase, setTenantCode } from '../services/supabaseClient'; // Adjust path
+import { supabase } from '../services/supabaseClient'; // Adjust path
 
 const MainAppScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
-  const [userTenantDisplay, setUserTenantDisplay] = useState('N/A');
-  const [isTenantMasterUser, setIsTenantMasterUser] = useState(false);
-
-  useEffect(() => {
-    // Update UI display based on the configured tenant status
-    const currentTenantCode = supabase.currentTenantCode; // Access the module-level variable
-    setUserTenantDisplay(currentTenantCode === null ? 'NULL (Direct)' : currentTenantCode);
-    setIsTenantMasterUser(currentTenantCode !== null);
-  }, []); // Run once on mount
 
   const handleLogout = async () => {
     setLoading(true);
@@ -41,8 +32,8 @@ const MainAppScreen = ({ navigation }) => {
     }
     setLoading(true);
     try {
-      const tableName = isTenantMasterUser ? 'your_tenant_table' : 'your_main_project_table';
-      console.log(`Fetching from ${tableName} for user type: ${isTenantMasterUser ? 'Tenant Master' : 'Normal'}`);
+      const tableName = 'your_main_project_table'; // Now using a single table for all data
+      console.log(`Fetching from ${tableName}`);
 
       const { data, error } = await supabase.from(tableName).select('*');
       if (error) {
@@ -61,8 +52,6 @@ const MainAppScreen = ({ navigation }) => {
     <View style={styles.container}>
       <Text style={styles.title}>Welcome to the App!</Text>
       <Text style={styles.infoText}>Logged in as: {supabase.auth.currentUser?.email}</Text>
-      <Text style={styles.infoText}>Tenant Status: {userTenantDisplay}</Text>
-      <Text style={styles.infoText}>Type: {isTenantMasterUser ? 'Tenant Master' : 'Normal'}</Text>
 
       <View style={styles.buttonContainer}>
         <Button title={loading ? "Fetching..." : "Fetch Data"} onPress={fetchData} disabled={loading} />

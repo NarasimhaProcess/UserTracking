@@ -12,7 +12,7 @@ import {
   FlatList, // Added FlatList
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -494,6 +494,7 @@ export default function QuickTransactionScreen({ navigation, user }) {
       payment_mode: paymentType,
       upi_image: paymentType === 'upi' ? paymentProofImage : null,
       user_id: user.id,
+      area_id: selectedAreaId, // Add area_id here
       transaction_type: 'repayment',
       latitude: user.latitude,
       longitude: user.longitude,

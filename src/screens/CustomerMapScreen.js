@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, TextInput, FlatList, TouchableOpacity } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { supabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 import { useNavigation } from '@react-navigation/native';
 
 function AreaSearchBar({ onAreaSelected }) {

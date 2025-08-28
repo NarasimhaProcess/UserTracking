@@ -10,9 +10,10 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { supabase, reinitializeSupabase } from '../services/supabase';
+import { supabase } from '../services/supabaseClient';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { registerForPushNotificationsAsync } from '../services/notificationService';
 
 
 
@@ -56,32 +57,12 @@ export default function LoginScreen({ navigation, route }) {
 
         let tenantId = userData.tenant_id;
 
-        if (!tenantId) {
-          // This is an old user, assign them to the default tenant
-          const { data: defaultTenant, error: tenantError } = await supabase
-            .from('tenants')
-            .select('id')
-            .eq('name', 'Default')
-            .single();
+        // Removed: Logic to assign default tenant and update user's tenant_id.
+        // The app now operates in a single-tenant mode, connecting directly to the master DB.
 
-          if (tenantError || !defaultTenant) {
-            Alert.alert('Error', 'Could not find the default tenant. Please contact support.');
-            setLoading(false);
-            return;
-          }
-
-          tenantId = defaultTenant.id;
-
-          // Update the user with the new tenant_id
-          await supabase
-            .from('users')
-            .update({ tenant_id: tenantId })
-            .eq('id', userData.id);
-        }
-
-        if (tenantId) {
-          await reinitializeSupabase(tenantId);
-        }
+        // if (tenantId) { // reinitializeSupabase is no longer needed as we use a single client
+        //   await reinitializeSupabase(tenantId);
+        // }
         
         // Use the user data from users table instead of auth user
         const authenticatedUser = {
@@ -96,6 +77,19 @@ export default function LoginScreen({ navigation, route }) {
         // Call the auth success callback if provided
         if (onAuthSuccess) {
           onAuthSuccess(authenticatedUser, navigation);
+        }
+
+        
+
+        // Register for push notifications and save token
+        try {
+          const pushToken = await registerForPushNotificationsAsync(authenticatedUser); // Pass authenticatedUser
+          if (pushToken) {
+            console.log('Push Token obtained:', pushToken);
+            // The notificationService.js already handles saving to Supabase
+          }
+        } catch (e) {
+          console.error('Error during push notification registration:', e);
         }
 
         // After successful login, ask to enable biometrics
