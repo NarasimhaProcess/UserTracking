@@ -25,7 +25,7 @@ import LargeChartModal from '../components/LargeChartModal';
 import CalculatorModal from '../components/CalculatorModal';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import RealtimeCollaboration from '../components/RealtimeCollaboration';
+
 
 const getDayName = () => {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -697,10 +697,7 @@ ${customer ? customer.book_no : ''}`;
         customerDataForModal={customerList}
       />
 
-      {/* Real-time collaboration overlay */}
-      <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
-        <RealtimeCollaboration user={user} />
-      </View>
+      
     </View>
   );
 }

@@ -15,6 +15,8 @@ import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync } from './src/services/notificationService';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import RealtimeCollaboration from './src/components/RealtimeCollaboration';
+import GlobalChatAndPresence from './src/components/GlobalChatAndPresence';
 if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer;
 }
@@ -266,6 +268,8 @@ export default function App() {
   const [userProfile, setUserProfile] = useState(null);
   
   const [showCalculatorModal, setShowCalculatorModal] = useState(false);
+  const [showGlobalChat, setShowGlobalChat] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null); // New state for selected group
   const [expoPushToken, setExpoPushToken] = useState('');
   const notificationListener = React.useRef();
   const responseListener = React.useRef();
@@ -406,6 +410,57 @@ export default function App() {
     }
   };
 
+  const fetchUserGroups = async (userId, userType) => {
+    try {
+      let groups = [];
+      if (userType === 'superadmin') {
+        // Fetch all groups for superadmin
+        const { data, error } = await supabase
+          .from('groups')
+          .select('id, name');
+        if (error) {
+          console.error('❌ Error fetching all groups for superadmin:', error);
+          return [];
+        }
+        groups = data;
+      } else {
+        // Fetch group_ids from user_groups table for the given userId
+        const { data: userGroupLinks, error: userGroupError } = await supabase
+          .from('user_groups')
+          .select('group_id')
+          .eq('user_id', userId);
+
+        if (userGroupError) {
+          console.error('❌ Error fetching user group links:', userGroupError);
+          return [];
+        }
+
+        if (!userGroupLinks || userGroupLinks.length === 0) {
+          return [];
+        }
+
+        // Extract group_ids
+        const groupIds = userGroupLinks.map(link => link.group_id);
+
+        // Fetch group details from the groups table
+        const { data, error } = await supabase
+          .from('groups')
+          .select('id, name')
+          .in('id', groupIds);
+
+        if (error) {
+          console.error('❌ Error fetching group details:', error);
+          return [];
+        }
+        groups = data;
+      }
+      return groups; // Returns an array of { id, name } objects
+    } catch (error) {
+      console.error('❌ Unexpected error in fetchUserGroups:', error);
+      return [];
+    }
+  };
+
   // Update route params when user data changes
   useEffect(() => {
     if (isAuthenticated && user && userProfile) {
@@ -443,7 +498,12 @@ export default function App() {
       }
 
       console.log('✅ User profile loaded successfully:', data);
-      setUserProfile(data);
+      
+      // Fetch user's groups
+      const userGroups = await fetchUserGroups(userId, data.user_type);
+      console.log('✅ User groups loaded successfully:', userGroups);
+
+      setUserProfile({ ...data, groups: userGroups });
       
       // Use the complete user data from users table
       const userData = {
@@ -593,6 +653,8 @@ export default function App() {
     }
   };
 
+  const [showRealtimeCollaboration, setShowRealtimeCollaboration] = useState(false);
+
   // Header component for authenticated screens
   const renderHeader = (navigation) => ({
     headerShown: isAuthenticated,
@@ -609,6 +671,26 @@ export default function App() {
     headerTitle: () => null,
     headerRight: () => (
       <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15 }}>
+        <TouchableOpacity 
+          onPress={() => setShowRealtimeCollaboration(prev => !prev)} 
+          style={{ marginRight: 15 }}
+        >
+          <MaterialIcons 
+            name={showRealtimeCollaboration ? "visibility" : "visibility-off"} 
+            size={24} 
+            color="#007AFF" 
+          />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          onPress={() => setShowGlobalChat(prev => !prev)} 
+          style={{ marginRight: 15 }}
+        >
+          <MaterialIcons 
+            name={showGlobalChat ? "chat-bubble" : "chat-bubble-outline"} 
+            size={24} 
+            color="#007AFF" 
+          />
+        </TouchableOpacity>
         <QuickTransactionButton onPress={() => navigation.navigate('QuickTransaction')} />
         <TouchableOpacity 
           onPress={() => navigation.navigate('Expenses')} 
@@ -714,6 +796,23 @@ export default function App() {
           isVisible={showCalculatorModal} 
           onClose={() => setShowCalculatorModal(false)} 
         />
+      )}
+
+      {/* Real-time collaboration overlay */}
+      {isAuthenticated && user && showRealtimeCollaboration && (
+        <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+          <RealtimeCollaboration user={user} selectedGroup={selectedGroup} />
+        </View>
+      )}
+
+      {/* Global Chat and Presence */}
+      {isAuthenticated && user && showGlobalChat && (
+        <GlobalChatAndPresence 
+          user={user} 
+          userProfile={userProfile} 
+          selectedGroup={selectedGroup} 
+          setSelectedGroup={setSelectedGroup} 
+               />
       )}
     </NavigationContainer>
   );

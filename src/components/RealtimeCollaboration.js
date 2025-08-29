@@ -21,7 +21,7 @@ const pointsToPath = (points) => {
   return `M ${firstPoint.x} ${firstPoint.y} ` + rest.map(p => `L ${p.x} ${p.y}`).join(' ');
 };
 
-export default function RealtimeCollaboration({ user }) {
+export default function RealtimeCollaboration({ user, selectedGroup }) {
   const [remoteCursors, setRemoteCursors] = useState({});
   const [paths, setPaths] = useState({});
   const myCursorPos = useRef(new Animated.ValueXY({ x: -100, y: -100 })).current;
@@ -31,7 +31,15 @@ export default function RealtimeCollaboration({ user }) {
   const myInstanceId = useRef(Date.now() + Math.random()).current;
 
   useEffect(() => {
-    const channelName = 'collaboration-channel'; // New channel for both features
+    if (!selectedGroup) {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      return;
+    }
+
+    const channelName = `collaboration-group-${selectedGroup.id}`;
     const channel = supabase.channel(channelName, {
       config: { broadcast: { self: false } },
     });
@@ -44,10 +52,12 @@ export default function RealtimeCollaboration({ user }) {
 
     // Subscribe to drawing events
     channel.on('broadcast', { event: 'path-start' }, ({ payload }) => {
+      if (!payload || !payload.pathId) return; // Added null check
       setPaths(current => ({ ...current, [payload.pathId]: [payload.point] }));
     });
 
     channel.on('broadcast', { event: 'path-point' }, ({ payload }) => {
+      if (!payload || !payload.pathId) return; // Added null check
       setPaths(current => {
         if (!current[payload.pathId]) return current;
         return { ...current, [payload.pathId]: [...current[payload.pathId], payload.point] };
@@ -64,7 +74,7 @@ export default function RealtimeCollaboration({ user }) {
         channelRef.current = null;
       }
     };
-  }, [user, myInstanceId]);
+  }, [selectedGroup]); // Added dependency array
 
   const panResponder = useRef(
     PanResponder.create({
@@ -86,7 +96,7 @@ export default function RealtimeCollaboration({ user }) {
         myCursorPos.setValue({ x: moveX, y: moveY });
 
         // Add point to current path
-        if (currentPath.current) {
+        if (currentPath.current && currentPath.current.pathId) {
           const point = { x: moveX, y: moveY };
           currentPath.current.points.push(point);
           setPaths(current => ({ ...current, [currentPath.current.pathId]: currentPath.current.points }));

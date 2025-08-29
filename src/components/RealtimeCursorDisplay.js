@@ -72,6 +72,8 @@ export default function RealtimeCursorDisplay({ user }) {
         myCursorPos.setValue({ x: moveX, y: moveY });
 
         // Broadcast our position to the channel
+        // Temporarily commented out Supabase broadcast for debugging
+        /*
         if (channelRef.current && user) {
           channelRef.current.send({
             type: 'broadcast',
@@ -85,10 +87,11 @@ export default function RealtimeCursorDisplay({ user }) {
             },
           });
         }
+        */
       },
       onPanResponderRelease: () => {
-        // Move cursor off-screen when touch is released
-        myCursorPos.setValue({ x: -100, y: -100 });
+        // Temporarily commented out for debugging
+        // myCursorPos.setValue({ x: -100, y: -100 });
       },
     })
   ).current;
