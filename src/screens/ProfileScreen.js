@@ -164,9 +164,10 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
             text: 'Logout and Discard',
             style: 'destructive',
             onPress: async () => {
+              console.log('ProfileScreen: Attempting to sign out (discarding offline expenses).'); // NEW LOG
               await OfflineStorageService.clearOfflineExpenses();
               await supabase.auth.signOut();
-              navigation.dispatch(StackActions.replace('Login'));
+              console.log('ProfileScreen: Sign out call completed (discarding offline expenses).'); // NEW LOG
             },
           },
           {
@@ -178,9 +179,10 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
       );
     } else {
       try {
+        console.log('ProfileScreen: Attempting to sign out (no offline expenses).'); // NEW LOG
         await supabase.auth.signOut();
-        Alert.alert('Success', 'Logged out successfully!');
-        navigation.dispatch(StackActions.replace('Login'));
+        console.log('ProfileScreen: Sign out call completed (no offline expenses).'); // NEW LOG
+        // Alert.alert('Success', 'Logged out successfully!'); // Temporarily removed
       } catch (error) {
         Alert.alert('Error', 'Failed to log out: ' + error.message);
         console.error('Logout error:', error);

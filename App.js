@@ -45,7 +45,7 @@ import QuickTransactionButton from './src/components/QuickTransactionButton';
 import BankTransactionScreen from './src/screens/BankTransactionScreen';
 
 // Import services
-import { supabase, initializeSupabase } from './src/services/supabase';
+import { supabase } from './src/services/supabaseClient';
 import { locationTracker } from './src/services/locationTracker';
 console.log('locationTracker after import:', locationTracker);
 
@@ -277,7 +277,6 @@ export default function App() {
   useEffect(() => {
     const initializeApp = async () => {
       console.log('Starting app initialization...');
-      await initializeSupabase();
       console.log('Supabase initialized, proceeding with auth.');
 
       
@@ -609,7 +608,7 @@ export default function App() {
     setIsAuthenticated(true);
     setShowCalculatorModal(false); // Ensure calculator is hidden on successful auth
     if (navigation) {
-      navigation.replace('Main');
+      // navigation.replace('Main'); // Removed this line
     }
   };
 

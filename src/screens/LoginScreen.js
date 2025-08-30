@@ -17,11 +17,10 @@ import { registerForPushNotificationsAsync } from '../services/notificationServi
 
 
 
-export default function LoginScreen({ navigation, route }) {
+export default function LoginScreen({ navigation, route, onAuthSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const onAuthSuccess = route.params?.onAuthSuccess;
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -94,8 +93,7 @@ export default function LoginScreen({ navigation, route }) {
 
         // After successful login, ask to enable biometrics
         await promptForBiometrics(authenticatedUser.email);
-        
-      }
+        }
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred');
       console.error('Login error:', error);
@@ -106,6 +104,15 @@ export default function LoginScreen({ navigation, route }) {
 
   const promptForBiometrics = async (userEmail) => {
     try {
+      // Check if biometrics already enabled or declined
+      const biometricsEnabled = await AsyncStorage.getItem('BIOMETRICS_ENABLED');
+      const biometricsDeclined = await AsyncStorage.getItem('BIOMETRICS_DECLINED');
+
+      if (biometricsEnabled === 'true' || biometricsDeclined === 'true') {
+        console.log('Biometrics preference already set. Skipping prompt.');
+        return;
+      }
+
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       if (!hasHardware) {
         console.log('Biometric hardware not available.');
@@ -125,14 +132,21 @@ export default function LoginScreen({ navigation, route }) {
         'Enable Biometric Login',
         'Would you like to use your fingerprint or Face ID for faster logins?',
         [
-          { text: 'No', style: 'cancel' },
+          {
+            text: 'No',
+            style: 'cancel',
+            onPress: async () => {
+              console.log('Biometrics setup declined');
+              await AsyncStorage.setItem('BIOMETRICS_DECLINED', 'true');
+            },
+          },
           {
             text: 'Yes, Enable',
             onPress: async () => {
               try {
-                // Securely store the fact that biometrics are enabled for this user
                 await AsyncStorage.setItem('BIOMETRICS_ENABLED', 'true');
                 await AsyncStorage.setItem('BIOMETRICS_EMAIL', userEmail);
+                await AsyncStorage.removeItem('BIOMETRICS_DECLINED'); // Remove declined flag if user enables
                 Alert.alert(
                   'Biometrics Enabled',
                   'You can now use your fingerprint or Face ID to log in.'

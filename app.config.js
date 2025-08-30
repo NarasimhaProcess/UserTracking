@@ -32,6 +32,7 @@ export default {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF"
       },
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",

@@ -33,6 +33,12 @@ serve(async (req)=>{
       customerId = record.customer_id; // Assuming bank_transactions can be linked to a customer
       creatorUserId = record.user_id; // Assuming bank_transactions has a user_id
       notificationMessage = `New transaction of ${amount} recorded.`;
+    } else if (table === "user_expenses") {
+      const amount = record.amount;
+      const description = record.description;
+      areaId = record.area_id;
+      creatorUserId = record.user_id;
+      notificationMessage = `New expense of ${amount} for '${description}' recorded.`;
     } else {
       return new Response(JSON.stringify({
         error: "Unsupported table type"
