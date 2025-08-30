@@ -132,39 +132,56 @@ serve(async (req)=>{
         status: 200
       });
     }
-    // Send Expo Push Notifications
-    const messages = expoPushTokens.map((token)=>({
+    // Send FCM Push Notifications
+    const notificationUrl = "https://fcm.googleapis.com/fcm/send";
+    const fcmServerKey = Deno.env.get("FCM_SERVER_KEY") || "YOUR_FCM_SERVER_KEY_HERE"; // IMPORTANT: Replace with your actual FCM Server Key or set as Deno env var
+
+    if (!fcmServerKey || fcmServerKey === "YOUR_FCM_SERVER_KEY_HERE") {
+      console.error("FCM_SERVER_KEY is not set. Cannot send notifications.");
+      return new Response(JSON.stringify({
+        error: "FCM Server Key not configured."
+      }), {
+        headers: { "Content-Type": "application/json" },
+        status: 500,
+      });
+    }
+
+    const results = [];
+    for (const token of expoPushTokens) { // expoPushTokens now contains raw FCM tokens
+      const fcmMessage = {
         to: token,
-        title: "New Activity Alert",
-        body: notificationMessage,
+        notification: {
+          title: "New Activity Alert",
+          body: notificationMessage,
+        },
         data: {
           table: table,
           recordId: record.id,
           areaId: areaId,
-          customerId: customerId
-        }
-      }));
-    const notificationUrl = "https://exp.host/--/api/v2/push/send";
-    console.log("Calling notification URL:", notificationUrl); // Added log
-    const expoResponse = await fetch(notificationUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Accept-Encoding": "gzip, deflate",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(messages)
-    });
-    const expoResult = await expoResponse.json();
-    console.log("Expo Push Notification Result:", expoResult);
+          customerId: customerId,
+        },
+      };
+
+      console.log("Calling FCM URL:", notificationUrl, "for token:", token);
+      const fcmResponse = await fetch(notificationUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `key=${fcmServerKey}`,
+        },
+        body: JSON.stringify(fcmMessage),
+      });
+      const fcmResult = await fcmResponse.json();
+      results.push({ token, result: fcmResult });
+      console.log("FCM Send Result for token", token, ":", fcmResult);
+    }
+
     return new Response(JSON.stringify({
-      message: "Notifications sent",
-      expoResult
+      message: "Notifications sent via FCM",
+      fcmResults: results,
     }), {
-      headers: {
-        "Content-Type": "application/json"
-      },
-      status: 200
+      headers: { "Content-Type": "application/json" },
+      status: 200,
     });
   } catch (error) {
     console.error("Edge Function error:", error);

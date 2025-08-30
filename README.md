@@ -1,262 +1,45 @@
-# User Tracking Mobile App
+# DalabHRPORTAL UserTracking App
 
-A React Native mobile application for real-time location tracking with Supabase backend integration.
+This document outlines the key features and recent enhancements made to the UserTracking mobile application.
 
-## 🚀 Features
+## Features & Enhancements
 
-### Core Features
-- **Real-time Location Tracking** - Track user location with high accuracy
-- **Background Location Updates** - Continue tracking when app is in background
-- **Offline Support** - Store location data locally when offline
-- **Interactive Map** - View location history on interactive map
-- **User Authentication** - Secure login/signup with Supabase Auth
-- **Push Notifications** - Real-time notifications for location events
+### 1. User Authentication & Management
+- **Robust Login Flow:** Enhanced login process with improved navigation handling, ensuring smooth transitions to the main application dashboard upon successful authentication.
+- **Seamless Logout:** Implemented a reliable logout mechanism that correctly clears user sessions and redirects to the login screen, allowing for easy switching between user accounts.
+- **Biometric Authentication (Fingerprint/Face ID):**
+    - Integrated optional biometric login for faster and more secure access.
+    - Improved user experience: The app now remembers if a user declines biometric setup, preventing repeated prompts on subsequent logins.
+    - Graceful handling for devices without biometric hardware or enrolled biometrics, ensuring the login process proceeds without interruption.
 
-### Advanced Features
-- **Geofencing** - Get notified when entering/leaving specific areas
-- **Route Visualization** - View travel routes on map
-- **Location Statistics** - Track distance, speed, and accuracy
-- **Data Synchronization** - Sync offline data when connection restored
-- **Battery Optimization** - Smart location updates to save battery
+### 2. Push Notifications
+- **Comprehensive Notification System:** Integrated push notifications using Expo Notifications for real-time alerts.
+- **Supabase Integration:** Leverages Supabase for secure storage of device push tokens and backend logic for sending notifications.
+- **Event-Driven Alerts:** Notifications are automatically triggered for key events:
+    - New customer additions.
+    - New bank transactions (including quick transactions).
+    - **NEW:** New user expenses.
+- **Note:** For push notifications to function in standalone Android APKs, ensure the `google-services.json` file from your Firebase project is correctly placed in the project root and configured in `app.config.js`.
 
-## 📱 Screens
+### 3. Real-time Global Chat & Presence
+- **Group-Based Communication:** Enables real-time chat within selected user groups.
+- **Live Presence Indicators:** Users can see who is currently online within their active chat group.
+- **Scalable Design:** Handles groups with multiple participants gracefully, with horizontal scrolling for large user lists.
+- **Note:** A database schema update is required for the `messages` table to include the `sender_email` column for proper chat functionality. Please run the provided SQL script against your Supabase database.
 
-1. **Login Screen** - User authentication
-2. **Dashboard** - Main control panel with tracking toggle
-3. **Map Screen** - Interactive map with location history
-4. **Location History** - Detailed location data and statistics
-5. **Profile Screen** - User profile and settings
+### 4. Header UI Enhancements (Pending)
+- **Improved Navigation Bar Layout:** Icons for real-time cursor visibility and global chat will be moved to the left side of the header, next to the profile photo, for better accessibility and organization.
 
-## 🛠 Setup Instructions
+---
 
-### Prerequisites
-- Node.js (v16 or higher)
-- npm or yarn
-- Expo CLI
-- iOS Simulator (for iOS development)
-- Android Studio (for Android development)
+## Getting Started
 
-### Installation
+(Placeholder for setup instructions - e.g., `npm install`, `npx expo start`)
 
-1. **Clone the repository**
-```bash
-cd UserTracking
-```
+## Development
 
-2. **Install dependencies**
-```bash
-npm install
-```
+(Placeholder for development guidelines - e.g., `npm run android`, `npm run ios`)
 
-3. **Install Expo CLI globally** (if not already installed)
-```bash
-npm install -g @expo/cli
-```
+## Deployment
 
-4. **Start the development server**
-```bash
-npm start
-```
-
-5. **Run on device/simulator**
-- Press `i` for iOS simulator
-- Press `a` for Android emulator
-- Scan QR code with Expo Go app on your phone
-
-### Environment Configuration
-
-The app is configured to use the same Supabase project as the web application. The credentials are already set in `src/services/supabase.js`.
-
-## 📋 Project Structure
-
-```
-UserTracking/
-├── App.js                 # Main app component
-├── app.json              # Expo configuration
-├── package.json          # Dependencies
-├── src/
-│   ├── screens/          # Screen components
-│   │   ├── LoginScreen.js
-│   │   ├── DashboardScreen.js
-│   │   ├── MapScreen.js
-│   │   ├── LocationHistoryScreen.js
-│   │   └── ProfileScreen.js
-│   ├── services/         # Business logic
-│   │   ├── supabase.js
-│   │   └── locationTracker.js
-│   └── components/       # Reusable components
-└── assets/              # Images and icons
-```
-
-## 🔧 Key Components
-
-### Location Tracker Service
-- Handles GPS location updates
-- Manages background location tracking
-- Stores offline data
-- Syncs with Supabase
-
-### Supabase Integration
-- User authentication
-- Real-time location storage
-- Offline data synchronization
-- Push notifications
-
-### Map Integration
-- React Native Maps
-- Real-time location display
-- Route visualization
-- Interactive markers
-
-## 📊 Database Schema
-
-The app uses the same Supabase tables as the web application:
-
-### users table
-- id (UUID)
-- email (string)
-- name (string)
-- user_type (string)
-
-### location_history table
-- id (UUID)
-- user_id (UUID)
-- latitude (float)
-- longitude (float)
-- accuracy (float)
-- timestamp (timestamp)
-- device_name (string)
-- location_status (integer)
-
-## 🔐 Permissions
-
-The app requires the following permissions:
-
-### iOS
-- Location When In Use
-- Location Always and When In Use
-- Background App Refresh
-
-### Android
-- ACCESS_FINE_LOCATION
-- ACCESS_COARSE_LOCATION
-- ACCESS_BACKGROUND_LOCATION
-- FOREGROUND_SERVICE
-
-## 🚀 Deployment
-
-### Building for Production
-
-1. **Configure app.json**
-```json
-{
-  "expo": {
-    "name": "User Tracking",
-    "slug": "user-tracking-mobile",
-    "version": "1.0.0"
-  }
-}
-```
-
-2. **Build for iOS**
-```bash
-expo build:ios
-```
-
-3. **Build for Android**
-```bash
-expo build:android
-```
-
-### App Store Deployment
-
-1. **iOS App Store**
-- Create app in App Store Connect
-- Upload build via Xcode or Expo
-- Submit for review
-
-2. **Google Play Store**
-- Create app in Google Play Console
-- Upload APK/AAB file
-- Submit for review
-
-## 🔧 Development
-
-### Adding New Features
-
-1. **Create new screen**
-```javascript
-// src/screens/NewScreen.js
-import React from 'react';
-import { View, Text } from 'react-native';
-
-export default function NewScreen() {
-  return (
-    <View>
-      <Text>New Screen</Text>
-    </View>
-  );
-}
-```
-
-2. **Add to navigation**
-```javascript
-// App.js
-<Stack.Screen name="NewScreen" component={NewScreen} />
-```
-
-### Testing
-
-1. **Unit Tests**
-```bash
-npm test
-```
-
-2. **E2E Tests**
-```bash
-npm run e2e
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Location not working**
-- Check device permissions
-- Ensure location services are enabled
-- Verify GPS is turned on
-
-2. **Build errors**
-- Clear npm cache: `npm cache clean --force`
-- Delete node_modules and reinstall
-- Update Expo CLI: `npm install -g @expo/cli`
-
-3. **Supabase connection issues**
-- Check internet connection
-- Verify Supabase credentials
-- Check API rate limits
-
-## 📈 Performance Optimization
-
-- **Battery optimization** - Smart location update intervals
-- **Offline support** - Local storage for offline data
-- **Image optimization** - Compressed assets
-- **Memory management** - Efficient component lifecycle
-
-## 🔒 Security
-
-- **Secure authentication** - Supabase Auth
-- **Data encryption** - HTTPS connections
-- **Permission handling** - Proper permission requests
-- **Privacy compliance** - GDPR compliant data handling
-
-## 📞 Support
-
-For issues and questions:
-- Check the troubleshooting section
-- Review Expo documentation
-- Contact development team
-
-## 📄 License
-
-This project is licensed under the MIT License. 
+(Placeholder for deployment instructions - e.g., `eas build`)
