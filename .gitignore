@@ -7,7 +7,7 @@ yarn-error.log*
 # Expo
 .expo/
 .expo-shared/
-dist/
+
 web-build/
 
 # Native
@@ -121,7 +121,7 @@ jspm_packages/
 # Expo
 .expo/
 .expo-shared/
-dist/
+
 web-build/
 
 # EAS
