@@ -7,7 +7,7 @@ yarn-error.log*
 # Expo
 .expo/
 .expo-shared/
-dist/
+
 web-build/
 
 # Native
@@ -94,7 +94,8 @@ jspm_packages/
 .nuxt
 
 # vuepress build output
-.vuepress/dist
+#vuepress/dist
+#.vuepress/dist
 
 # Serverless directories
 .serverless
@@ -121,7 +122,7 @@ jspm_packages/
 # Expo
 .expo/
 .expo-shared/
-dist/
+
 web-build/
 
 # EAS

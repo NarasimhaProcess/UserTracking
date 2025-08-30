@@ -9,6 +9,7 @@ export default {
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
+    "jsEngine": "jsc",
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
@@ -47,7 +48,8 @@ export default {
     },
     "web": {
       "bundler": "metro",
-      "favicon": "./assets/icon.png"
+      "favicon": "./assets/icon.png",
+      "jsEngine": "jsc"
     },
     "plugins": [
       [
