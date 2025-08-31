@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, TouchableOpacity, RefreshControl, Modal } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, TouchableOpacity, RefreshControl, Modal, Clipboard } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import { supabase } from '../services/supabaseClient';
 import BankTransactionFormModal from './BankTransactionFormModal'; // Import the new modal component
 import TransactionDetailModal from '../components/TransactionDetailModal'; // Import the details modal
@@ -33,6 +34,10 @@ const BankTransactionScreen = ({ navigation, user, userProfile }) => {
 
     // State to control the visibility of the Add Transaction Modal
     const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
+
+    // State for customer upload modal
+    const [showUploadModal, setShowUploadModal] = useState(false);
+    const [uploadedTransactions, setUploadedTransactions] = useState([]);
 
     useEffect(() => {
         fetchAreaMasters();
@@ -154,6 +159,171 @@ const BankTransactionScreen = ({ navigation, user, userProfile }) => {
         }
     };
 
+    const handlePickTransactionCsvFile = async () => {
+        try {
+          const result = await DocumentPicker.getDocumentAsync({
+            type: '*/*', // Or 'text/csv'
+            copyToCacheDirectory: true,
+          });
+    
+          if (result.canceled === false && result.assets && result.assets.length > 0) {
+            const uri = result.assets[0].uri;
+            const fileContent = await fetch(uri).then(res => res.text());
+    
+            // Simple CSV parsing
+            const lines = fileContent.trim().split('\n');
+            if (lines.length === 0) {
+              Alert.alert('Error', 'CSV file is empty.');
+              return;
+            }
+    
+            const headers = lines[0].split(',').map(h => h.trim());
+            const requiredHeaders = ['transaction_date', 'description', 'amount', 'transaction_type', 'bank_account_id'];
+            const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+            if (missingHeaders.length > 0) {
+                Alert.alert('Invalid CSV Format', `The following required columns are missing: ${missingHeaders.join(', ')}`);
+                return;
+            }
+
+            const parsedData = lines.slice(1).map(line => {
+              const values = line.split(',').map(v => v.trim());
+              const rowData = {};
+              headers.forEach((header, index) => {
+                rowData[header] = values[index];
+              });
+              return rowData;
+            });
+    
+            setUploadedTransactions(parsedData);
+            Alert.alert('File Selected', `${parsedData.length} transactions parsed from CSV.`);
+          } else {
+            Alert.alert('File Selection Cancelled', 'No file was selected.');
+          }
+        } catch (err) {
+          console.error('Error picking document:', err);
+          Alert.alert('Error', 'Failed to pick document.');
+        }
+    };
+
+    const handleUploadTransactions = async () => {
+        if (!areaMasterId) {
+            Alert.alert('Error', 'Please select an Area before uploading transactions.');
+            return;
+        }
+        if (uploadedTransactions.length === 0) {
+            Alert.alert('Error', 'No transactions to upload. Please select a CSV file.');
+            return;
+        }
+    
+        Alert.alert(
+            'Confirm Upload',
+            `Are you sure you want to upload ${uploadedTransactions.length} transactions to the selected Area?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Upload',
+                    onPress: async () => {
+                        try {
+                            const transactionsToInsert = uploadedTransactions.map(tx => ({
+                                ...tx,
+                                area_id: areaMasterId,
+                                user_id: user.id, 
+                                amount: parseFloat(tx.amount),
+                                bank_account_id: parseInt(tx.bank_account_id, 10),
+                            }));
+
+                            const { error } = await supabase
+                                .from('bank_transactions')
+                                .insert(transactionsToInsert);
+    
+                            if (error) {
+                                throw error;
+                            }
+    
+                            Alert.alert('Success', `${uploadedTransactions.length} transactions uploaded successfully!`);
+                            setShowUploadModal(false);
+                            setUploadedTransactions([]);
+                            handleRefreshTransactions(); // Refresh the list
+                        } catch (error) {
+                            console.error('Error uploading transactions:', error);
+                            Alert.alert('Upload Error', `Failed to upload transactions: ${error.message}`);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const renderTransactionUploadModal = () => {
+        const csvColumns = "transaction_date (YYYY-MM-DD),description,amount,transaction_type,bank_account_id";
+        const copyToClipboard = () => {
+          Clipboard.setString(csvColumns);
+          Alert.alert('Copied', 'CSV columns copied to clipboard.');
+        };
+    
+        return (
+          <Modal
+            visible={showUploadModal}
+            animationType="slide"
+            onRequestClose={() => setShowUploadModal(false)}
+          >
+            <View style={styles.modalContainer}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Upload Transactions</Text>
+                
+                <View style={{ marginVertical: 10 }}>
+                  <Text style={styles.csvInstructionText}>
+                    Please select a CSV file with the following columns:
+                  </Text>
+                  <Text style={styles.columnText}>{csvColumns}</Text>
+                  <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
+                    <Text style={styles.copyButtonText}>Copy Columns</Text>
+                  </TouchableOpacity>
+                </View>
+    
+                <TouchableOpacity style={styles.locationButton} onPress={handlePickTransactionCsvFile}>
+                  <Text style={styles.locationButtonText}>Select CSV File</Text>
+                </TouchableOpacity>
+    
+                {uploadedTransactions.length > 0 && (
+                  <View style={styles.csvPreviewContainer}>
+                    <Text style={styles.formLabel}>CSV Preview ({uploadedTransactions.length} rows):</Text>
+                    <ScrollView horizontal>
+                      <View>
+                        <View style={styles.csvHeaderRow}>
+                          {Object.keys(uploadedTransactions[0]).map((header, index) => (
+                            <Text key={index} style={styles.csvHeaderCell}>{header}</Text>
+                          ))}
+                        </View>
+                        {uploadedTransactions.slice(0, 5).map((row, rowIndex) => (
+                          <View key={rowIndex} style={styles.csvDataRow}>
+                            {Object.values(row).map((value, colIndex) => (
+                              <Text key={colIndex} style={styles.csvDataCell}>{String(value)}</Text>
+                            ))}
+                          </View>
+                        ))}
+                        {uploadedTransactions.length > 5 && (
+                          <Text style={styles.csvMoreText}>... {uploadedTransactions.length - 5} more rows</Text>
+                        )}
+                      </View>
+                    </ScrollView>
+                  </View>
+                )}
+    
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={() => setShowUploadModal(false)}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.saveButton} onPress={handleUploadTransactions}>
+                    <Text style={styles.saveButtonText}>Upload</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+        );
+    };
+
     const renderTransactionItem = useCallback(({ item }) => (
         <TouchableOpacity onPress={() => handleTransactionPress(item)}>
             <View style={styles.transactionItem}>
@@ -185,13 +355,21 @@ const BankTransactionScreen = ({ navigation, user, userProfile }) => {
                 />
             </View>
 
-            {/* Add Transaction Button */}
-            <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setShowAddTransactionModal(true)}
-            >
-                <Text style={styles.addButtonText}>+ Add New Transaction</Text>
-            </TouchableOpacity>
+            {/* Action Buttons */}
+            <View style={styles.actionButtonsContainer}>
+                <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={() => setShowAddTransactionModal(true)}
+                >
+                    <Text style={styles.addButtonText}>+ Add New</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.addButton, styles.uploadButton]}
+                    onPress={() => setShowUploadModal(true)}
+                >
+                    <Text style={styles.addButtonText}>Upload</Text>
+                </TouchableOpacity>
+            </View>
 
             {/* Totals Display */}
             {Object.keys(transactionTotals).length > 0 && (
@@ -256,9 +434,11 @@ const BankTransactionScreen = ({ navigation, user, userProfile }) => {
                 onClose={() => setIsDetailModalVisible(false)}
                 transaction={selectedTransaction}
             />
+            {renderTransactionUploadModal()}
         </View>
     );
 };
+
 
 const styles = StyleSheet.create({
     container: {
@@ -311,17 +491,27 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#eee',
     },
+    actionButtonsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 20,
+    },
     addButton: {
         backgroundColor: '#007AFF',
-        padding: 15,
+        paddingVertical: 15,
+        paddingHorizontal: 20,
         borderRadius: 10,
         alignItems: 'center',
-        marginBottom: 20,
+        flex: 1,
+        marginHorizontal: 10,
         shadowColor: '#007AFF',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 5,
         elevation: 5,
+    },
+    uploadButton: {
+        backgroundColor: '#4CAF50', // Green color for upload
     },
     addButtonText: {
         color: '#fff',
@@ -408,6 +598,120 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: 10,
         color: '#8E8E93',
+    },
+    modalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    modalContent: {
+        width: '90%',
+        backgroundColor: 'white',
+        borderRadius: 10,
+        padding: 20,
+        alignItems: 'center',
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 15,
+    },
+    csvInstructionText: {
+        textAlign: 'center',
+        marginBottom: 10,
+    },
+    columnText: {
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginBottom: 10,
+    },
+    copyButton: {
+        backgroundColor: '#ddd',
+        padding: 10,
+        borderRadius: 5,
+        marginBottom: 20,
+    },
+    copyButtonText: {
+        textAlign: 'center',
+    },
+    locationButton: {
+        backgroundColor: '#007AFF',
+        padding: 15,
+        borderRadius: 10,
+        alignItems: 'center',
+        marginBottom: 20,
+        width: '100%',
+    },
+    locationButtonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    csvPreviewContainer: {
+        width: '100%',
+        maxHeight: 200,
+        borderColor: '#ccc',
+        borderWidth: 1,
+        borderRadius: 5,
+        padding: 10,
+        marginBottom: 20,
+    },
+    formLabel: {
+        fontSize: 16,
+        marginBottom: 5,
+        fontWeight: 'bold',
+    },
+    csvHeaderRow: {
+        flexDirection: 'row',
+        borderBottomWidth: 1,
+        borderBottomColor: '#ccc',
+        paddingBottom: 5,
+        marginBottom: 5,
+    },
+    csvHeaderCell: {
+        fontWeight: 'bold',
+        padding: 5,
+        minWidth: 100,
+    },
+    csvDataRow: {
+        flexDirection: 'row',
+    },
+    csvDataCell: {
+        padding: 5,
+        minWidth: 100,
+    },
+    csvMoreText: {
+        fontStyle: 'italic',
+        marginTop: 5,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        width: '100%',
+    },
+    cancelButton: {
+        backgroundColor: '#ccc',
+        padding: 15,
+        borderRadius: 10,
+        alignItems: 'center',
+        flex: 1,
+        marginRight: 10,
+    },
+    cancelButtonText: {
+        color: '#333',
+        fontWeight: 'bold',
+    },
+    saveButton: {
+        backgroundColor: '#4CAF50',
+        padding: 15,
+        borderRadius: 10,
+        alignItems: 'center',
+        flex: 1,
+    },
+    saveButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
     },
 });
 

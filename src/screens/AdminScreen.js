@@ -12,7 +12,10 @@ import {
   TextInput,
   Modal,
   Switch,
+  Share,
 } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 import { supabase } from '../services/supabaseClient';
 import BankTransactionScreen from './BankTransactionScreen';
 import BankAccountsScreen from './BankAccountsScreen';
@@ -216,10 +219,28 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [selectedUploadAreaId, setSelectedUploadAreaId] = useState('');
   const [uploadedCustomers, setUploadedCustomers] = useState([]); // New state for parsed CSV data
 
+  // Customer Transaction Upload state
+  const [showCustomerTransactionUploadModal, setShowCustomerTransactionUploadModal] = useState(false);
+  const [uploadedCustomerTransactions, setUploadedCustomerTransactions] = useState([]);
+
+  // State for expanding customer transactions
+  const [expandedCustomers, setExpandedCustomers] = useState({});
+  const [customerTransactions, setCustomerTransactions] = useState({});
+
   useEffect(() => {
     // Update the navigation header title based on the active tab
     navigation.setOptions({
       title: `Admin - ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`,
+      headerRight: () => (
+        activeTab === 'customers' && userProfile?.user_type === 'superadmin' && (
+          <TouchableOpacity
+            onPress={shareAllTransactionsAsCsv}
+            style={{ marginRight: 15 }}
+          >
+            <Icon name="share-alt-square" size={24} color="#007AFF" />
+          </TouchableOpacity>
+        )
+      ),
     });
 
     if (activeTab === 'users') {
@@ -496,6 +517,225 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     }
   };
 
+  const fetchTransactionsForCustomer = async (customerId) => {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('transaction_date', { ascending: false });
+
+    if (error) {
+      Alert.alert('Error', 'Failed to fetch transactions.');
+    } else {
+      setCustomerTransactions(prev => ({ ...prev, [customerId]: data }));
+    }
+  };
+
+  const toggleCustomerTransactions = (customerId) => {
+    const isExpanded = !!expandedCustomers[customerId];
+    setExpandedCustomers(prev => ({ ...prev, [customerId]: !isExpanded }));
+
+    if (!isExpanded && !customerTransactions[customerId]) {
+      fetchTransactionsForCustomer(customerId);
+    }
+  };
+
+  const shareCustomerDetails = async (customer) => {
+    try {
+      const result = await Share.share({
+        message:
+          `Customer Details:\n` +
+          `Name: ${customer.name}\n` +
+          `Card No: ${customer.book_no}\n` +
+          `Mobile: ${customer.mobile}\n` +
+          `Email: ${customer.email}\n`,
+      });
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          // shared with activity type of result.activityType
+        } else {
+          // shared
+        }
+      } else if (result.action === Share.dismissedAction) {
+        // dismissed
+      }
+    } catch (error) {
+      Alert.alert(error.message);
+    } 
+  };
+
+  const shareTransactionDetails = async (transaction) => {
+    try {
+      const result = await Share.share({
+        message:
+          `Transaction Details:\n` +
+          `Date: ${new Date(transaction.transaction_date).toLocaleDateString()}\n` +
+          `Type: ${transaction.transaction_type}\n` +
+          `Amount: ₹${transaction.amount}\n` +
+          `Payment Mode: ${transaction.payment_mode}\n` +
+          `Remarks: ${transaction.remarks}\n`,
+      });
+    } catch (error) {
+      Alert.alert(error.message);
+    } 
+  };
+
+  const shareTransactionsAsCsv = async (transactions, customer) => {
+    if (!transactions || transactions.length === 0) {
+      Alert.alert('No Transactions', 'There are no transactions to share.');
+      return;
+    }
+
+    const header = 'Date,Customer Name,Mobile,Area,Card No,Type,Amount,Payment Mode,Remarks\n';
+    const rows = transactions.map(tx =>
+      [
+        new Date(tx.transaction_date).toLocaleDateString(),
+        customer.name,
+        customer.mobile,
+        customer.area_master.area_name,
+        customer.book_no,
+        tx.transaction_type,
+        tx.amount,
+        tx.payment_mode,
+        `"${tx.remarks ? tx.remarks.replace(/"/g, '""') : ''}"`
+      ].join(',')
+    ).join('\n');
+
+    const csvContent = header + rows;
+    const fileName = `${customer.area_master.area_name}_${customer.name}_transactions.csv`;
+    const filePath = FileSystem.documentDirectory + fileName;
+
+    try {
+      await FileSystem.writeAsStringAsync(filePath, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      await Sharing.shareAsync(filePath, {
+        mimeType: 'text/csv',
+        dialogTitle: 'Share Transactions CSV',
+      });
+    } catch (error) {
+      console.error('Error sharing CSV:', error);
+      Alert.alert('Error', 'Failed to share transactions as CSV.');
+    }
+  };
+
+  const shareAreaTransactionsAsCsv = async (customersInArea) => {
+    if (!customersInArea || customersInArea.length === 0) {
+      Alert.alert('No Customers', 'There are no customers in the selected area to share transactions for.');
+      return;
+    }
+
+    const customerIds = customersInArea.map(c => c.id);
+    const { data: transactions, error } = await supabase
+      .from('transactions')
+      .select('*, customers(*, area_master(area_name))')
+      .in('customer_id', customerIds)
+      .order('transaction_date', { ascending: false });
+
+    if (error) {
+      return Alert.alert('Error', 'Failed to fetch transactions for the area.');
+    }
+
+    if (!transactions || transactions.length === 0) {
+      return Alert.alert('No Transactions', 'No transactions found for customers in this area.');
+    }
+
+    const header = 'Date,Customer Name,Mobile,Area,Card No,Type,Amount,Payment Mode,Remarks\n';
+    const rows = transactions.map(tx =>
+      [
+        new Date(tx.transaction_date).toLocaleDateString(),
+        tx.customers.name,
+        tx.customers.mobile,
+        tx.customers.area_master.area_name,
+        tx.customers.book_no,
+        tx.transaction_type,
+        tx.amount,
+        tx.payment_mode,
+        `"${tx.remarks ? tx.remarks.replace(/:"/g, '""') : ''}"`
+      ].join(',')
+    ).join('\n');
+
+    const csvContent = header + rows;
+    const areaName = customersInArea[0]?.area_master?.area_name || 'Area';
+    const fileName = `${areaName}_all_transactions.csv`;
+    const filePath = FileSystem.documentDirectory + fileName;
+
+    try {
+      await FileSystem.writeAsStringAsync(filePath, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      await Sharing.shareAsync(filePath, {
+        mimeType: 'text/csv',
+        dialogTitle: 'Share Area Transactions CSV',
+      });
+    } catch (error) {
+      console.error('Error sharing area CSV:', error);
+      Alert.alert('Error', 'Failed to share area transactions as CSV.');
+    }
+  };
+
+  const shareAllTransactionsAsCsv = async () => {
+    Alert.alert(
+      "Export All Transactions",
+      "This will export all transactions for all customers in the system. This could be a large file and may take some time. Are you sure you want to continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          onPress: async () => {
+            const { data: transactions, error } = await supabase
+              .from('transactions')
+              .select('*, customers(*, area_master(area_name))')
+              .order('transaction_date', { ascending: false });
+
+            if (error) {
+              return Alert.alert('Error', 'Failed to fetch all transactions.');
+            }
+
+            if (!transactions || transactions.length === 0) {
+              return Alert.alert('No Transactions', 'No transactions found in the system.');
+            }
+
+            const header = 'Date,Customer Name,Mobile,Area,Card No,Type,Amount,Payment Mode,Remarks\n';
+            const rows = transactions.map(tx =>
+              [
+                new Date(tx.transaction_date).toLocaleDateString(),
+                tx.customers?.name || 'N/A',
+                tx.customers?.mobile || 'N/A',
+                tx.customers?.area_master?.area_name || 'N/A',
+                tx.customers?.book_no || 'N/A',
+                tx.transaction_type,
+                tx.amount,
+                tx.payment_mode,
+                `"${tx.remarks ? tx.remarks.replace(/:"/g, '""') : ''}"`
+              ].join(',')
+            ).join('\n');
+
+            const csvContent = header + rows;
+            const fileName = 'All_Transactions.csv';
+            const filePath = FileSystem.documentDirectory + fileName;
+
+            try {
+              await FileSystem.writeAsStringAsync(filePath, csvContent, {
+                encoding: FileSystem.EncodingType.UTF8,
+              });
+
+              await Sharing.shareAsync(filePath, {
+                mimeType: 'text/csv',
+                dialogTitle: 'Share All Transactions CSV',
+              });
+            } catch (shareError) {
+              console.error('Error sharing all transactions CSV:', shareError);
+              Alert.alert('Error', 'Failed to share all transactions as CSV.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleActivateCustomer = async (customerId) => {
     Alert.alert(
       'Activate Customer',
@@ -641,6 +881,14 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           )}
         </View>
         <View style={styles.itemActions}>
+          <TouchableOpacity
+            style={styles.viewTransactionsButton}
+            onPress={() => toggleCustomerTransactions(item.id)}
+          >
+            <Text style={styles.viewTransactionsButtonText}>
+              {expandedCustomers[item.id] ? 'Hide Transactions' : 'View Transactions'}
+            </Text>
+          </TouchableOpacity>
           {item.status === 'bulkupload' && (
             <TouchableOpacity
               style={[styles.editButton, { backgroundColor: '#007AFF' }]}
@@ -657,7 +905,48 @@ export default function AdminScreen({ navigation, user, userProfile }) {
               <Text style={styles.deleteButtonText}>Delete</Text>
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={() => shareCustomerDetails(item)}
+          >
+            <Icon name="share-alt" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
+        {expandedCustomers[item.id] && (
+          <View style={styles.transactionsContainer}>
+            {customerTransactions[item.id] ? (
+              <>
+                <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <Text style={styles.transactionsTitle}>Transactions</Text>
+                  <TouchableOpacity onPress={() => shareTransactionsAsCsv(customerTransactions[item.id], item)}>
+                    <Icon name="share-square-o" size={24} color="#007AFF" />
+                  </TouchableOpacity>
+                </View>
+                <FlatList
+                  data={customerTransactions[item.id]}
+                  keyExtractor={(tx) => tx.id.toString()}
+                  renderItem={({ item: tx }) => (
+                    <View style={styles.transactionItem}>
+                      <Text>{new Date(tx.transaction_date).toLocaleDateString()}</Text>
+                      <Text>{tx.transaction_type}</Text>
+                      <Text>₹{tx.amount}</Text>
+                      <Text>{tx.payment_mode}</Text>
+                      <Text>{tx.remarks}</Text>
+                      <TouchableOpacity onPress={() => shareTransactionDetails(tx)} style={{padding: 5}}>
+                        <Icon name="share-alt" size={20} color="#5BC0DE" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                />
+                <Text style={styles.totalAmount}>
+                  Total: ₹{customerTransactions[item.id].reduce((acc, tx) => acc + tx.amount, 0)}
+                </Text>
+              </>
+            ) : (
+              <Text>Loading transactions...</Text>
+            )}
+          </View>
+        )}
       </View>
     );
   };
@@ -1217,6 +1506,180 @@ export default function AdminScreen({ navigation, user, userProfile }) {
                   ))}
                   {uploadedCustomers.length > 5 && (
                     <Text style={styles.csvMoreText}>... {uploadedCustomers.length - 5} more rows</Text>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
+          )}
+        </ScrollView>
+      </AdminModal>
+    );
+  };
+
+  const handlePickCustomerTransactionCsvFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*', // Or 'text/csv'
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled === false && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0].uri;
+        const fileContent = await fetch(uri).then(res => res.text());
+
+        // Simple CSV parsing
+        const lines = fileContent.trim().split('\n');
+        if (lines.length === 0) {
+          Alert.alert('Error', 'CSV file is empty.');
+          return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim());
+        const requiredHeaders = ['card_no', 'amount', 'transaction_date', 'payment_mode', 'remarks'];
+        const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+
+        if (missingHeaders.length > 0) {
+            Alert.alert('Invalid CSV Format', `The following required columns are missing: ${missingHeaders.join(', ')}`);
+            return;
+        }
+
+        const parsedData = lines.slice(1).map(line => {
+          const values = line.split(',').map(v => v.trim());
+          const rowData = {};
+          headers.forEach((header, index) => {
+            rowData[header] = values[index];
+          });
+          return rowData;
+        });
+
+        setUploadedCustomerTransactions(parsedData);
+        Alert.alert('File Selected', `${parsedData.length} transactions parsed from CSV.`);
+      } else {
+        Alert.alert('File Selection Cancelled', 'No file was selected.');
+      }
+    } catch (err) {
+      console.error('Error picking document:', err);
+      Alert.alert('Error', 'Failed to pick document.');
+    }
+  };
+
+  const handleUploadCustomerTransactions = async () => {
+    if (uploadedCustomerTransactions.length === 0) {
+      Alert.alert('Error', 'No transactions to upload. Please select a CSV file.');
+      return;
+    }
+
+    // Fetch all customers to map book_no to customer_id
+    const { data: allCustomers, error: customersError } = await supabase
+      .from('customers')
+      .select('id, book_no');
+
+    if (customersError) {
+      Alert.alert('Error', 'Failed to fetch customers for lookup.');
+      console.error('Customers fetch error:', customersError);
+      return;
+    }
+
+    const customerMap = allCustomers.reduce((acc, customer) => {
+      acc[customer.book_no] = customer.id;
+      return acc;
+    }, {});
+
+    Alert.alert(
+      'Confirm Upload',
+      `Are you sure you want to upload ${uploadedCustomerTransactions.length} transactions?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Upload',
+          onPress: async () => {
+            try {
+              const transactionsToInsert = uploadedCustomerTransactions.map(tx => {
+                const customer_id = customerMap[tx.card_no];
+                if (!customer_id) {
+                  throw new Error(`Customer with card_no ${tx.card_no} not found.`);
+                }
+                return {
+                  customer_id,
+                  user_id: user.id,
+                  amount: parseFloat(tx.amount),
+                  transaction_type: 'repayment',
+                  payment_mode: tx.payment_mode,
+                  remarks: tx.remarks,
+                  transaction_date: tx.transaction_date,
+                };
+              });
+
+              const { error } = await supabase
+                .from('transactions')
+                .insert(transactionsToInsert);
+
+              if (error) {
+                throw error;
+              }
+
+              Alert.alert('Success', `${uploadedCustomerTransactions.length} transactions uploaded successfully!`);
+              setShowCustomerTransactionUploadModal(false);
+              setUploadedCustomerTransactions([]);
+            } catch (error) {
+              console.error('Error uploading transactions:', error);
+              Alert.alert('Upload Error', `Failed to upload transactions: ${error.message}`);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const renderCustomerTransactionUploadModal = () => {
+    const csvColumns = "card_no\tamount\ttransaction_date (YYYY-MM-DD)\tpayment_mode\tremarks";
+    const copyToClipboard = () => {
+      Clipboard.setString(csvColumns);
+      Alert.alert('Copied', 'CSV columns copied to clipboard.');
+    };
+
+    return (
+      <AdminModal
+        visible={showCustomerTransactionUploadModal}
+        onClose={() => setShowCustomerTransactionUploadModal(false)}
+        title="Upload Customer Transactions"
+        onSave={handleUploadCustomerTransactions}
+        saveButtonText="Upload"
+      >
+        <ScrollView keyboardShouldPersistTaps="handled">
+          <View style={{ marginVertical: 10 }}>
+            <Text style={styles.csvInstructionText}>
+              Please select a CSV file with the following columns:
+            </Text>
+            <Text style={styles.columnText}>{csvColumns}</Text>
+            <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
+              <Text style={styles.copyButtonText}>Copy Columns</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={styles.locationButton} onPress={handlePickCustomerTransactionCsvFile}>
+            <Text style={styles.locationButtonText}>Select CSV File</Text>
+          </TouchableOpacity>
+
+          {uploadedCustomerTransactions.length > 0 && (
+            <View style={styles.csvPreviewContainer}>
+              <Text style={styles.formLabel}>CSV Preview ({uploadedCustomerTransactions.length} rows):</Text>
+              <ScrollView horizontal>
+                <View>
+                  <View style={styles.csvHeaderRow}>
+                    {Object.keys(uploadedCustomerTransactions[0]).map((header, index) => (
+                      <Text key={index} style={styles.csvHeaderCell}>{header}</Text>
+                    ))}
+                  </View>
+                  {uploadedCustomerTransactions.slice(0, 5).map((row, rowIndex) => (
+                    <View key={rowIndex} style={styles.csvDataRow}>
+                      {Object.values(row).map((value, colIndex) => (
+                        <Text key={colIndex} style={styles.csvDataCell}>{value}</Text>
+                      ))}
+                    </View>
+                  ))}
+                  {uploadedCustomerTransactions.length > 5 && (
+                    <Text style={styles.csvMoreText}>... {uploadedCustomerTransactions.length - 5} more rows</Text>
                   )}
                 </View>
               </ScrollView>
@@ -1919,6 +2382,21 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             onChangeText={setCustomerDetailSearchQuery}
           />
 
+          <View style={{flexDirection: 'row'}}>
+            <TouchableOpacity style={[styles.addButton, {flex: 1}]} onPress={() => {
+              if (!selectedCustomerAreaId) {
+                Alert.alert('No Area Selected', 'Please select an area first before uploading transactions.');
+              } else {
+                setShowCustomerTransactionUploadModal(true);
+              }
+            }}>
+              <Text style={styles.addButtonText}>+ Upload Transactions</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.addButton, {flex: 1, marginLeft: 10, backgroundColor: '#5BC0DE'}]} onPress={() => shareAreaTransactionsAsCsv(customers)}>
+              <Text style={styles.addButtonText}>Share Area Transactions</Text>
+            </TouchableOpacity>
+          </View>
+
           <FlatList
             data={filteredCustomersData} // Will define filteredCustomersData below
             renderItem={renderCustomerItem}
@@ -2197,6 +2675,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           </AdminModal>
         </View>
       )}
+      {renderCustomerTransactionUploadModal()}
     </View>
   );
 }
@@ -2798,4 +3277,48 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-}); 
+  viewTransactionsButton: {
+    backgroundColor: '#FF9500',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  viewTransactionsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  shareButton: {
+    backgroundColor: '#5BC0DE',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginLeft: 8,
+    justifyContent: 'center',
+  },
+  transactionsContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+  },
+  transactionsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  transactionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  totalAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'right',
+    marginTop: 8,
+  },
+});
