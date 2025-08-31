@@ -901,6 +901,15 @@ export default function AdminScreen({ navigation, user, userProfile }) {
               <Text style={styles.editButtonText}>Activate</Text>
             </TouchableOpacity>
           )}
+          {/* Add Close Account button here */}
+          {item.status === 'Active' && (
+            <TouchableOpacity
+              style={[styles.editButton, { backgroundColor: '#FF3B30' }]} // Red color for close
+              onPress={() => handleCloseCustomerAccount(item.id)}
+            >
+              <Text style={styles.editButtonText}>Close Account</Text>
+            </TouchableOpacity>
+          )}
           {userProfile?.user_type === 'superadmin' && (
             <TouchableOpacity
               style={styles.deleteButton}
