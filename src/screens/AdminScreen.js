@@ -223,6 +223,10 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [showCustomerTransactionUploadModal, setShowCustomerTransactionUploadModal] = useState(false);
   const [uploadedCustomerTransactions, setUploadedCustomerTransactions] = useState([]);
 
+  // Expense Upload state
+  const [showExpenseUploadModal, setShowExpenseUploadModal] = useState(false);
+  const [uploadedExpenses, setUploadedExpenses] = useState([]);
+
   // State for expanding customer transactions
   const [expandedCustomers, setExpandedCustomers] = useState({});
   const [customerTransactions, setCustomerTransactions] = useState({});
@@ -1447,9 +1451,10 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   };
 
   const renderCustomerUploadModal = () => {
-    const csvColumns = "name, mobile, email, cardno, customer_type, start_date (YYYY-MM-DD), amount_given, repayment_amount, repayment_frequency, periods";
+    const csvColumnsDisplay = "name, mobile, email, cardno, customer_type, start_date (YYYY-MM-DD), amount_given, repayment_amount, repayment_frequency, periods";
+    const csvColumnsCopy = "name,mobile,email,cardno,customer_type,start_date,amount_given,repayment_amount,repayment_frequency,periods";
     const copyToClipboard = () => {
-      Clipboard.setString(csvColumns);
+      Clipboard.setString(csvColumnsCopy);
       Alert.alert('Copied', 'CSV columns copied to clipboard.');
     };
 
@@ -1476,7 +1481,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             <Text style={styles.csvInstructionText}>
               Please select a CSV file with the following columns:
             </Text>
-            <Text style={styles.columnText}>{csvColumns}</Text>
+            <Text style={styles.columnText}>{csvColumnsDisplay}</Text>
             <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
               <Text style={styles.copyButtonText}>Copy Columns</Text>
             </TouchableOpacity>
@@ -1563,6 +1568,53 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     }
   };
 
+  const handlePickExpenseCsvFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*', // Or 'text/csv'
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled === false && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0].uri;
+        const fileContent = await fetch(uri).then(res => res.text());
+
+        // Simple CSV parsing
+        const lines = fileContent.trim().split('\n');
+        if (lines.length === 0) {
+          Alert.alert('Error', 'CSV file is empty.');
+          return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim());
+        const requiredHeaders = ['amount', 'remarks', 'date', 'expense_type'];
+        const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+
+        if (missingHeaders.length > 0) {
+            Alert.alert('Invalid CSV Format', `The following required columns are missing: ${missingHeaders.join(', ')}`);
+            return;
+        }
+
+        const parsedData = lines.slice(1).map(line => {
+          const values = line.split(',').map(v => v.trim());
+          const rowData = {};
+          headers.forEach((header, index) => {
+            rowData[header] = values[index];
+          });
+          return rowData;
+        });
+
+        setUploadedExpenses(parsedData);
+        Alert.alert('File Selected', `${parsedData.length} expenses parsed from CSV.`);
+      } else {
+        Alert.alert('File Selection Cancelled', 'No file was selected.');
+      }
+    } catch (err) {
+      console.error('Error picking document:', err);
+      Alert.alert('Error', 'Failed to pick document.');
+    }
+  };
+
   const handleUploadCustomerTransactions = async () => {
     if (uploadedCustomerTransactions.length === 0) {
       Alert.alert('Error', 'No transactions to upload. Please select a CSV file.');
@@ -1631,10 +1683,83 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     );
   };
 
+  const handleUploadExpenses = async () => {
+    if (!selectedUploadAreaId) {
+      Alert.alert('Error', 'Please select an Area.');
+      return;
+    }
+    if (uploadedExpenses.length === 0) {
+      Alert.alert('Error', 'No expense data to upload. Please select a CSV file.');
+      return;
+    }
+
+    Alert.alert(
+      'Confirm Upload',
+      `Are you sure you want to upload ${uploadedExpenses.length} expenses to the selected Area?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Upload',
+          onPress: async () => {
+            try {
+              const expensesToInsert = uploadedExpenses.map(expense => {
+                // Basic validation and type conversion
+                const amount = parseFloat(expense.amount);
+                if (isNaN(amount)) {
+                  throw new Error(`Invalid amount for expense: ${expense.amount}`);
+                }
+                // Ensure date is in YYYY-MM-DD format
+                const date = new Date(expense.date);
+                if (isNaN(date.getTime())) {
+                    throw new Error(`Invalid date for expense: ${expense.date}`);
+                }
+                const formattedDate = date.toISOString().split('T')[0];
+
+                // New validation for mandatory description and category
+                if (!expense.remarks || expense.remarks.trim() === '') {
+                    throw new Error(`Remarks is mandatory for expense: ${JSON.stringify(expense)}`);
+                }
+                if (!expense.expense_type || expense.expense_type.trim() === '') {
+                    throw new Error(`Expense Type is mandatory for expense: ${JSON.stringify(expense)}`);
+                }
+
+                return {
+                  user_id: user.id, // Admin's user ID
+                  area_id: selectedUploadAreaId,
+                  amount: amount,
+                  remarks: expense.remarks.trim(), // Trim whitespace
+                  created_at: formattedDate, // Map CSV date to created_at
+                  expense_type: expense.expense_type.trim(), // Trim whitespace
+                };
+              });
+
+              const { error } = await supabase
+                .from('user_expenses')
+                .insert(expensesToInsert);
+
+              if (error) {
+                throw error;
+              }
+
+              Alert.alert('Success', `${uploadedExpenses.length} expenses uploaded successfully!`);
+              setShowExpenseUploadModal(false);
+              setUploadedExpenses([]); // Clear uploaded data
+              setSelectedUploadAreaId(''); // Clear selected area
+            } catch (error) {
+              console.error('Error uploading expenses:', error);
+              Alert.alert('Upload Error', `Failed to upload expenses: ${error.message}`);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderCustomerTransactionUploadModal = () => {
-    const csvColumns = "card_no\tamount\ttransaction_date (YYYY-MM-DD)\tpayment_mode\tremarks";
+    const csvColumnsDisplay = "card_no\tamount\ttransaction_date (YYYY-MM-DD)\tpayment_mode\tremarks";
+    const csvColumnsCopy = "card_no\tamount\ttransaction_date\tpayment_mode\tremarks"; // Use tab as separator for TSV
     const copyToClipboard = () => {
-      Clipboard.setString(csvColumns);
+      Clipboard.setString(csvColumnsCopy);
       Alert.alert('Copied', 'CSV columns copied to clipboard.');
     };
 
@@ -1651,7 +1776,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             <Text style={styles.csvInstructionText}>
               Please select a CSV file with the following columns:
             </Text>
-            <Text style={styles.columnText}>{csvColumns}</Text>
+            <Text style={styles.columnText}>{csvColumnsDisplay}</Text>
             <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
               <Text style={styles.copyButtonText}>Copy Columns</Text>
             </TouchableOpacity>
@@ -1680,6 +1805,76 @@ export default function AdminScreen({ navigation, user, userProfile }) {
                   ))}
                   {uploadedCustomerTransactions.length > 5 && (
                     <Text style={styles.csvMoreText}>... {uploadedCustomerTransactions.length - 5} more rows</Text>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
+          )}
+        </ScrollView>
+      </AdminModal>
+    );
+  };
+
+  const renderExpenseUploadModal = () => {
+    const csvColumnsDisplay = "amount, remarks, date (YYYY-MM-DD), expense_type";
+    const csvColumnsCopy = "amount\tremarks\tdate\texpense_type"; // Use tab as separator for TSV
+    const copyToClipboard = () => {
+      Clipboard.setString(csvColumnsCopy); // Use the new variable for copying
+      Alert.alert('Copied', 'CSV columns copied to clipboard.');
+    };
+
+    return (
+      <AdminModal
+        visible={showExpenseUploadModal}
+        onClose={() => setShowExpenseUploadModal(false)}
+        title="Upload Expenses"
+        onSave={handleUploadExpenses}
+        saveButtonText="Upload"
+      >
+        <ScrollView keyboardShouldPersistTaps="handled">
+          <Text style={styles.formLabel}>Select Area:</Text>
+          <SearchableDropdown
+            data={allAreas}
+            onSelect={setSelectedUploadAreaId}
+            selectedValue={selectedUploadAreaId}
+            placeholder="Select Area"
+            labelField="area_name"
+            valueField="id"
+          />
+
+          <View style={{ marginVertical: 10 }}>
+            <Text style={styles.csvInstructionText}>
+              Please select a CSV file with the following columns:
+            </Text>
+            <Text style={styles.columnText}>{csvColumnsDisplay}</Text>
+            <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
+              <Text style={styles.copyButtonText}>Copy Columns</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={styles.locationButton} onPress={handlePickExpenseCsvFile}>
+            <Text style={styles.locationButtonText}>Select CSV File</Text>
+          </TouchableOpacity>
+
+          {uploadedExpenses.length > 0 && (
+            <View style={styles.csvPreviewContainer}>
+              <Text style={styles.formLabel}>CSV Preview ({uploadedExpenses.length} rows):</Text>
+              <ScrollView horizontal>
+                <View>
+                  <View style={styles.csvHeaderRow}>
+                    {Object.keys(uploadedExpenses[0]).map((header, index) => (
+                      <Text key={index} style={styles.csvHeaderCell}>{header}</Text>
+                    ))}
+                  </View>
+                  {uploadedExpenses.slice(0, 5).map((row, rowIndex) => (
+                    <View key={rowIndex} style={styles.csvDataRow}>
+                      {Object.values(row).map((value, colIndex) => (
+                        <Text key={colIndex} style={styles.csvDataCell}>{value}</Text>
+                      ))}
+                    </View>
+                  ))}
+                  {uploadedExpenses.length > 5 && (
+                    <Text style={styles.csvMoreText}>... {uploadedExpenses.length - 5} more rows</Text>
                   )}
                 </View>
               </ScrollView>
@@ -2585,7 +2780,13 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           <TouchableOpacity style={styles.addButton} onPress={() => setShowCustomerUploadModal(true)}>
             <Text style={styles.addButtonText}>Upload Customers</Text>
           </TouchableOpacity>
+          {/* New button for Expense Upload */}
+          <TouchableOpacity style={[styles.addButton, { backgroundColor: '#FF9500' }]} onPress={() => setShowExpenseUploadModal(true)}>
+            <Text style={styles.addButtonText}>Upload Expenses</Text>
+          </TouchableOpacity>
           {renderCustomerUploadModal()}
+          {/* New modal for Expense Upload */}
+          {renderExpenseUploadModal()}
         </View>
       )}
 
