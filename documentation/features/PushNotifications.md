@@ -9,7 +9,7 @@ Push notifications are used to deliver timely alerts, updates, and important inf
 ## Key Components/Services Involved
 
 *   `notificationService.js`: Handles the registration of push tokens and sending of notifications.
-*   `App.js`: Initializes the push notification registration process.
+*   [`App.js`](../../App.js): Initializes the push notification registration process.
 *   Supabase: Used to store user push tokens and potentially trigger notifications via Edge Functions.
 
 ## Functionality

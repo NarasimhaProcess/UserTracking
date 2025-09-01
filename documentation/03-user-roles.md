@@ -40,18 +40,35 @@ This role is specifically designed for customer accounts. In terms of main navig
 
 ### 3. `admin`
 
-Administrators have elevated privileges, allowing them to manage various aspects of the application and access more sensitive data.
+Administrators have elevated privileges. Their access to specific areas is **limited to those explicitly granted by a `superadmin`** through the "Group Tab" or similar configuration within the administrative interface.
 
 *   **Access:**
     *   Dashboard
     *   Customers
     *   News (including Newspapers, Astrology, Marriage, Birthday, Videos)
     *   Profile
-    *   Map
-    *   History
-    *   Admin (Access to the administrative panel)
+    *   Map (if granted)
+    *   History (if granted)
+    *   Admin (Access to the administrative panel, with features limited by superadmin configuration)
 
 **[SCREENSHOT: Admin Dashboard with Admin Tab]**
+
+### 4. `superadmin`
+
+The `superadmin` role represents the highest level of administrative access. A `superadmin` has **unrestricted access to all areas and functionalities** of the application, including the ability to configure permissions for `admin` users.
+
+*   **Access:**
+    *   Dashboard
+    *   Customers
+    *   News (including Newspapers, Astrology, Marriage, Birthday, Videos)
+    *   Profile
+    *   Map (Full Access)
+    *   History (Full Access)
+    *   Admin (Full Access, including user/group permission management)
+
+**Note:** While `superadmin` and `admin` might appear to have similar tab visibility in the main navigation, the `superadmin` possesses the underlying authority to control `admin` permissions and access all data/features without restriction.
+
+**[SCREENSHOT: Superadmin Admin Screen (if different from Admin)]**
 
 ### 4. `superadmin`
 

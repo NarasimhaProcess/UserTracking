@@ -8,7 +8,7 @@ Enables real-time messaging and displays the online status of users within the a
 
 ## Key Components/Services Involved
 
-*   `GlobalChatAndPresence.js` (component): Manages the chat interface and presence logic.
+*   [`GlobalChatAndPresence.js`](../../src/components/GlobalChatAndPresence.js) (component): Manages the chat interface and presence logic.
 *   Supabase Realtime: Powers the real-time messaging and presence tracking.
 
 ## Functionality

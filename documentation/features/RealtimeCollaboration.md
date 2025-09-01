@@ -8,7 +8,7 @@ Leverages Supabase Realtime capabilities to provide instant updates and shared e
 
 ## Key Components/Services Involved
 
-*   `RealtimeCollaboration.js` (component): Manages the real-time connection and shared state.
+*   [`RealtimeCollaboration.js`](../../src/components/RealtimeCollaboration.js) (component): Manages the real-time connection and shared state.
 *   Supabase Realtime: The backend service providing WebSocket connections for real-time data synchronization.
 
 ## Functionality

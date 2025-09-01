@@ -8,9 +8,9 @@ The application allows users to log various types of transactions, providing an 
 
 ## Key Screens/Components Involved
 
-*   `QuickTransactionScreen`: For rapid transaction entry.
-*   `UserExpensesScreen`: For managing personal expenses.
-*   `BankTransactionScreen`: For handling bank-related transactions.
+*   [`QuickTransactionScreen`](../../screens/QuickTransactionScreen.md): For rapid transaction entry.
+*   [`UserExpensesScreen`](../../screens/UserExpensesScreen.md): For managing personal expenses.
+*   [`BankTransactionScreen`](../../screens/BankTransactionScreen.md): For handling bank-related transactions.
 *   `BankTransactionForm` (component): A reusable form for transaction input.
 *   `TransactionDetailModal` (component): For viewing detailed transaction information.
 
