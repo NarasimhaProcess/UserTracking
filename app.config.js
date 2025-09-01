@@ -34,6 +34,7 @@ export default {
         "backgroundColor": "#FFFFFF"
       },
       "googleServicesFile": "./google-services.json",
+      "useNextNotificationsApi": true, 
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",

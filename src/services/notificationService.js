@@ -1,10 +1,10 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { supabase } from './supabaseClient';
 
-// Sets how notifications are handled when the app is in the foreground
+// Configure how notifications are handled when app is in the foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -13,10 +13,19 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function registerForPushNotificationsAsync(user) { // Added user parameter
-  let token;
-  console.log('Notification Service: registerForPushNotificationsAsync called.'); // NEW LOG
+export async function registerForPushNotificationsAsync(user) {
+  let pushToken = null;
 
+  console.log('🔔 Notification Service: registerForPushNotificationsAsync called.');
+
+  // ✅ Only physical devices and development builds support native push
+  if (!Device.isDevice) {
+    Alert.alert("Push Token", "❌ Must use physical device for push notifications");
+    console.warn("❌ Push notifications require a physical device.");
+    return null;
+  }
+
+  // ✅ Android: configure notification channel
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
@@ -26,71 +35,81 @@ export async function registerForPushNotificationsAsync(user) { // Added user pa
     });
   }
 
-  if (Device.isDevice) {
-    console.log('Notification Service: Checking device permissions.'); // NEW LOG
+  try {
+    // 1. Permissions
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
     if (existingStatus !== 'granted') {
-      console.log('Notification Service: Requesting permissions.'); // NEW LOG
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
 
     if (finalStatus !== 'granted') {
-      alert('Failed to get push token for push notification!');
-      console.log('Notification permissions not granted. Final status:', finalStatus); // Added log
-      return;
+      Alert.alert("Push Token", "❌ Permission not granted for notifications");
+      console.warn("❌ Notification permissions not granted:", finalStatus);
+      return null;
     }
-    console.log('Notification Service: Permissions granted. Final status:', finalStatus); // NEW LOG
 
-    // Learn more about projectId: https://docs.expo.dev/push-notifications/push-notifications-setup/#configure-projectid
-    // EAS project ID is automatically configured in eas.json
-    const projectId = Constants.expoConfig.extra.eas.projectId;
-    console.log(
-      'Using projectId for push token:',
-      projectId,
-      'from Constants.expoConfig.extra.eas.projectId'
-    ); // Added log, clarified source
-    
-    try { // Added try-catch around token retrieval
-      const expoTokenObject = await Notifications.getExpoPushTokenAsync({ projectId });
-      token = expoTokenObject.data; // Keep Expo token for logging if needed
-      const rawDeviceToken = expoTokenObject.devicePushToken; // Get raw device token
-      console.log('Expo Push Token obtained:', token);
-      console.log('Raw Device Push Token obtained:', rawDeviceToken); // NEW LOG
+    console.log("✅ Notification permissions granted:", finalStatus);
 
-      // --- NEW LOGIC TO SAVE TOKEN TO SUPABASE ---
-      if (user && rawDeviceToken) {
-        console.log('Attempting to upsert push token for user:', user.id, 'token:', rawDeviceToken);
-        const { error } = await supabase
-          .from('user_push_tokens')
-          .upsert(
-            { user_id: user.id, push_token: rawDeviceToken }, // Use rawDeviceToken
-            { onConflict: ['user_id'] } // Update if user_id already exists
-          );
-
-        if (error) {
-          console.error('Error saving push token to Supabase:', error);
-          alert('Error saving push token to database: ' + error.message); // NEW ALERT
-        } else {
-          console.log('Push token saved to Supabase successfully.');
-        }
+    // 2. Get the correct token based on environment
+    if (Constants.appOwnership === 'standalone' || Constants.appOwnership === 'development') {
+      // In a native build (standalone or development), get the raw FCM token on Android
+      if (Platform.OS === 'android') {
+        const rawTokenObject = await Notifications.getDevicePushTokenAsync();
+        pushToken = rawTokenObject.data;
+        console.log("✅ Raw FCM Token (Android):", pushToken);
       } else {
-        console.log(
-          'Skipping push token upsert: user or token is missing. User:',
-          user,
-          'Token:',
-          rawDeviceToken
-        );
+        // For iOS, get the APNs token via getDevicePushTokenAsync
+        // For cross-platform backends, you can still use getDevicePushTokenAsync
+        const rawTokenObject = await Notifications.getDevicePushTokenAsync();
+        pushToken = rawTokenObject.data;
+        console.log("✅ Raw APNs Token (iOS):", pushToken);
       }
-      // --- END NEW LOGIC ---
-    } catch (tokenError) {
-      console.error('Error getting Expo Push Token:', tokenError); // NEW LOG
-      alert('Error getting push token. Check your EAS project ID and Firebase setup.'); // NEW ALERT
-      return;
+    } else if (Constants.appOwnership === 'expo') {
+      // In Expo Go, get the Expo token
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+      const expoTokenObject = await Notifications.getExpoPushTokenAsync({ projectId });
+      pushToken = expoTokenObject.data;
+      console.log("⚠️ Running in Expo Go. Using Expo Token:", pushToken);
+      Alert.alert(
+        "Push Token",
+        `⚠️ Running in Expo Go. Using Expo Token:\n${pushToken}`
+      );
+    }
+    
+    if (!pushToken) {
+      console.warn("❌ Failed to retrieve push token.");
+      return null;
+    }
+    
+    // 3. Save token to Supabase
+    if (user) {
+      console.log("Saving token to Supabase:", pushToken);
+
+      const { error } = await supabase
+        .from('user_push_tokens')
+        .upsert(
+          { user_id: user.id, push_token: pushToken },
+          { onConflict: ['user_id'] }
+        );
+
+      if (error) {
+        console.error("❌ Error saving token to Supabase:", error);
+        Alert.alert("Supabase Error", error.message);
+      } else {
+        console.log("✅ Push token saved to Supabase successfully.");
+      }
+    } else {
+      console.log("ℹ️ No user provided, skipping Supabase save.");
     }
 
-    return token; // ✅ Now correctly inside function
+    return pushToken;
+
+  } catch (error) {
+    console.error("❌ Error in push registration:", error);
+    Alert.alert("Push Token Error", error.message);
+    return null;
   }
 }
