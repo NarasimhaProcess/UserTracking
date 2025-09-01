@@ -8,8 +8,8 @@ Users with appropriate permissions can create, view, and potentially modify cust
 
 ## Key Screens/Components Involved
 
-*   [`CreateCustomerScreen`](../../screens/CreateCustomerScreen.md): For adding new customers.
-*   [`CustomerMapScreen`](../../screens/CustomerMapScreen.md): For visualizing customer locations.
+*   [`CreateCustomerScreen`](../screens/CreateCustomerScreen.md): For adding new customers.
+*   [`CustomerMapScreen`](../screens/CustomerMapScreen.md): For visualizing customer locations.
 *   `CustomerItemActions` (component): For actions related to individual customer items.
 
 ## Functionality
