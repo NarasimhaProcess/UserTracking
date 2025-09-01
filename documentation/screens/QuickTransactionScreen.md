@@ -11,4 +11,4 @@ To allow users to rapidly log financial transactions without navigating through 
 *   Simplified input fields for transaction details.
 *   Quick action buttons.
 
-**[SCREENSHOT: Quick Transaction Screen]**
+![Quick Transaction Screen](../images/quick-transaction-screen.png)

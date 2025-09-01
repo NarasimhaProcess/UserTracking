@@ -12,4 +12,4 @@ Facilitates new user registration and redirects to the main application upon suc
 *   Signup button.
 *   Link to the Login screen.
 
-**[SCREENSHOT: Signup Screen]**
+![Signup Screen](../images/signup-screen.png)

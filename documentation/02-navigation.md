@@ -6,7 +6,7 @@ This document describes the navigation structure of the DalabHRPORTAL User Track
 
 The application uses a combination of Stack Navigators and Tab Navigators to manage screen transitions.
 
-**[SCREENSHOT: Overall Navigation Flow Diagram]**
+![Overall Navigation Flow Diagram](images/overall-navigation-flow-diagram.png)
 
 ### Authentication Flow
 
@@ -17,7 +17,7 @@ Users first encounter the authentication flow:
 
 Upon successful authentication, the user is directed to the `Main` screen, which hosts the primary tab navigation.
 
-**[SCREENSHOT: Login/Signup Screens]**
+![Login/Signup Screens](images/login-signup-screens.png)
 
 ### Main Tab Navigation (`TabNavigator`)
 
@@ -31,7 +31,7 @@ The main part of the application uses a bottom tab navigator, with tabs visible 
 *   **News:** (`NewsTabs`) - A nested tab navigator for news-related content.
 *   **Profile:** ([`ProfileScreen`](screens/ProfileScreen.md)) - User profile management.
 
-**[SCREENSHOT: Main Tab Bar]**
+![Main Tab Bar](images/main-tab-bar.png)
 
 ### Nested News Tab Navigation (`NewsTabs`)
 
@@ -43,7 +43,7 @@ The 'News' tab itself contains a nested bottom tab navigator:
 *   **Birthday:** ([`BirthdayScreen`](screens/BirthdayScreen.md)) - Birthday-related content.
 *   **Videos:** ([`YouTubeScreen`](screens/YouTubeScreen.md)) - Video content, likely from YouTube.
 
-**[SCREENSHOT: News Tab Bar]**
+![News Tab Bar](images/news-tab-bar.png)
 
 ### Stack Screens (Accessed from various points)
 
@@ -54,4 +54,4 @@ Beyond the main tabs, several screens are part of the main stack navigator and c
 *   ([`QuickTransactionScreen`](screens/QuickTransactionScreen.md) (Accessed via 'QuickTransaction' button in header)
 *   ([`BankTransactionScreen`](screens/BankTransactionScreen.md)
 
-**[SCREENSHOT: Example of a Stack Screen (e.g., Expenses Screen)]**
+![Example of a Stack Screen](images/example-stack-screen.png)

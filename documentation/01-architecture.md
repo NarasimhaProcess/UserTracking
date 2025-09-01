@@ -6,7 +6,7 @@ This document outlines the high-level architecture of the DalabHRPORTAL User Tra
 
 The application follows a client-server architecture, with a React Native frontend communicating with a Supabase backend.
 
-**[SCREENSHOT: High-level Architecture Diagram (if available)]**
+![High-level Architecture Diagram](images/high-level-architecture-diagram.png)
 
 ## Frontend (React Native / Expo)
 
@@ -22,7 +22,7 @@ The application follows a client-server architecture, with a React Native fronte
 *   **Realtime:** Supabase Realtime is used for features like global chat and real-time collaboration.
 *   **Edge Functions:** Serverless functions (e.g., for sending notifications, archiving customers) are deployed as Supabase Edge Functions.
 
-**[SCREENSHOT: Supabase Dashboard Overview (if applicable)]**
+![Supabase Dashboard Overview](images/supabase-dashboard-overview.png)
 
 ## Data Flow
 

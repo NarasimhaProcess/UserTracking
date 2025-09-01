@@ -11,4 +11,4 @@ To manage or view marriage-related data.
 *   List of marriage records.
 *   Input fields for adding/editing marriage information.
 
-**[SCREENSHOT: Marriage Screen]**
+![Marriage Screen](../images/marriage-screen.png)

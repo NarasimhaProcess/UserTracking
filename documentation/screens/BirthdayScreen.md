@@ -11,4 +11,4 @@ To manage or view birthday-related data.
 *   List of upcoming birthdays.
 *   Input fields for adding/editing birthday information.
 
-**[SCREENSHOT: Birthday Screen]**
+![Birthday Screen](../images/birthday-screen.png)

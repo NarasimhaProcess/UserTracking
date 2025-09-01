@@ -10,4 +10,4 @@ To provide users with access to video content directly within the application.
 
 *   Video player component (e.g., WebView or a dedicated YouTube player).
 
-**[SCREENSHOT: YouTube Screen]**
+![YouTube Screen](../images/youtube-screen.png)

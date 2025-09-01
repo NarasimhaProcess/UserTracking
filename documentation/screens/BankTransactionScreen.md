@@ -12,4 +12,4 @@ To provide an interface for users to interact with their bank transaction data.
 *   Filters for transaction types, dates, etc.
 *   Details view for individual transactions.
 
-**[SCREENSHOT: Bank Transaction Screen]**
+![Bank Transaction Screen](../images/bank-transaction-screen.png)

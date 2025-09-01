@@ -11,4 +11,4 @@ To provide access to various online newspaper publications directly within the a
 *   List of newspaper titles.
 *   WebView component for displaying selected newspapers.
 
-**[SCREENSHOT: News Paper Screen]**
+![News Paper Screen](../images/news-paper-screen.png)

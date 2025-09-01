@@ -12,4 +12,4 @@ To provide a centralized hub for users to view important data and navigate to ot
 *   Summaries or widgets displaying relevant data.
 *   Navigation elements to other screens.
 
-**[SCREENSHOT: Dashboard Screen]**
+![Dashboard Screen](../images/dashboard-screen.png)

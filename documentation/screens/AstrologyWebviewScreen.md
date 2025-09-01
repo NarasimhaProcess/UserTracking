@@ -10,4 +10,4 @@ To embed external web content related to astrology directly within the applicati
 
 *   WebView component to render web pages.
 
-**[SCREENSHOT: Astrology Webview Screen]**
+![Astrology Webview Screen](../images/astrology-webview-screen.png)

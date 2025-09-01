@@ -12,4 +12,4 @@ To allow authorized users (admins/superadmins) to review the location history of
 *   Date/time filters.
 *   List of recorded locations.
 
-**[SCREENSHOT: Location History Screen]**
+![Location History Screen](../images/location-history-screen.png)

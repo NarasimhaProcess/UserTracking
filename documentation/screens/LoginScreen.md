@@ -12,4 +12,4 @@ Handles user authentication and redirects to the main application upon successfu
 *   Login button.
 *   Link to the Signup screen.
 
-**[SCREENSHOT: Login Screen]**
+![Login Screen](../images/login-screen.png)

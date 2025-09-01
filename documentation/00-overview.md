@@ -20,4 +20,4 @@ This document provides a high-level overview of the DalabHRPORTAL User Tracking 
 
 [Provide brief instructions on how to set up and run the project locally. Refer to a more detailed setup guide if available.]
 
-**[SCREENSHOT: App Login Screen]**
+![App Login Screen](images/app-login-screen.png)

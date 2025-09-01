@@ -12,4 +12,4 @@ To allow users to add new customer profiles and potentially edit existing ones.
 *   Save/Submit button.
 *   List of existing customers (if it also serves as a customer list).
 
-**[SCREENSHOT: Create Customer Screen]**
+![Create Customer Screen](../images/create-customer-screen.png)

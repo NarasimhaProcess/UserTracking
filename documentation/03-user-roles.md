@@ -20,7 +20,7 @@ This is the basic user type. They have access to core functionalities and inform
     *   History
     *   Admin
 
-**[SCREENSHOT: General User Dashboard]**
+![General User Dashboard](images/general-user-dashboard.png)
 
 ### 2. `customer`
 
@@ -36,7 +36,7 @@ This role is specifically designed for customer accounts. In terms of main navig
     *   History
     *   Admin
 
-**[SCREENSHOT: Customer User Profile]**
+![Customer User Profile](images/customer-user-profile.png)
 
 ### 3. `admin`
 
@@ -51,7 +51,7 @@ Administrators have elevated privileges. Their access to specific areas is **lim
     *   History (if granted)
     *   Admin (Access to the administrative panel, with features limited by superadmin configuration)
 
-**[SCREENSHOT: Admin Dashboard with Admin Tab]**
+![Admin Dashboard with Admin Tab](images/admin-dashboard-with-admin-tab.png)
 
 ### 4. `superadmin`
 
@@ -68,21 +68,6 @@ The `superadmin` role represents the highest level of administrative access. A `
 
 **Note:** While `superadmin` and `admin` might appear to have similar tab visibility in the main navigation, the `superadmin` possesses the underlying authority to control `admin` permissions and access all data/features without restriction.
 
-**[SCREENSHOT: Superadmin Admin Screen (if different from Admin)]**
+![Superadmin Admin Screen](images/superadmin-admin-screen.png)
 
-### 4. `superadmin`
 
-The `superadmin` role represents the highest level of administrative access. In the current application's main navigation logic, `superadmin` has the same tab access as an `admin`.
-
-*   **Access:**
-    *   Dashboard
-    *   Customers
-    *   News (including Newspapers, Astrology, Marriage, Birthday, Videos)
-    *   Profile
-    *   Map
-    *   History
-    *   Admin (Access to the administrative panel)
-
-**Note:** While `superadmin` and `admin` have the same tab visibility in the main navigation, it is possible that specific functionalities or data within the `AdminScreen` itself might be further restricted or expanded based on whether the user is a `superadmin`.
-
-**[SCREENSHOT: Superadmin Admin Screen (if different from Admin)]**

@@ -12,4 +12,4 @@ To allow authorized personnel to perform administrative tasks, such as user mana
 *   System settings.
 *   Data reports or dashboards.
 
-**[SCREENSHOT: Admin Screen]**
+![Admin Screen](../images/admin-screen.png)

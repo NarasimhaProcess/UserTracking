@@ -12,4 +12,4 @@ To provide a personal finance management tool for users to record and categorize
 *   Form for adding new expenses.
 *   Summary of expenses (e.g., by category, by date).
 
-**[SCREENSHOT: User Expenses Screen]**
+![User Expenses Screen](../images/user-expenses-screen.png)

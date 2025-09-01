@@ -15,13 +15,13 @@ Users with appropriate permissions can create, view, and potentially modify cust
 ## Functionality
 
 *   **Adding New Customers:** Users can input various details to create a new customer profile.
-    **[SCREENSHOT: Create Customer Form]**
+    ![Create Customer Form](../images/create-customer-form.png)
 *   **Viewing Customer List:** A list of all registered customers is accessible.
-    **[SCREENSHOT: Customer List]**
+    ![Customer List](../images/customer-list.png)
 *   **Customer Details:** Viewing detailed information for a selected customer.
-    **[SCREENSHOT: Customer Detail View]**
+    ![Customer Detail View](../images/customer-detail-view.png)
 *   **Customer Location Tracking:** Integration with mapping features to track or display customer locations.
-    **[SCREENSHOT: Customer on Map]**
+    ![Customer on Map](../images/customer-on-map.png)
 
 ## Permissions
 

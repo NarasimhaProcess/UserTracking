@@ -12,4 +12,4 @@ To visualize geographical data, such as user locations or customer points of int
 *   Markers for locations.
 *   Controls for map interaction (zoom, pan).
 
-**[SCREENSHOT: Map Screen]**
+![Map Screen](../images/map-screen.png)

@@ -14,15 +14,15 @@ Enables real-time messaging and displays the online status of users within the a
 ## Functionality
 
 *   **Real-time Messaging:** Users can send and receive messages instantly.
-    **[SCREENSHOT: Global Chat Interface]**
+    ![Global Chat Interface](../images/global-chat-interface.png)
 *   **User Presence:** Displays which users are currently online or active.
-    **[SCREENSHOT: Online User List]**
+    ![Online User List](../images/online-user-list.png)
 *   **Group Selection:** (If implemented) Allows users to select different chat groups or channels.
-    **[SCREENSHOT: Chat Group Selection]**
+    ![Chat Group Selection](../images/chat-group-selection.png)
 
 ## Implementation Details
 
 *   Leverages Supabase Realtime subscriptions for chat messages and presence updates.
 *   Can be toggled on/off via a header button.
 
-**[SCREENSHOT: Global Chat Toggle Button]**
+![Global Chat Toggle Button](../images/global-chat-toggle-button.png)

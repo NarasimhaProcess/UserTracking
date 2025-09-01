@@ -12,4 +12,4 @@ To provide users with a dedicated section to update their details, change passwo
 *   Options to edit profile information.
 *   Logout button.
 
-**[SCREENSHOT: Profile Screen]**
+![Profile Screen](../images/profile-screen.png)

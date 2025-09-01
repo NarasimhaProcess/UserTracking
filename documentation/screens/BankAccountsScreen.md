@@ -15,13 +15,13 @@ To provide a secure interface for users to add, view, and potentially edit their
 ## Functionality
 
 *   **Add Bank Account:** Users can input and save new bank account details.
-    **[SCREENSHOT: Add Bank Account Form]**
+    ![Add Bank Account Form](../images/add-bank-account-form.png)
 *   **View Bank Accounts:** Displays a list of all bank accounts associated with the user.
-    **[SCREENSHOT: List of Bank Accounts]**
+    ![List of Bank Accounts](../images/list-of-bank-accounts.png)
 *   **Offline Handling:** Checks for network availability before performing operations.
 
 ## Permissions
 
 Access to this screen might be restricted based on user roles or specific feature flags.
 
-**[SCREENSHOT: Bank Accounts Screen]**
+![Bank Accounts Screen](../images/bank-accounts-screen.png)
