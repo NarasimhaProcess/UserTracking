@@ -6,8 +6,17 @@ This screen displays astrology-related content within a webview.
 
 To embed external web content related to astrology directly within the application.
 
-## Components
+## Functionality
+*   **Dedicated Web Viewer:** Loads the `https://www.nemaniastrology.com/` website within a `WebView` component.
+*   **Auto-Scroll (Panchangam):** Attempts to automatically scroll to a specific section (`panchangam-section`) on the loaded webpage when the screen comes into focus.
 
-*   WebView component to render web pages.
+## Data Sources
+*   External website: `https://www.nemaniastrology.com/`
 
-![Astrology Webview Screen](../images/astrology-webview-screen.png)
+## Components Used
+*   `WebView` (from `react-native-webview`)
+
+## Images
+
+![Astrology Webview Screen Overview](images/astrology-webview-screen.png)
+![Astrology Webview Screen Panchangam](images/astrology-webview-screen-panchangam.png)

@@ -1,14 +1,25 @@
-# News Paper Screen
+# NewsPaper Screen
 
-This screen displays a list of Telugu newspapers and allows users to view them within a webview.
+This screen displays various online newspapers.
 
 ## Purpose
 
-To provide access to various online newspaper publications directly within the application.
+To provide users with direct access to online news publications within the app.
 
-## Components
+## Functionality
+*   **Newspaper Selection:** Displays a grid of tiles, each representing a different Telugu newspaper.
+*   **In-App Web Viewer:** When a newspaper tile is tapped, a `WebView` component loads the selected newspaper's website directly within the app.
+*   **Back Button:** Provides a "Back to Newspapers" button within the WebView view to return to the newspaper selection grid.
 
-*   List of newspaper titles.
-*   WebView component for displaying selected newspapers.
+## Data Sources
+*   Hardcoded list of Telugu newspapers with their names and URLs.
 
-![News Paper Screen](../images/news-paper-screen.png)
+## Components Used
+*   `WebView` (from `react-native-webview`)
+*   `FlatList` (from React Native)
+*   `TouchableOpacity` (from React Native)
+
+## Images
+
+![Newspaper Selection Grid](images/newspaper-selection-grid.png)
+![Newspaper Web View](images/newspaper-web-view.png)

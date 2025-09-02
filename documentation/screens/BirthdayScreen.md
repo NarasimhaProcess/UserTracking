@@ -1,14 +1,24 @@
 # Birthday Screen
 
-This screen likely displays information related to birthdays, possibly for customers or users.
+This screen provides a list of external web resources related to birthday wishes, cards, and gifts.
 
 ## Purpose
 
-To manage or view birthday-related data.
+To provide users with quick access to online resources for birthday-related content.
 
-## Components
+## Functionality
+*   **Resource List:** Displays a list of external websites related to birthday greetings, e-cards, and gift services.
+*   **External Linking:** When a resource is tapped, it opens the corresponding URL in the device's default web browser.
 
-*   List of upcoming birthdays.
-*   Input fields for adding/editing birthday information.
+## Data Sources
+*   Hardcoded list of external websites.
 
-![Birthday Screen](../images/birthday-screen.png)
+## Components Used
+*   `ScrollView` (from React Native)
+*   `TouchableOpacity` (from React Native)
+*   `Linking` (from `react-native`)
+
+## Images
+
+![Birthday Screen Overview](images/birthday-screen.png)
+![Birthday Screen Resource List](images/birthday-screen-resource-list.png)

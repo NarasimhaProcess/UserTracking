@@ -1,14 +1,24 @@
 # Marriage Screen
 
-This screen likely displays information related to marriages, possibly for customers or users.
+This screen provides a list of external web resources related to marriage wishes and content generation.
 
 ## Purpose
 
-To manage or view marriage-related data.
+To provide users with quick access to online resources for marriage-related content.
 
-## Components
+## Functionality
+*   **Resource List:** Displays a list of external websites and AI tools related to marriage wishes, quotes, and invitation message generation.
+*   **External Linking:** When a resource is tapped, it opens the corresponding URL in the device's default web browser.
 
-*   List of marriage records.
-*   Input fields for adding/editing marriage information.
+## Data Sources
+*   Hardcoded list of external websites/tools.
 
-![Marriage Screen](../images/marriage-screen.png)
+## Components Used
+*   `ScrollView` (from React Native)
+*   `TouchableOpacity` (from React Native)
+*   `Linking` (from `react-native`)
+
+## Images
+
+![Marriage Screen Overview](images/marriage-screen.png)
+![Marriage Screen Resource List](images/marriage-screen-resource-list.png)

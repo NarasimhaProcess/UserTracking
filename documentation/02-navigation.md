@@ -6,7 +6,11 @@ This document describes the navigation structure of the Transaction Tracker, pri
 
 The application uses a combination of Stack Navigators and Tab Navigators to manage screen transitions.
 
-![Overall Navigation Flow Diagram](images/overall-navigation-flow-diagram.svg)
+![Overall Navigation Flow Diagram (SVG)](images/overall-navigation-flow-diagram.svg)
+
+![Overall Navigation Flow Diagram (PNG)](images/overall-navigation-flow-diagram.png)
+
+[Download Latest APK](releases/locationtracker_v1.0.0.apk)
 
 ### Authentication Flow
 
@@ -27,28 +31,30 @@ Upon successful authentication, the user is directed to the `Main` screen, which
 
 The main part of the application uses a bottom tab navigator, with tabs visible based on the user's role.
 
-*   **Dashboard:** ([`DashboardScreen`](screens/DashboardScreen.md)) - Home screen with an overview.
-*   **Map:** ([`MapScreen`](screens/MapScreen.md)) - Displays map functionalities. (Visible to `admin`/`superadmin`)
-*   **History:** ([`LocationHistoryScreen`](screens/LocationHistoryScreen.md)) - Shows location history. (Visible to `admin`/`superadmin`)
-*   **Admin:** ([`AdminScreen`](screens/AdminScreen.md)) - Administrative functionalities. (Visible to `admin`/`superadmin`)
+*   📊 **Dashboard:** ([`DashboardScreen`](screens/DashboardScreen.md)) - Home screen with an overview.
+*   🗺️ **Map:** ([`MapScreen`](screens/MapScreen.md)) - Displays map functionalities. (Visible to `admin`/`superadmin`)
+*   📜 **History:** ([`LocationHistoryScreen`](screens/LocationHistoryScreen.md)) - Shows location history. (Visible to `admin`/`superadmin`)
+*   ⚙️ **Admin:** ([`AdminScreen`](screens/AdminScreen.md)) - Administrative functionalities. (Visible to `admin`/`superadmin`)
 
 ### Admin Screen Internal Tabs
 
 The 'Admin' screen itself contains several internal sections managed by a custom tab system:
 
-*   **Users:** ([`AdminScreen.js`](../src/screens/AdminScreen.js)) - Manages user accounts.
+*   👥 **Users:** ([`Users.md`](admin-modules/Users.md)) - Manages user accounts.
 
 [<img src="images/admin-users-tab.png" width="300" alt="Admin Users Tab">](images/admin-users-tab.png)
 
-*   **Areas:** ([`AdminScreen.js`](../src/screens/AdminScreen.js)) - Manages geographical areas.
+*   📍 **Areas:** ([`Areas.md`](admin-modules/Areas.md)) - Manages geographical areas.
 
 [<img src="images/admin-areas-tab.png" width="300" alt="Admin Areas Tab">](images/admin-areas-tab.png)
 
-*   **Bank Accounts:** ([`AdminScreen.js`](../src/screens/AdminScreen.js)) - Manages bank accounts.
+*   🏦 **Bank Accounts:** ([`BankAccounts.md`](admin-modules/BankAccounts.md)) - Manages bank accounts.
 
 [<img src="images/admin-bank-accounts-tab.png" width="300" alt="Admin Bank Accounts Tab">](images/admin-bank-accounts-tab.png)
 
-*   **Customers:** ([`AdminScreen.js`](../src/screens/AdminScreen.js)) - Manages customer data.
+*   🧑‍🤝‍🧑 **Customers:** ([`CreateCustomerScreen`](screens/CreateCustomerScreen.md)) - Manages customer data.
+
+[<img src="images/main-tab-bar.png" width="300" alt="Main Tab Bar">](images/main-tab-bar.png)
     *   Add Transaction
     *   Customer View Map
 
@@ -56,21 +62,21 @@ The 'Admin' screen itself contains several internal sections managed by a custom
 [<img src="images/admin-customers-add-transaction.png" width="300" alt="Admin Customers Add Transaction">](images/admin-customers-add-transaction.png)
 [<img src="images/admin-customers-view-map.png" width="300" alt="Admin Customers View Map">](images/admin-customers-view-map.png)
 
-*   **Groups:** ([`AdminScreen.js`](../src/screens/AdminScreen.js)) - Manages user groups.
+*   🤝 **Groups:** ([`Groups.md`](admin-modules/Groups.md)) - Manages user groups.
 
 [<img src="images/admin-groups-tab.png" width="300" alt="Admin Groups Tab">](images/admin-groups-tab.png)
 
-*   **Bank Transactions:** ([`AdminScreen.js`](../src/screens/AdminScreen.js)) - Manages bank transaction data.
+*   💰 **Bank Transactions:** ([`BankTransactions.md`](admin-modules/BankTransactions.md)) - Manages bank transaction data.
     *   Bank Transaction Upload
 
 [<img src="images/admin-bank-transactions-tab.png" width="300" alt="Admin Bank Transactions Tab">](images/admin-bank-transactions-tab.png)
 [<img src="images/admin-bank-transactions-upload.png" width="300" alt="Admin Bank Transactions Upload">](images/admin-bank-transactions-upload.png)
 
-*   **Configuration:** ([`AdminScreen.js`](../src/screens/AdminScreen.js)) - Contains nested configuration tabs.
+*   ⚙️ **Configuration:** ([`Configuration.md`](admin-modules/Configuration.md)) - Contains nested configuration tabs.
 
 [<img src="images/admin-configuration-tab.png" width="300" alt="Admin Configuration Tab">](images/admin-configuration-tab.png)
 
-*   **Upload:** ([`AdminScreen.js`](../src/screens/AdminScreen.js)) - Handles various data uploads:
+*   ⬆️ **Upload:** ([`Upload.md`](admin-modules/Upload.md)) - Handles various data uploads:
     *   Customer Uploads (CSV)
     *   Customer Transaction Uploads (CSV)
     *   Expense Uploads (CSV)
@@ -83,14 +89,14 @@ The 'Admin' screen itself contains several internal sections managed by a custom
 
 The 'Configuration' tab itself contains nested sections:
 
-*   **Repayment Plans:** ([`AdminScreen.js`](../src/screens/AdminScreen.js)) - Manages repayment plan settings.
+*   🗓️ **Repayment Plans:** ([`RepaymentPlans.md`](admin-modules/RepaymentPlans.md)) - Manages repayment plan settings.
 
 [<img src="images/admin-repayment-plans-tab.png" width="300" alt="Admin Repayment Plans Tab">](images/admin-repayment-plans-tab.png)
 
-*   **Customer Types:** ([`AdminScreen.js`](../src/screens/AdminScreen.js)) - Manages customer type definitions.
+*   🏷️ **Customer Types:** ([`CustomerTypes.md`](admin-modules/CustomerTypes.md)) - Manages customer type definitions.
 
 [<img src="images/admin-customer-types-tab.png" width="300" alt="Admin Customer Types Tab">](images/admin-customer-types-tab.png)
-*   **Customers:** ([`CreateCustomerScreen`](screens/CreateCustomerScreen.md)) - Manages customer data.
+*   🧑‍🤝‍🧑 **Customers:** ([`CreateCustomerScreen`](screens/CreateCustomerScreen.md)) - Manages customer data.
 *   **News:** (`NewsTabs`) - A nested tab navigator for news-related content.
 *   **Profile:** ([`ProfileScreen`](screens/ProfileScreen.md)) - User profile management.
 
