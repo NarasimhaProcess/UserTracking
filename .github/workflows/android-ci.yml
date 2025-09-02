@@ -3,10 +3,10 @@ name: Android CI
 on:
   push:
     branches:
-      - '*' # Triggers on all branches; change to your branch if needed
+      - '*' # Runs on all branches. Change to your branch name if you want specific branches.
   pull_request:
     branches:
-      - '*' # Triggers on all branches; change as needed
+      - '*'
 
 jobs:
   build_android_apk:
@@ -35,7 +35,6 @@ jobs:
         with:
           api-level: 33
           build-tools: 33.0.0
-          # ndk: 23.1.7779620 # Uncomment if needed
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
@@ -44,7 +43,6 @@ jobs:
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon
-        # echo "sdk.dir=$ANDROID_HOME" > android/local.properties # Uncomment if needed
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
