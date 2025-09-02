@@ -13,14 +13,11 @@ The application uses a combination of Stack Navigators and Tab Navigators to man
 Users first encounter the authentication flow:
 
 *   [`LoginScreen`](screens/LoginScreen.md)
+[<img src="images/login-signup-screens.png" width="300" alt="Sign up">](images/login-signup-screens.png)
 *   [`SignupScreen`](screens/SignupScreen.md)
+[<img src="images/app-login-screen.png" width="300" alt="Sign up">](images/app-login-screen.png)
 
 Upon successful authentication, the user is directed to the `Main` screen, which hosts the primary tab navigation.
-Signup Screen
-[<img src="images/login-signup-screens.png" width="300" alt="Sign up">](images/login-signup-screens.png)
-Signin Screen
-[<img src="images/login-signin-screens.png" width="300" alt="Sign up">](images/login-signin-screens.png)
-
 
 ### Main Tab Navigation (`TabNavigator`)
 
