@@ -25,4 +25,4 @@ Enables real-time messaging and displays the online status of users within the a
 *   Leverages Supabase Realtime subscriptions for chat messages and presence updates.
 *   Can be toggled on/off via a header button.
 
-![Global Chat Toggle Button](../images/global-chat-toggle-button.png)
+[<img src="../images/global-chat-toggle-button.png" width="300" alt="Global Chat Toggle Button">](../images/global-chat-toggle-button.png)
