@@ -33,7 +33,7 @@ The main part of the application uses a bottom tab navigator, with tabs visible 
 *   **News:** (`NewsTabs`) - A nested tab navigator for news-related content.
 *   **Profile:** ([`ProfileScreen`](screens/ProfileScreen.md)) - User profile management.
 
-![Main Tab Bar](images/main-tab-bar.png)
+[<img src="images/main-tab-bar.png" width="300" alt="Main Tab Bar">](images/main-tab-bar.png)
 
 ### Nested News Tab Navigation (`NewsTabs`)
 
@@ -45,7 +45,7 @@ The 'News' tab itself contains a nested bottom tab navigator:
 *   **Birthday:** ([`BirthdayScreen`](screens/BirthdayScreen.md)) - Birthday-related content.
 *   **Videos:** ([`YouTubeScreen`](screens/YouTubeScreen.md)) - Video content, likely from YouTube.
 
-![News Tab Bar](images/news-tab-bar.png)
+[<img src="images/news-tab-bar.png" width="300" alt="News Tab Bar">](images/news-tab-bar.png)
 
 ### Stack Screens (Accessed from various points)
 
@@ -57,3 +57,6 @@ Beyond the main tabs, several screens are part of the main stack navigator and c
 *   ([`BankTransactionScreen`](screens/BankTransactionScreen.md)
 
 [Watch a video of an Example Stack Screen](https://youtube.com/your_video_link_here)
+re)
+re)
+link_here)
