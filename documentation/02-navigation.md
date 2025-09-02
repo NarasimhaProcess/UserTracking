@@ -16,8 +16,9 @@ Users first encounter the authentication flow:
 *   [`SignupScreen`](screens/SignupScreen.md)
 
 Upon successful authentication, the user is directed to the `Main` screen, which hosts the primary tab navigation.
-
+Signup Screen
 ![Signup Screens](images/login-signup-screens.png)
+Signin Screen
 ![Login Sreens](images/app-login-screen.png)
 
 ### Main Tab Navigation (`TabNavigator`)
