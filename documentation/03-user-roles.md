@@ -1,6 +1,6 @@
 # User Roles and Permissions
 
-This document outlines the different user roles within the DalabHRPORTAL User Tracking application and their associated permissions, primarily focusing on access to different sections and features.
+This document outlines the different user roles within the Transaction Tracker and their associated permissions, primarily focusing on access to different sections and features.
 
 User roles are determined by the `user_type` field in the user's profile, which is stored in the `users` table in Supabase.
 

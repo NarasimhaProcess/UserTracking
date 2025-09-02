@@ -1,6 +1,6 @@
 # Application Architecture
 
-This document outlines the high-level architecture of the DalabHRPORTAL User Tracking application.
+This document outlines the high-level architecture of the Transaction Tracker.
 
 ## Overall Structure
 

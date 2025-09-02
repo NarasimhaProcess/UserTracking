@@ -1,6 +1,6 @@
 # Project Overview
 
-This document provides a high-level overview of the DalabHRPORTAL User Tracking application. It aims to serve as a starting point for understanding the project's purpose, key functionalities, and overall structure.
+This document provides a high-level overview of the Transaction Tracker. It aims to serve as a starting point for understanding the project's purpose, key functionalities, and overall structure.
 
 ## Purpose
 
