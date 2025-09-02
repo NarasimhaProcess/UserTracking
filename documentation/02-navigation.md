@@ -17,7 +17,7 @@ Users first encounter the authentication flow:
 
 Upon successful authentication, the user is directed to the `Main` screen, which hosts the primary tab navigation.
 Signup Screen
-![Signup Screens](images/login-signup-screens.png)
+![<img src="images/main-tab-bar.png" width="200" alt="Signup Screens">](images/login-signup-screens.png)
 Signin Screen
 ![Login Sreens](images/app-login-screen.png)
 
