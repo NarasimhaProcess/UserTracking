@@ -259,16 +259,36 @@ useEffect(() => {
   // ---------------- Header ----------------
   const renderHeader = (navigation) => ({
     headerShown: true,
-    headerLeft: () => (
-      userProfile?.profile_photo_data ? (
-        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-          <Image 
-            source={{ uri: userProfile.profile_photo_data }} 
-            style={{ width: 30, height: 30, borderRadius: 15, marginLeft: 15 }} 
-          />
-        </TouchableOpacity>
-      ) : null
-    ),
+    headerTitle: () => null,
+    headerLeft: () => {
+      const currentStackRoute = navigation.getState().routes[navigation.getState().index];
+      let headerTitle = ''; // Default to empty
+
+      // If 'Main' screen has a nested navigator (TabNavigator in this case)
+      if (currentStackRoute.state && currentStackRoute.state.routes) {
+        const currentTabRoute = currentStackRoute.state.routes[currentStackRoute.state.index];
+        // Only show title for Admin screen
+        if (currentTabRoute.name === 'Admin') {
+          headerTitle = currentTabRoute.name;
+        }
+      }
+
+      return (
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {userProfile?.profile_photo_data ? (
+            <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+              <Image 
+                source={{ uri: userProfile.profile_photo_data }} 
+                style={{ width: 30, height: 30, borderRadius: 15, marginLeft: 15 }} 
+              />
+            </TouchableOpacity>
+          ) : null}
+          {headerTitle ? ( // Only render Text if headerTitle is not empty
+            <Text style={{ marginLeft: 10, fontSize: 18, fontWeight: 'bold', color: '#1C1C1E' }}>{headerTitle}</Text>
+          ) : null}
+        </View>
+      );
+    },
     headerRight: () => (
       <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15 }}>
         <TouchableOpacity onPress={() => setShowRealtimeCollaboration(prev => !prev)} style={{ marginRight: 15 }}>
