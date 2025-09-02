@@ -1,4 +1,4 @@
-# LocalWala UserTracking App
+# LocalWala UserTracking App Test scenrios checking
 
 This document outlines the key features and recent enhancements made to the UserTracking mobile application.
 
