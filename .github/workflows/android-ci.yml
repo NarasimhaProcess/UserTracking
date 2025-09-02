@@ -44,8 +44,23 @@ jobs:
           cd android
           ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK artifact
+      - name: Run Expo Prebuild
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Install Detox dependencies
+        run: npm install detox-cli
+
+      - name: Build app for Detox
+        run: npx detox build --configuration android.emu.debug
+
+      - name: Run Detox tests
+        run: npx detox test --configuration android.emu.debug
+
+      - name: Upload Detox Artifacts (Screenshots, Logs)
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: app-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: detox-artifacts
+          path: |
+            ./artifacts/
+            ./detox-logs/
