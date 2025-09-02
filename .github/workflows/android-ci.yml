@@ -1,0 +1,54 @@
+name: Android CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build_android_apk:
+    runs-on: ubuntu-latest # Use a Linux runner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3 # Checks out your repository code
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18.x' # Specify your project's Node.js version
+
+      - name: Install dependencies
+        run: npm install # Or 'yarn install' if you use Yarn
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin' # Recommended distribution
+          java-version: '17' # Android requires Java 11 or 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v2 # Action to set up Android SDK components
+        with:
+          api-level: 33 # Your target Android API level
+          build-tools: 33.0.0 # Your Android build tools version
+          # ndk: 23.1.7779620 # Uncomment if your project uses NDK
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew # Ensures gradlew is executable
+
+      - name: Build Android Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon # Builds the debug APK
+        # If you have a local.properties file that's not committed, you might need to create it here
+        # echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v3 # Uploads the generated APK as a workflow artifact
+        with:
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
