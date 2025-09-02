@@ -56,4 +56,4 @@ Beyond the main tabs, several screens are part of the main stack navigator and c
 *   ([`QuickTransactionScreen`](screens/QuickTransactionScreen.md) (Accessed via 'QuickTransaction' button in header)
 *   ([`BankTransactionScreen`](screens/BankTransactionScreen.md)
 
-![Example of a Stack Screen](images/example-stack-screen.png)
+[Watch a video of an Example Stack Screen](https://youtube.com/your_video_link_here)
