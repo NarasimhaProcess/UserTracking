@@ -1,4 +1,4 @@
-# DalabHRPORTAL UserTracking App
+# LocalWala UserTracking App
 
 This document outlines the key features and recent enhancements made to the UserTracking mobile application.
 
