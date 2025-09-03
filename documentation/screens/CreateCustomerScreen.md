@@ -35,11 +35,11 @@ To allow users to add new customer profiles and potentially edit existing ones.
 
 ## Images
 
-![Create Customer Screen Overview](images/create-customer-screen.png)
-![Customer List with Search](images/customer-list-search.png)
-![Customer Form Details](images/customer-form-details.png)
-![Customer Form Repayment](images/customer-form-repayment.png)
-![Customer Transaction Modal](images/customer-transaction-modal.png)
-![Customer Document Modal](images/customer-document-modal.png)
-![Customer Location Picker](images/customer-location-picker.png)
-![Customer Item Actions](images/customer-item-actions.png)
+<img src="images/create-customer-screen.png" alt="Create Customer Screen Overview" width="200"/>
+<img src="images/customer-list-search.png" alt="Customer List with Search" width="200"/>
+<img src="images/customer-form-details.png" alt="Customer Form Details" width="200"/>
+<img src="images/customer-form-repayment.png" alt="Customer Form Repayment" width="200"/>
+<img src="images/customer-transaction-modal.png" alt="Customer Transaction Modal" width="200"/>
+<img src="images/customer-document-modal.png" alt="Customer Document Modal" width="200"/>
+<img src="images/customer-location-picker.png" alt="Customer Location Picker" width="200"/>
+<img src="images/customer-item-actions.png" alt="Customer Item Actions" width="200"/>

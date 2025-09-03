@@ -14,7 +14,6 @@ This section allows administrators to perform bulk data uploads for customers, c
     *   Required columns: `amount`, `remarks`, `date (YYYY-MM-DD)`, `expense_type`.
 
 ## Images
-
-![Upload Section](images/admin-upload-customers.png)
-![Customer Upload](images/admin-upload-customer-transactions.png)
-![Expense Upload](images/admin-upload-expenses.png)
+<img src="../images/admin-bank-accounts-tab2.png" alt="Bank Accounts List" width="200"/><img src="../images/admin-bank-accounts-tab3.png" alt="Bank Accounts List" width="200"/>
+<img src="../images/admin-upload.png" alt="Bank Accounts List" width="200"/><img src="../images/admin-bank-accounts-tab3.png" alt="Bank Accounts List" width="200"/>
+<img src="../images/admin-bank-accounts-tab2.png" alt="Bank Accounts List" width="200"/><img src="../images/admin-bank-accounts-tab3.png" alt="Bank Accounts List" width="200"/>

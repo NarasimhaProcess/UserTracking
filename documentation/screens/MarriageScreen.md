@@ -20,5 +20,4 @@ To provide users with quick access to online resources for marriage-related cont
 
 ## Images
 
-![Marriage Screen Overview](images/marriage-screen.png)
-![Marriage Screen Resource List](images/marriage-screen-resource-list.png)
+<img src="../images/marriage-screen.png" alt="Marriage Screen Overview" width="200"/>

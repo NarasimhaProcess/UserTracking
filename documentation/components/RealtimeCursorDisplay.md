@@ -23,5 +23,5 @@ This component uses `position: 'absolute'` and `transparent` backgrounds to floa
 
 ## Images
 
-![Realtime Cursor Display Overview](images/realtime-cursor-display.png)
-![Realtime Cursor Example](images/realtime-cursor-example.png)
+<img src="images/realtime-cursor-display.png" alt="Realtime Cursor Display Overview" width="200"/>
+<img src="images/realtime-cursor-example.png" alt="Realtime Cursor Example" width="200"/>

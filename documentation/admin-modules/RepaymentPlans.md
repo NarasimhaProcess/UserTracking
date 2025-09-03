@@ -12,4 +12,6 @@ This section allows administrators to define and manage various repayment plans 
 
 ## Images
 
-![Repayment Plans List](images/admin-repayment-plans-tab.png)
+<img src="../images/admin-repayment-plans-tab.png" alt="Repayment Plans List" width="200"/>
+<img src="../images/admin-repayment-plans-tab1.png" alt="Repayment Plans List" width="200"/>
+<img src="../images/admin-repayment-plans-tab2.png" alt="Repayment Plans List" width="200"/>

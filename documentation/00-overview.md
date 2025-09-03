@@ -20,4 +20,4 @@ This document provides a high-level overview of the Transaction Tracker. It aims
 
 [Provide brief instructions on how to set up and run the project locally. Refer to a more detailed setup guide if available.]
 
-![App Login Screen](images/app-login-screen.png)
+<img src="images/app-login-screen.png" alt="App Login Screen" width="200"/>

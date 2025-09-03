@@ -14,15 +14,15 @@ Leverages Supabase Realtime capabilities to provide instant updates and shared e
 ## Functionality
 
 *   **Shared State Synchronization:** Updates made by one user are immediately reflected for others in the same collaborative session.
-    ![Realtime Collaboration in action](../images/realtime-collaboration-in-action.png)
+    <img src="../images/realtime-collaboration-in-action.png" alt="Realtime Collaboration in action" width="200"/>
 *   **Presence Indicators:** Shows which users are currently active or present in a collaborative space.
-    ![User Presence Indicators](../images/user-presence-indicators.png)
+    <img src="../images/user-presence-indicators.png" alt="User Presence Indicators" width="200"/>
 *   **Realtime Cursor Display:** (If implemented) Shows the cursors of other users in real-time.
-    ![Realtime Cursor Display](../images/realtime-cursor-display.png)
+    <img src="../images/realtime-cursor-display.png" alt="Realtime Cursor Display" width="200"/>
 
 ## Implementation Details
 
 *   Utilizes Supabase channels for broadcasting and listening to real-time events.
 *   Can be toggled on/off via a header button.
 
-![Realtime Collaboration Toggle Button](../images/realtime-collaboration-toggle-button.png)
+<img src="../images/realtime-collaboration-toggle-button.png" alt="Realtime Collaboration Toggle Button" width="200"/>

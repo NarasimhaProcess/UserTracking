@@ -31,7 +31,7 @@ To authenticate users and grant them access to the application's features.
 
 ## Images
 
-![Login Screen Overview](images/app-login-screen.png)
-![Login Screen Form](images/login-screen-form.png)
-![Login Screen Biometrics Prompt](images/login-screen-biometrics-prompt.png)
-![Login Screen Forgot Password](images/login-screen-forgot-password.png)
+<img src="images/app-login-screen.png" alt="Login Screen Overview" width="200"/>
+<img src="images/login-screen-form.png" alt="Login Screen Form" width="200"/>
+<img src="images/login-screen-biometrics-prompt.png" alt="Login Screen Biometrics Prompt" width="200"/>
+<img src="images/login-screen-forgot-password.png" alt="Login Screen Forgot Password" width="200"/>

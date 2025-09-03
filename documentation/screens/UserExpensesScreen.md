@@ -29,8 +29,8 @@ To provide a personal finance management tool for users to record and categorize
 
 ## Images
 
-![User Expenses Screen Overview](images/user-expenses-screen.png)
-![User Expenses Add Form](images/user-expenses-add-form.png)
-![User Expenses List](images/user-expenses-list.png)
-![User Expenses Offline Sync](images/user-expenses-offline-sync.png)
-![User Expenses Calculator Integration](images/user-expenses-calculator-integration.png)
+<img src="images/user-expenses-screen.png" alt="User Expenses Screen Overview" width="200"/>
+<img src="images/user-expenses-add-form.png" alt="User Expenses Add Form" width="200"/>
+<img src="images/user-expenses-list.png" alt="User Expenses List" width="200"/>
+<img src="images/user-expenses-offline-sync.png" alt="User Expenses Offline Sync" width="200"/>
+<img src="images/user-expenses-calculator-integration.png" alt="User Expenses Calculator Integration" width="200"/>

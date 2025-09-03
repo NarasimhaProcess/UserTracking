@@ -12,4 +12,4 @@ This section allows administrators to define and manage different categories or 
 
 ## Images
 
-![Customer Types List](images/admin-customer-types-tab.png)
+<img src="images/admin-customer-types-tab.png" alt="Customer Types List" width="200"/><img src="images/admin-customer-types-tab1.png" alt="Customer Types List" width="200"/><img src="images/admin-customer-types-tab2.png" alt="Customer Types List" width="200"/>

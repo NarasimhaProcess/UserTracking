@@ -6,7 +6,7 @@ This document outlines the high-level architecture of the Transaction Tracker.
 
 The application follows a client-server architecture, with a React Native frontend communicating with a Supabase backend.
 
-![High-level Architecture Diagram](images/high-level-architecture-diagram.png)
+<img src="images/high-level-architecture-diagram.png" alt="High-level Architecture Diagram" width="200"/>
 
 ## Frontend (React Native / Expo)
 
@@ -22,7 +22,7 @@ The application follows a client-server architecture, with a React Native fronte
 *   **Realtime:** Supabase Realtime is used for features like global chat and real-time collaboration.
 *   **Edge Functions:** Serverless functions (e.g., for sending notifications, archiving customers) are deployed as Supabase Edge Functions.
 
-![Supabase Dashboard Overview](images/supabase-dashboard-overview.png)
+<img src="images/supabase-dashboard-overview.png" alt="Supabase Dashboard Overview" width="200"/>
 
 ## Data Flow
 

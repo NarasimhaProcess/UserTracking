@@ -12,5 +12,4 @@ This section allows administrators to view and manage bank transaction data, inc
 
 ## Images
 
-![Bank Transactions List](images/admin-bank-transactions-tab.png)
-![Bank Transaction Upload](images/admin-bank-transactions-upload.png)
+<img src="../images/admin-bank-transactions-tab.png" alt="Bank Transactions List" width="200"/><img src="../images/admin-bank-transactions-tab1.png" alt="Bank Transactions List" width="200"/><img src="../images/admin-bank-transactions-tab2.png" alt="Bank Transactions List" width="200"/>

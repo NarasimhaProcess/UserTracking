@@ -12,4 +12,4 @@ To allow authorized personnel to perform administrative tasks, such as user mana
 *   System settings.
 *   Data reports or dashboards.
 
-![Admin Screen](../images/admin-screen.png)
+<img src="../images/admin-screen.png" alt="Admin Screen" width="200"/>

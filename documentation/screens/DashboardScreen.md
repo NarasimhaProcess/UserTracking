@@ -30,11 +30,10 @@ To provide a centralized hub for users to view important data and navigate to ot
 
 ## Images
 
-![Dashboard Overview](images/general-user-dashboard.png)
-![Dashboard Pie Chart](images/dashboard-pie-chart.png)
-![Dashboard Bar Chart](images/dashboard-bar-chart.png)
-![Dashboard Customer List](images/dashboard-customer-list.png)
-![Dashboard Financial Summary](images/dashboard-financial-summary.png)
-![Dashboard CSV Export](images/dashboard-csv-export.png)
-![Dashboard Profile Modal](images/dashboard-profile-modal.png)
-![Dashboard Large Chart Modal](images/dashboard-large-chart-modal.png)
+<img src="../images/general-user-dashboard.png" alt="Dashboard Overview" width="200"/>
+<img src="../images/dashboard-pie-chart.png" alt="Dashboard Pie Chart" width="200"/>
+<img src="../images/dashboard-bar-chart.png" alt="Dashboard Bar Chart" width="200"/>
+<img src="../images/dashboard-customer-list.png" alt="Dashboard Customer List" width="200"/>
+<img src="../images/dashboard-bar-chart.png" alt="Dashboard Financial Summary" width="200"/>
+<img src="../images/dashboard-pie-chart.png" alt="Dashboard CSV Export" width="200"/>
+

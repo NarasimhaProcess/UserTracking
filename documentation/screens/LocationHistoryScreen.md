@@ -26,7 +26,4 @@ To allow authorized users (admins/superadmins) to review the location history of
 
 ## Images
 
-![Location History Screen Overview](images/location-history-screen.png)
-![Location History Stats](images/location-history-stats.png)
-![Location History List Details](images/location-history-list-details.png)
-![Location History User Selection Modal](images/location-history-user-selection-modal.png)
+<img src="../images/location-history-screen.png" alt="Location History Screen Overview" width="200"/>

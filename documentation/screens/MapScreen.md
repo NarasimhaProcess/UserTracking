@@ -27,9 +27,7 @@ To visualize geographical data, such as user locations or customer points of int
 
 ## Images
 
-![Map Screen Overview](images/map-screen.png)
-![Map Screen Search](images/map-screen-search.png)
-![Map Screen Controls](images/map-screen-controls.png)
-![Map Screen User Selection](images/map-screen-user-selection.png)
-![Map Screen Date Filter](images/map-screen-date-filter.png)
-![Map Screen Web Fallback](images/map-screen-web-fallback.png)
+<img src="../images/map-screen.png" alt="Map Screen Overview" width="200"/>
+<img src="../images/map-screen-search.png" alt="Map Screen Search" width="200"/>
+<img src="../images/map-screen-controls.png" alt="Map Screen Controls" width="200"/>
+

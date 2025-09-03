@@ -27,6 +27,4 @@ To provide users with access to video content directly within the application.
 
 ## Images
 
-![YouTube Screen Search](images/youtube-screen.png)
-![YouTube Screen Video List](images/youtube-video-list.png)
-![YouTube Screen Video Player](images/youtube-video-player.png)
+<img src="../images/youtube-screen.png" alt="YouTube Screen Search" width="200"/><img src="../images/youtube-screen1.png" alt="YouTube Screen Search" width="200"/>

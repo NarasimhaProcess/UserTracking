@@ -14,4 +14,4 @@ This section allows administrators to define and manage geographical areas, incl
 
 ## Images
 
-![Areas List](images/admin-areas-tab.png)
+<img src="../images/admin-areas-tab.png" alt="Areas List" width="200"/><img src="../images/admin-areas-tab2.png" alt="Areas List" width="200"/><img src="../images/admin-areas-tab1.png" alt="Areas List" width="200"/><img src="../images/admin-areas-tab3.png" alt="Areas List" width="200"/>

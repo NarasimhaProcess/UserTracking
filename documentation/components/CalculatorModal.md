@@ -21,5 +21,5 @@ This component directly uses the `Modal` component from React Native, making it 
 
 ## Images
 
-![Calculator Modal Overview](images/calculator-modal.png)
-![Calculator Modal Example](images/calculator-modal-example.png)
+<img src="images/calculator-modal.png" alt="Calculator Modal Overview" width="200"/>
+<img src="images/calculator-modal-example.png" alt="Calculator Modal Example" width="200"/>

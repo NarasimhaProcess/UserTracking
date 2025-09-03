@@ -20,5 +20,4 @@ To provide users with quick access to online resources for birthday-related cont
 
 ## Images
 
-![Birthday Screen Overview](images/birthday-screen.png)
-![Birthday Screen Resource List](images/birthday-screen-resource-list.png)
+<img src="../images/birthday-screen.png" alt="Birthday Screen Overview" width="200"/>

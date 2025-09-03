@@ -15,6 +15,15 @@ This section allows administrators to view and manage customer data, including a
 
 ## Images
 
-![Customers List](images/admin-customers-tab.png)
-![Add Transaction](images/admin-customers-add-transaction.png)
-![Customer View Map](images/admin-customers-view-map.png)
+<img src="../images/admin-customers-tab.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab1.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab2.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab3.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab4.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab5.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab6.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab7.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab8.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab9.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab10.png" alt="Customers List" width="200"/>
+<img src="../images/admin-customers-tab11.png" alt="Customers List" width="200"/>

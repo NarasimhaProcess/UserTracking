@@ -12,4 +12,4 @@ This section provides access to various application settings and configurations,
 
 ## Images
 
-![Configuration Overview](images/admin-configuration-tab.png)
+<img src="images/admin-configuration-tab.png" alt="Configuration Overview" width="200"/>

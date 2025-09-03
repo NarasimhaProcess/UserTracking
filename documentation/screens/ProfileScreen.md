@@ -30,9 +30,4 @@ To provide users with a dedicated section to update their details, change passwo
 
 ## Images
 
-![Profile Screen Overview](images/profile-screen.png)
-![Profile Screen User Info](images/profile-screen-user-info.png)
-![Profile Screen Settings](images/profile-screen-settings.png)
-![Profile Screen Actions](images/profile-screen-actions.png)
-![Profile Screen Location Picker Modal](images/profile-screen-location-picker-modal.png)
-![Profile Screen Image Modal](images/profile-screen-image-modal.png)
+<img src="../images/profile-screen.png" alt="Profile Screen Overview" width="200"/><img src="../images/profile-screen1.png" alt="Profile Screen Overview" width="200"/>

@@ -20,7 +20,7 @@ This is the basic user type. They have access to core functionalities and inform
     *   History
     *   Admin
 
-![General User Dashboard](images/general-user-dashboard.png)
+<img src="images/general-user-dashboard.png" alt="General User Dashboard" width="200"/>
 
 ### 2. `customer`
 
@@ -36,7 +36,7 @@ This role is specifically designed for customer accounts. In terms of main navig
     *   History
     *   Admin
 
-![Customer User Profile](images/customer-user-profile.png)
+<img src="images/customer-user-profile.png" alt="Customer User Profile" width="200"/>
 
 ### 3. `admin`
 
@@ -51,7 +51,7 @@ Administrators have elevated privileges. Their access to specific areas is **lim
     *   History (if granted)
     *   Admin (Access to the administrative panel, with features limited by superadmin configuration)
 
-![Admin Dashboard with Admin Tab](images/admin-dashboard-with-admin-tab.png)
+<img src="images/admin-dashboard-with-admin-tab.png" alt="Admin Dashboard with Admin Tab" width="200"/>
 
 ### 4. `superadmin`
 
@@ -68,6 +68,6 @@ The `superadmin` role represents the highest level of administrative access. A `
 
 **Note:** While `superadmin` and `admin` might appear to have similar tab visibility in the main navigation, the `superadmin` possesses the underlying authority to control `admin` permissions and access all data/features without restriction.
 
-![Superadmin Admin Screen](images/superadmin-admin-screen.png)
+<img src="images/superadmin-admin-screen.png" alt="Superadmin Admin Screen" width="200"/>
 
 

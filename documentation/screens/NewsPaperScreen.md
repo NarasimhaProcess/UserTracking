@@ -21,5 +21,4 @@ To provide users with direct access to online news publications within the app.
 
 ## Images
 
-![Newspaper Selection Grid](images/newspaper-selection-grid.png)
-![Newspaper Web View](images/newspaper-web-view.png)
+<img src="images/newspaper-selection-grid.png" alt="Newspaper Selection Grid" width="200"/>

@@ -26,6 +26,6 @@ This component uses `position: 'absolute'` and `transparent` backgrounds to floa
 
 ## Images
 
-![Global Chat Interface](images/global-chat-interface.png)
-![Global Chat Group Selection](images/chat-group-selection.png)
-![Global Chat User List](images/online-user-list.png)
+<img src="images/global-chat-interface.png" alt="Global Chat Interface" width="200"/>
+<img src="images/chat-group-selection.png" alt="Global Chat Group Selection" width="200"/>
+<img src="images/online-user-list.png" alt="Global Chat User List" width="200"/>

@@ -12,4 +12,4 @@ This section allows administrators to manage bank account details.
 
 ## Images
 
-![Bank Accounts List](images/admin-bank-accounts-tab.png)
+<img src="../images/admin-bank-accounts-tab.png" alt="Bank Accounts List" width="200"/><img src="../images/admin-bank-accounts-tab1.png" alt="Bank Accounts List" width="200"/>

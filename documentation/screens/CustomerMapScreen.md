@@ -12,4 +12,4 @@ To visualize the geographical distribution of customers or their specific locati
 *   Customer markers.
 *   Search/filter options for customers.
 
-![Customer Map Screen](../images/customer-map-screen.png)
+<img src="../images/customer-map-screen.png" alt="Customer Map Screen" width="200"/>

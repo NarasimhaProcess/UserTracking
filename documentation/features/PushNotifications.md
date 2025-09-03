@@ -15,11 +15,11 @@ Push notifications are used to deliver timely alerts, updates, and important inf
 ## Functionality
 
 *   **Device Token Registration:** When a user logs in, the app registers the device for push notifications and obtains a unique push token.
-    ![Push Notification Permission Prompt](../images/push-notification-permission-prompt.png)
+    <img src="../images/push-notification-permission-prompt.png" alt="Push Notification Permission Prompt" width="200"/>
 *   **Token Storage:** The obtained push token is stored in the Supabase database, linked to the user's profile.
-    ![Supabase user_push_tokens table](../images/supabase-user-push-tokens-table.png)
+    <img src="../images/supabase-user-push-tokens-table.png" alt="Supabase user_push_tokens table" width="200"/>
 *   **Notification Handling:** The app is configured to handle incoming notifications, displaying them to the user.
-    ![Example Push Notification](../images/example-push-notification.png)
+    <img src="../images/example-push-notification.png" alt="Example Push Notification" width="200"/>
 
 ## Implementation Details
 

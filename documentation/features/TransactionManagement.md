@@ -17,13 +17,13 @@ The application allows users to log various types of transactions, providing an 
 ## Functionality
 
 *   **Quick Transaction Entry:** Streamlined process for logging simple transactions.
-    ![Quick Transaction Entry Form](../images/quick-transaction-entry-form.png)
+    <img src="../images/quick-transaction-entry-form.png" alt="Quick Transaction Entry Form" width="200"/>
 *   **Expense Tracking:** Detailed management of personal or user-specific expenses.
-    ![User Expenses List](../images/user-expenses-list.png)
+    <img src="../images/user-expenses-list.png" alt="User Expenses List" width="200"/>
 *   **Bank Transaction Handling:** Integration or display of bank transaction data.
-    ![Bank Transaction List](../images/bank-transaction-list.png)
+    <img src="../images/bank-transaction-list.png" alt="Bank Transaction List" width="200"/>
 *   **Transaction Details View:** Ability to view comprehensive details of any recorded transaction.
-    ![Transaction Detail Modal](../images/transaction-detail-modal.png)
+    <img src="../images/transaction-detail-modal.png" alt="Transaction Detail Modal" width="200"/>
 
 ## Permissions
 

@@ -18,5 +18,4 @@ To embed external web content related to astrology directly within the applicati
 
 ## Images
 
-![Astrology Webview Screen Overview](images/astrology-webview-screen.png)
-![Astrology Webview Screen Panchangam](images/astrology-webview-screen-panchangam.png)
+<img src="images/astrology-webview-screen.png" alt="Astrology Webview Screen Overview" width="200"/>

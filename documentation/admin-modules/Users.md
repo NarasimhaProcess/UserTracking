@@ -17,4 +17,4 @@ This section allows administrators to view, manage, and update user accounts, in
 
 ## Images
 
-![Users List](images/admin-users-tab.png)
+<img src="../images/admin-dashboard-with-admin-tab.png" alt="Users List" width="200"/><img src="../images/admin-user-statuschagne.png" alt="Users List" width="200"/><img src="../images/admin-user-statuschagne1.png" alt="Users List" width="200"/>

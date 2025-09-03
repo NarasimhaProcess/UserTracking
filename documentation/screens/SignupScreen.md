@@ -31,6 +31,6 @@ To register new users and set up their initial profile within the application.
 
 ## Images
 
-![Signup Screen Overview](images/login-signup-screens.png)
-![Signup Screen Form](images/signup-screen-form.png)
-![Signup Screen Validation Error](images/signup-screen-validation-error.png)
+<img src="images/login-signup-screens.png" alt="Signup Screen Overview" width="200"/>
+<img src="images/signup-screen-form.png" alt="Signup Screen Form" width="200"/>
+<img src="images/signup-screen-validation-error.png" alt="Signup Screen Validation Error" width="200"/>

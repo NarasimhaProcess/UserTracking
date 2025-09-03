@@ -30,8 +30,8 @@ To allow users to rapidly log financial transactions without navigating through 
 
 ## Images
 
-![Quick Transaction Screen Overview](images/quick-transaction-screen.png)
-![Quick Transaction Form](images/quick-transaction-form.png)
-![Quick Transaction Customer Select](images/quick-transaction-customer-select.png)
-![Quick Transaction UPI Upload](images/quick-transaction-upi-upload.png)
-![Quick Transaction Recent List](images/quick-transaction-recent-list.png)
+<img src="images/quick-transaction-screen.png" alt="Quick Transaction Screen Overview" width="200"/>
+<img src="images/quick-transaction-form.png" alt="Quick Transaction Form" width="200"/>
+<img src="images/quick-transaction-customer-select.png" alt="Quick Transaction Customer Select" width="200"/>
+<img src="images/quick-transaction-upi-upload.png" alt="Quick Transaction UPI Upload" width="200"/>
+<img src="images/quick-transaction-recent-list.png" alt="Quick Transaction Recent List" width="200"/>

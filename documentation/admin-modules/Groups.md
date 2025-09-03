@@ -14,4 +14,4 @@ This section allows administrators to create and manage user groups, assigning u
 
 ## Images
 
-![Groups List](images/admin-groups-tab.png)
+<img src="../images/admin-groups-tab.png" alt="Groups List" width="200"/><img src="../images/admin-groups-tab1.png" alt="Groups List" width="200"/><img src="../images/admin-groups-tab2.png" alt="Groups List" width="200"/>
