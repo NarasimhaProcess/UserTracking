@@ -3,10 +3,10 @@ name: Android CI
 on:
   push:
     branches:
-      - '*' # Runs on all branches. Change to your branch name if you want specific branches.
+      - 'stop' # Runs on all branches. Change to your branch name if you want specific branches.
   pull_request:
     branches:
-      - '*'
+      - 'stop'
 
 jobs:
   build_android_apk:
