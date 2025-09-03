@@ -7,11 +7,11 @@ const GlobalChatAndPresence = ({ user, userProfile, selectedGroup, setSelectedGr
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const chatChannelRef = useRef(null);
-
+  const flatListRef = useRef(null);
   useEffect(() => {
+    // If no group is selected, clean up any existing channels and return.
     if (!selectedGroup || !user) {
       if (chatChannelRef.current) {
-        chatChannelRef.current.untrack();
         supabase.removeChannel(chatChannelRef.current);
         chatChannelRef.current = null;
       }
@@ -20,84 +20,66 @@ const GlobalChatAndPresence = ({ user, userProfile, selectedGroup, setSelectedGr
       return;
     }
 
-    const channelName = `chat-group-${selectedGroup.id}`;
-    const chatChannel = supabase.channel(channelName, {
+    // --- Create a single channel for the selected group ---
+    const channel = supabase.channel(`group-${selectedGroup.id}`, {
       config: {
         presence: {
           key: user.id,
         },
       },
     });
-    chatChannelRef.current = chatChannel;
+    chatChannelRef.current = channel;
 
     // --- Fetch historical messages ---
     const fetchMessages = async () => {
       const { data, error } = await supabase
         .from('messages')
-        .select('*, sender:sender_id(email, name)') // Fetch sender's email/name
+        .select('*, sender:sender_id(email, name)')
         .eq('group_id', selectedGroup.id)
-        .order('created_at', { ascending: false })
-        .limit(50); // Fetch last 50 messages
+        .order('created_at', { ascending: true })
+        .limit(50);
 
       if (error) {
         console.error('Error fetching messages:', error);
       } else {
-        setMessages(data.reverse()); // Reverse to show oldest first
+        setMessages(data);
       }
     };
 
     fetchMessages();
 
-    // --- Presence Handling ---
-    chatChannel
+    // --- Poll for new messages every 3 seconds ---
+    const intervalId = setInterval(fetchMessages, 3000);
+
+    // --- Subscribe to presence events on the channel ---
+    channel
       .on('presence', { event: 'sync' }, () => {
-        const newState = chatChannel.presenceState();
+        const newState = channel.presenceState();
         const currentUsers = Object.values(newState).flat();
         setGroupUsers(currentUsers);
       })
-      .on('presence', { event: 'join' }, ({ newPresences }) => {
-        const newState = chatChannel.presenceState();
-        const currentUsers = Object.values(newState).flat();
-        setGroupUsers(currentUsers);
-        console.log('New presences:', newPresences);
-      })
-      .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        const newState = chatChannel.presenceState();
-        const currentUsers = Object.values(newState).flat();
-        setGroupUsers(currentUsers);
-        console.log('Left presences:', leftPresences);
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ user_id: user.id, username: userProfile.name || user.email });
+          console.log(`Successfully subscribed to channel: group-${selectedGroup.id}`);
+        }
       });
 
-    // --- Chat Message Handling (Postgres Changes) ---
-    supabase
-      .channel(`messages-group-${selectedGroup.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `group_id=eq.${selectedGroup.id}`,
-      }, (payload) => {
-        setMessages((prevMessages) => [...prevMessages, payload.new]);
-      })
-      .subscribe();
-
-    chatChannel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await chatChannel.track({ user_id: user.id, username: user.email || 'Anonymous' });
-        console.log(`Successfully subscribed to channel: ${channelName}`);
-      }
-    });
-
+    // --- Cleanup function to remove the channel and interval ---
     return () => {
+      clearInterval(intervalId);
       if (chatChannelRef.current) {
-        chatChannelRef.current.untrack();
         supabase.removeChannel(chatChannelRef.current);
         chatChannelRef.current = null;
       }
-      // Remove postgres_changes subscription
-      supabase.removeChannel(supabase.channel(`messages-group-${selectedGroup.id}`));
     };
-  }, [selectedGroup, user]);
+  }, [selectedGroup, user, userProfile]);
+
+  useEffect(() => {
+    if (flatListRef.current) {
+      flatListRef.current.scrollToEnd({ animated: true });
+    }
+  }, [messages]);
 
   const sendMessage = async () => {
     if (newMessage.trim() && selectedGroup && user) {
@@ -115,6 +97,7 @@ const GlobalChatAndPresence = ({ user, userProfile, selectedGroup, setSelectedGr
         console.error('Error sending message:', error);
       } else {
         setNewMessage('');
+        // The new message will be picked up by the next poll
       }
     }
   };
@@ -163,18 +146,22 @@ const GlobalChatAndPresence = ({ user, userProfile, selectedGroup, setSelectedGr
       {/* Chat Window (Bottom Right) */}
       <View style={[styles.chatWindow, { top: 70 }]}>
         <FlatList
+          ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View style={[
               styles.messageBubble,
-              item.sender === (user.email || 'Anonymous') ? styles.sentMessageBubble : styles.receivedMessageBubble
+              item.sender_id === user.id ? styles.sentMessageBubble : styles.receivedMessageBubble
             ]}>
-              <Text style={styles.messageSender}>{item.sender_email}:</Text>
-              <Text style={styles.messageText}>{item.text}</Text>
+              <Text style={item.sender_id === user.id ? styles.sentMessageSender : styles.messageSender}>
+                {item.sender ? item.sender.name || item.sender.email : 'Anonymous'}:
+              </Text>
+              <Text style={item.sender_id === user.id ? styles.sentMessageText : styles.messageText}>
+                {item.text}
+              </Text>
             </View>
           )}
-          inverted // Show latest messages at the bottom
         />
         <View style={styles.inputContainer}>
           <TextInput
@@ -293,8 +280,16 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     color: '#333',
   },
+  sentMessageSender: {
+    fontWeight: 'bold',
+    marginBottom: 2,
+    color: 'white',
+  },
   messageText: {
     color: '#333',
+  },
+  sentMessageText: {
+    color: 'white',
   },
   inputContainer: {
     flexDirection: 'row',

@@ -225,6 +225,7 @@ useEffect(() => {
       );
 
       await checkAuthStatus();
+      await handleBiometricLogin();
       await locationTracker.init();
       setIsLoading(false);
 
@@ -236,8 +237,54 @@ useEffect(() => {
   const loadUserProfile = async (userId) => {
     const { data } = await supabase.from('users').select('*').eq('id', userId).single();
     if (data) {
-      setUserProfile(data);
-      return data;
+      const groups = await fetchUserGroups(data.id, data.user_type);
+      const profileWithGroups = { ...data, groups };
+      setUserProfile(profileWithGroups);
+      return profileWithGroups;
+    }
+  };
+
+  const fetchUserGroups = async (userId, userType) => {
+    try {
+      if (userType === 'superadmin') {
+        const { data: allGroups, error: allGroupsError } = await supabase
+          .from('groups')
+          .select('id, name');
+        if (allGroupsError) {
+          console.error('❌ Error fetching all groups for superadmin:', allGroupsError);
+          return [];
+        }
+        return allGroups;
+      } else {
+        const { data: userGroupLinks, error: userGroupLinkError } = await supabase
+          .from('user_groups')
+          .select('group_id')
+          .eq('user_id', userId);
+
+        if (userGroupLinkError) {
+          console.error('❌ Error fetching user group links:', userGroupLinkError);
+          return [];
+        }
+
+        if (!userGroupLinks || userGroupLinks.length === 0) {
+          return [];
+        }
+
+        const groupIds = userGroupLinks.map(link => link.group_id);
+        const { data: groupDetails, error: groupDetailsError } = await supabase
+          .from('groups')
+          .select('id, name')
+          .in('id', groupIds);
+
+        if (groupDetailsError) {
+          console.error('❌ Error fetching group details:', groupDetailsError);
+          return [];
+        }
+        return groupDetails;
+      }
+    } catch (error) {
+      console.error('❌ Unexpected error in fetchUserGroups:', error);
+      return [];
     }
   };
 
@@ -254,6 +301,40 @@ useEffect(() => {
     setUser(userData);
     await loadUserProfile(userData.id);
     setIsAuthenticated(true);
+  };
+
+  const handleBiometricLogin = async () => {
+    try {
+      const isBiometricsEnabled = await AsyncStorage.getItem('BIOMETRICS_ENABLED');
+      const userEmail = await AsyncStorage.getItem('BIOMETRICS_EMAIL');
+
+      if (isBiometricsEnabled === 'true' && userEmail) {
+        const { success } = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Log in with your fingerprint or Face ID',
+          cancelLabel: 'Use Password',
+        });
+
+        if (success) {
+          console.log('Biometric authentication successful');
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', userEmail)
+            .single();
+
+          if (error || !userData) {
+            console.error('Failed to fetch user profile after biometric login:', error);
+            Alert.alert('Error', 'Could not log you in. Please use your password.');
+            return;
+          }
+          handleAuthSuccess(userData);
+        } else {
+          console.log('Biometric authentication failed or was cancelled.');
+        }
+      }
+    } catch (error) {
+      console.error('Error during biometric login attempt:', error);
+    }
   };
 
   // ---------------- Header ----------------

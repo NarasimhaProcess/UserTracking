@@ -134,4 +134,46 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 -- Add transaction_id to location_history for linking transactions
-ALTER TABLE location_history ADD COLUMN IF NOT EXISTS transaction_id BIGINT REFERENCES transactions(id); 
+ALTER TABLE location_history ADD COLUMN IF NOT EXISTS transaction_id BIGINT REFERENCES transactions(id);
+
+-- Groups and Chat
+CREATE TABLE IF NOT EXISTS public.groups (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.user_groups (
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    group_id INTEGER REFERENCES public.groups(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, group_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.messages (
+    id BIGSERIAL PRIMARY KEY,
+    group_id INTEGER REFERENCES public.groups(id) ON DELETE CASCADE,
+    sender_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    sender_email TEXT,
+    text TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS for messages, groups, and user_groups
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_groups ENABLE ROW LEVEL SECURITY;
+
+-- Policies for groups
+CREATE POLICY "Users can view groups they are a member of" ON public.groups
+    FOR SELECT USING (id IN (SELECT group_id FROM public.user_groups WHERE user_id = auth.uid()));
+
+-- Policies for user_groups
+CREATE POLICY "Users can view their own group memberships" ON public.user_groups
+    FOR SELECT USING (auth.uid() = user_id);
+
+-- Policies for messages
+CREATE POLICY "Users can view messages in groups they are a member of" ON public.messages
+    FOR SELECT USING (group_id IN (SELECT group_id FROM public.user_groups WHERE user_id = auth.uid()));
+
+CREATE POLICY "Users can insert messages in groups they are a member of" ON public.messages
+    FOR INSERT WITH CHECK (group_id IN (SELECT group_id FROM public.user_groups WHERE user_id = auth.uid()));
