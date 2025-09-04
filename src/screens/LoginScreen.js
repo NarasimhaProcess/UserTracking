@@ -33,7 +33,7 @@ export default function LoginScreen({ navigation, route, onAuthSuccess }) {
       // First, check if user exists in users table
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('id, email, name, user_type, location_status, tenant_id')
+        .select('id')
         .eq('email', email)
         .single();
 
@@ -51,49 +51,29 @@ export default function LoginScreen({ navigation, route, onAuthSuccess }) {
 
       if (error) {
         Alert.alert('Login Error', error.message);
-      } else {
-        console.log('Login successful:', data.user);
-
-        let tenantId = userData.tenant_id;
-
-        // Removed: Logic to assign default tenant and update user's tenant_id.
-        // The app now operates in a single-tenant mode, connecting directly to the master DB.
-
-        // if (tenantId) { // reinitializeSupabase is no longer needed as we use a single client
-        //   await reinitializeSupabase(tenantId);
-        // }
+      } else if (data.session) {
+        console.log('Login successful, session created:', data.session);
         
-        // Use the user data from users table instead of auth user
-        const authenticatedUser = {
-          id: userData.id,
-          email: userData.email,
-          name: userData.name,
-          user_type: userData.user_type,
-          location_status: userData.location_status,
-          tenant_id: tenantId,
-        };
-        
-        // Call the auth success callback if provided
+        // Call the auth success callback with the entire session object
         if (onAuthSuccess) {
-          onAuthSuccess(authenticatedUser, navigation);
+          onAuthSuccess(data.session, navigation);
         }
-
-        
 
         // Register for push notifications and save token
         try {
-          const pushToken = await registerForPushNotificationsAsync(authenticatedUser); // Pass authenticatedUser
+          const pushToken = await registerForPushNotificationsAsync(data.user); // Pass the user object
           if (pushToken) {
             console.log('Push Token obtained:', pushToken);
-            // The notificationService.js already handles saving to Supabase
           }
         } catch (e) {
           console.error('Error during push notification registration:', e);
         }
 
         // After successful login, ask to enable biometrics
-        await promptForBiometrics(authenticatedUser.email);
-        }
+        await promptForBiometrics(data.user.email);
+      } else {
+        Alert.alert('Login Error', 'Could not establish a session.');
+      }
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred');
       console.error('Login error:', error);
@@ -346,5 +326,3 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
 });
-
- 

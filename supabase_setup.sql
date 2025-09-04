@@ -154,8 +154,11 @@ CREATE TABLE IF NOT EXISTS public.messages (
     group_id INTEGER REFERENCES public.groups(id) ON DELETE CASCADE,
     sender_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     sender_email TEXT,
-    text TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    text TEXT,
+    media_url TEXT,
+    media_type TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT text_or_media_check CHECK (text IS NOT NULL OR media_url IS NOT NULL)
 );
 
 -- Enable RLS for messages, groups, and user_groups
@@ -177,3 +180,15 @@ CREATE POLICY "Users can view messages in groups they are a member of" ON public
 
 CREATE POLICY "Users can insert messages in groups they are a member of" ON public.messages
     FOR INSERT WITH CHECK (group_id IN (SELECT group_id FROM public.user_groups WHERE user_id = auth.uid()));
+
+-- Storage for Chat Media
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('chat_media', 'chat_media', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Policies for chat_media bucket
+CREATE POLICY "Users can view media in groups they are a member of" ON storage.objects
+    FOR SELECT USING (bucket_id = 'chat_media' AND (storage.foldername(name))[1]::int IN (SELECT group_id FROM public.user_groups WHERE user_id = auth.uid()));
+
+CREATE POLICY "Users can upload media to groups they are a member of" ON storage.objects
+    FOR INSERT WITH CHECK (bucket_id = 'chat_media' AND (storage.foldername(name))[1]::int IN (SELECT group_id FROM public.user_groups WHERE user_id = auth.uid()));

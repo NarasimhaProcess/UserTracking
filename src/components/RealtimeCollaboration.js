@@ -1,150 +1,150 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { View, StyleSheet, PanResponder, Animated, Text } from 'react-native';
 import { supabase } from '../services/supabaseClient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Svg, { Path } from 'react-native-svg';
 
-// A simple component for the cursor itself
-const Cursor = ({ x, y, name }) => (
-  <Animated.View style={[styles.cursor, { transform: [{ translateX: x }, { translateY: y }] }]}>
+const HEADER_OFFSET = 120; // A constant for the header height to prevent overlap
+
+// Memoized Cursor component for performance
+const Cursor = memo(({ position, name }) => (
+  <Animated.View style={[styles.cursor, { transform: position.getTranslateTransform() }]}>
     <Icon name="navigation" size={24} color="#007AFF" style={styles.cursorIcon} />
     <Text style={styles.cursorLabel}>{name}</Text>
   </Animated.View>
-);
+));
 
-// Helper function to convert an array of points to an SVG path string
+// Helper to convert points to an SVG path string
 const pointsToPath = (points) => {
-  if (points.length === 0) {
-    return '';
-  }
-  const [firstPoint, ...rest] = points;
-  return `M ${firstPoint.x} ${firstPoint.y} ` + rest.map(p => `L ${p.x} ${p.y}`).join(' ');
+  if (points.length < 1) return '';
+  return `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ');
 };
 
-export default function RealtimeCollaboration({ user, selectedGroup }) {
-  const [remoteCursors, setRemoteCursors] = useState({});
+export default function RealtimeCollaboration({ user, userProfile }) {
+  // State for all completed paths from all users
   const [paths, setPaths] = useState({});
+  // State for the path currently being drawn by the local user
+  const [myCurrentPath, setMyCurrentPath] = useState([]);
+  
+  // Refs for animated values and Supabase channel
   const myCursorPos = useRef(new Animated.ValueXY({ x: -100, y: -100 })).current;
+  const remoteCursors = useRef({}).current; // Using a ref to update positions without re-rendering
+  const [remoteCursorsForRender, setRemoteCursorsForRender] = useState({});
   const channelRef = useRef(null);
-  const currentPath = useRef(null);
-
-  const myInstanceId = useRef(Date.now() + Math.random()).current;
+  const currentPathId = useRef(null);
 
   useEffect(() => {
-    if (!selectedGroup) {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-      return;
-    }
+    if (!user) return;
 
-    const channelName = `collaboration-group-${selectedGroup.id}`;
-    const channel = supabase.channel(channelName, {
-      config: { broadcast: { self: false } },
-    });
+    const channelName = 'global-collaboration-canvas'; // Generic channel name, not tied to a group
+    const channel = supabase.channel(channelName, { config: { broadcast: { self: false } } });
     channelRef.current = channel;
 
-    // Subscribe to cursor events
-    channel.on('broadcast', { event: 'cursor-pos' }, ({ payload }) => {
-      setRemoteCursors(current => ({ ...current, [payload.userId]: { ...payload } }));
-    });
+    const setupChannel = () => {
+      channel
+        .on('broadcast', { event: 'cursor-pos' }, ({ payload }) => {
+          if (!remoteCursors[payload.userId]) {
+            remoteCursors[payload.userId] = { 
+              position: new Animated.ValueXY({ x: payload.x, y: payload.y }),
+              name: payload.name 
+            };
+            setRemoteCursorsForRender({...remoteCursors});
+          } else {
+            remoteCursors[payload.userId].position.setValue({ x: payload.x, y: payload.y });
+          }
+        })
+        .on('broadcast', { event: 'path-complete' }, ({ payload }) => {
+            setPaths(current => ({ ...current, [payload.pathId]: payload.points }));
+        })
+        .subscribe(status => {
+          if (status === 'SUBSCRIBED') console.log(`Subscribed to ${channelName}`);
+        });
+    };
 
-    // Subscribe to drawing events
-    channel.on('broadcast', { event: 'path-start' }, ({ payload }) => {
-      if (!payload || !payload.pathId) return; // Added null check
-      setPaths(current => ({ ...current, [payload.pathId]: [payload.point] }));
-    });
-
-    channel.on('broadcast', { event: 'path-point' }, ({ payload }) => {
-      if (!payload || !payload.pathId) return; // Added null check
-      setPaths(current => {
-        if (!current[payload.pathId]) return current;
-        return { ...current, [payload.pathId]: [...current[payload.pathId], payload.point] };
-      });
-    });
-
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') console.log(`Successfully subscribed to channel: ${channelName}`);
-    });
+    setupChannel();
 
     return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, [selectedGroup]); // Added dependency array
+  }, [user]); // Dependency array no longer includes selectedGroup
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt, gestureState) => {
-        // Start a new path
-        const pathId = `${user.id}-${Date.now()}`;
-        const point = { x: gestureState.x0, y: gestureState.y0 };
-        currentPath.current = { pathId, points: [point] };
-        setPaths(current => ({ ...current, [pathId]: [point] }));
-
-        // Broadcast path start
-        channelRef.current?.send({
-          type: 'broadcast', event: 'path-start', payload: { pathId, point },
-        });
+        currentPathId.current = `${user.id}-${Date.now()}`;
+        const point = { x: gestureState.x0, y: gestureState.y0 - HEADER_OFFSET };
+        setMyCurrentPath([point]);
       },
       onPanResponderMove: (evt, gestureState) => {
         const { moveX, moveY } = gestureState;
-        myCursorPos.setValue({ x: moveX, y: moveY });
+        const correctedY = moveY - HEADER_OFFSET;
 
-        // Add point to current path
-        if (currentPath.current && currentPath.current.pathId) {
-          const point = { x: moveX, y: moveY };
-          currentPath.current.points.push(point);
-          setPaths(current => ({ ...current, [currentPath.current.pathId]: currentPath.current.points }));
+        myCursorPos.setValue({ x: moveX, y: correctedY });
+        const newPoint = { x: moveX, y: correctedY };
+        setMyCurrentPath(current => [...current, newPoint]);
 
-          // Broadcast new point
-          channelRef.current?.send({
-            type: 'broadcast', event: 'path-point', payload: { pathId: currentPath.current.pathId, point },
-          });
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast', event: 'cursor-pos', 
+                payload: { userId: user.id, name: userProfile?.name || user.email, x: moveX, y: correctedY },
+            });
         }
-
-        // Broadcast cursor position
-        channelRef.current?.send({
-          type: 'broadcast', event: 'cursor-pos', payload: { userId: user.id, instanceId: myInstanceId, name: user.name || user.email, x: moveX, y: moveY },
-        });
       },
       onPanResponderRelease: () => {
         myCursorPos.setValue({ x: -100, y: -100 });
-        currentPath.current = null;
+        if (myCurrentPath.length > 0) {
+            // Add the final path to the main state
+            setPaths(current => ({ ...current, [currentPathId.current]: myCurrentPath }));
+            // Broadcast the completed path to others
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast', event: 'path-complete', 
+                    payload: { pathId: currentPathId.current, points: myCurrentPath },
+                });
+            }
+        }
+        // Clear the temporary path
+        setMyCurrentPath([]);
+        currentPathId.current = null;
       },
     })
   ).current;
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
-      <Svg width="100%" height="100%">
-        {Object.values(paths).map((points, index) => (
-          <Path
-            key={index}
-            d={pointsToPath(points)}
-            stroke="red"
-            strokeWidth={3}
-            fill="none"
-          />
+    <View style={styles.container} pointerEvents="box-none">
+      <Svg style={styles.drawingSurface} {...panResponder.panHandlers}>
+        {/* Render completed paths from all users */}
+        {Object.entries(paths).map(([pathId, points]) => (
+          <Path key={pathId} d={pointsToPath(points)} stroke="#333" strokeWidth={3} fill="none" />
         ))}
+        {/* Render current user's drawing in real-time */}
+        {myCurrentPath.length > 0 && (
+            <Path d={pointsToPath(myCurrentPath)} stroke="red" strokeWidth={3} fill="none" />
+        )}
       </Svg>
-      <Cursor x={myCursorPos.x} y={myCursorPos.y} name="You" />
-      {Object.entries(remoteCursors).map(([userId, { x, y, name }]) => (
-        <Cursor key={userId} x={x} y={y} name={name} />
-      ))}
+      {/* Cursors are rendered on top of the Svg canvas but do not capture touch events. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Cursor position={myCursorPos} name={userProfile?.name || 'You'} />
+        {Object.entries(remoteCursorsForRender).map(([userId, { position, name }]) => (
+          <Cursor key={userId} position={position} name={name} />
+        ))}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    marginTop: HEADER_OFFSET, // Use the constant for the margin
+  },
+  drawingSurface: {
     flex: 1,
-    width: '100%',
-    height: '100%',
     backgroundColor: 'transparent',
   },
   cursor: {

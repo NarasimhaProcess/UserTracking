@@ -1,5 +1,5 @@
 import 'react-native-get-random-values';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -163,6 +163,7 @@ function TabNavigator({ route }) {
         name="News"
         component={NewsTabs}
         options={{
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Text style={{ color, fontSize: size }}>📰</Text>,
         }}
       />
@@ -183,13 +184,20 @@ function TabNavigator({ route }) {
 // ---------------- App ----------------
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
+  const [session, setSession] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [showCalculatorModal, setShowCalculatorModal] = useState(false);
   const [showGlobalChat, setShowGlobalChat] = useState(false);
   const [showRealtimeCollaboration, setShowRealtimeCollaboration] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
+
+  const user = session?.user;
+  const isAuthenticated = !!session;
+
+  const memoizedCollaboration = useMemo(() => {
+    if (!user) return null;
+    return <RealtimeCollaboration user={user} userProfile={userProfile} />
+  }, [user, userProfile]);
 
  // 🔔 Push notifications
 useEffect(() => {
@@ -209,17 +217,12 @@ useEffect(() => {
   useEffect(() => {
     const initializeApp = async () => {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
+        async (_event, session) => {
+          setSession(session);
           if (session) {
-            if (event === 'SIGNED_IN') {
-              setUser(session.user);
-              const profile = await loadUserProfile(session.user.id);
-              setIsAuthenticated(true);
-            }
+            await loadUserProfile(session.user.id);
           } else {
-            setUser(null);
             setUserProfile(null);
-            setIsAuthenticated(false);
           }
         }
       );
@@ -290,17 +293,15 @@ useEffect(() => {
 
   const checkAuthStatus = async () => {
     const { data: { session } } = await supabase.auth.getSession();
+    setSession(session);
     if (session) {
-      setUser(session.user);
       await loadUserProfile(session.user.id);
-      setIsAuthenticated(true);
     }
   };
 
-  const handleAuthSuccess = async (userData) => {
-    setUser(userData);
-    await loadUserProfile(userData.id);
-    setIsAuthenticated(true);
+  const handleAuthSuccess = async (sessionData) => {
+    setSession(sessionData);
+    await loadUserProfile(sessionData.user.id);
   };
 
   const handleBiometricLogin = async () => {
@@ -316,18 +317,9 @@ useEffect(() => {
 
         if (success) {
           console.log('Biometric authentication successful');
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', userEmail)
-            .single();
-
-          if (error || !userData) {
-            console.error('Failed to fetch user profile after biometric login:', error);
-            Alert.alert('Error', 'Could not log you in. Please use your password.');
-            return;
-          }
-          handleAuthSuccess(userData);
+          // This part needs to be updated to handle session properly
+          // For now, we will rely on checkAuthStatus to get the session
+          await checkAuthStatus();
         } else {
           console.log('Biometric authentication failed or was cancelled.');
         }
@@ -338,56 +330,58 @@ useEffect(() => {
   };
 
   // ---------------- Header ----------------
-  const renderHeader = (navigation) => ({
-    headerShown: true,
-    headerTitle: () => null,
-    headerLeft: () => {
-      const currentStackRoute = navigation.getState().routes[navigation.getState().index];
-      let headerTitle = ''; // Default to empty
+  const renderHeader = ({ navigation }) => {
+    return {
+      headerShown: true,
+      headerTitle: () => null,
+      headerLeft: () => {
+        const currentStackRoute = navigation.getState().routes[navigation.getState().index];
+        let headerTitle = ''; // Default to empty
 
-      // If 'Main' screen has a nested navigator (TabNavigator in this case)
-      if (currentStackRoute.state && currentStackRoute.state.routes) {
-        const currentTabRoute = currentStackRoute.state.routes[currentStackRoute.state.index];
-        // Only show title for Admin screen
-        if (currentTabRoute.name === 'Admin') {
-          headerTitle = currentTabRoute.name;
+        // If 'Main' screen has a nested navigator (TabNavigator in this case)
+        if (currentStackRoute.state && currentStackRoute.state.routes) {
+          const currentTabRoute = currentStackRoute.state.routes[currentStackRoute.state.index];
+          // Only show title for Admin screen
+          if (currentTabRoute.name === 'Admin') {
+            headerTitle = currentTabRoute.name;
+          }
         }
-      }
 
-      return (
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {userProfile?.profile_photo_data ? (
-            <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-              <Image 
-                source={{ uri: userProfile.profile_photo_data }} 
-                style={{ width: 30, height: 30, borderRadius: 15, marginLeft: 15 }} 
-              />
-            </TouchableOpacity>
-          ) : null}
-          {headerTitle ? ( // Only render Text if headerTitle is not empty
-            <Text style={{ marginLeft: 10, fontSize: 18, fontWeight: 'bold', color: '#1C1C1E' }}>{headerTitle}</Text>
-          ) : null}
+        return (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {userProfile?.profile_photo_data ? (
+              <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+                <Image 
+                  source={{ uri: userProfile.profile_photo_data }} 
+                  style={{ width: 30, height: 30, borderRadius: 15, marginLeft: 15 }} 
+                />
+              </TouchableOpacity>
+            ) : null}
+            {headerTitle ? ( // Only render Text if headerTitle is not empty
+              <Text style={{ marginLeft: 10, fontSize: 18, fontWeight: 'bold', color: '#1C1C1E' }}>{headerTitle}</Text>
+            ) : null}
+          </View>
+        );
+      },
+      headerRight: () => (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15 }}>
+          <TouchableOpacity onPress={() => setShowRealtimeCollaboration(prev => !prev)} style={{ marginRight: 15 }}>
+            <MaterialIcons name={showRealtimeCollaboration ? "edit" : "edit-off"} size={24} color="#007AFF" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowGlobalChat(prev => !prev)} style={{ marginRight: 15 }}>
+            <MaterialIcons name={showGlobalChat ? "chat-bubble" : "chat-bubble-outline"} size={24} color="#007AFF" />
+          </TouchableOpacity>
+          <QuickTransactionButton onPress={() => navigation.navigate('QuickTransaction')} />
+          <TouchableOpacity onPress={() => navigation.navigate('Expenses')} style={{ marginRight: 15 }}>
+            <MaterialIcons name="receipt-long" size={24} color="#007AFF" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowCalculatorModal(true)}>
+            <Icon name="calculator" size={20} color="#007AFF" />
+          </TouchableOpacity>
         </View>
-      );
-    },
-    headerRight: () => (
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15 }}>
-        <TouchableOpacity onPress={() => setShowRealtimeCollaboration(prev => !prev)} style={{ marginRight: 15 }}>
-          <MaterialIcons name={showRealtimeCollaboration ? "visibility" : "visibility-off"} size={24} color="#007AFF" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowGlobalChat(prev => !prev)} style={{ marginRight: 15 }}>
-          <MaterialIcons name={showGlobalChat ? "chat-bubble" : "chat-bubble-outline"} size={24} color="#007AFF" />
-        </TouchableOpacity>
-        <QuickTransactionButton onPress={() => navigation.navigate('QuickTransaction')} />
-        <TouchableOpacity onPress={() => navigation.navigate('Expenses')} style={{ marginRight: 15 }}>
-          <MaterialIcons name="receipt-long" size={24} color="#007AFF" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowCalculatorModal(true)}>
-          <Icon name="calculator" size={20} color="#007AFF" />
-        </TouchableOpacity>
-      </View>
-    ),
-  });
+      ),
+    }
+  };
 
   // ---------------- Render ----------------
   if (isLoading) {
@@ -415,7 +409,7 @@ useEffect(() => {
           <>
             <Stack.Screen
               name="Main"
-              options={({ navigation }) => renderHeader(navigation)}
+              options={({ navigation }) => renderHeader({ navigation })}
             >
               {(props) => (
                 <TabNavigator {...props} route={{ params: { user, userProfile } }} />
@@ -443,7 +437,7 @@ useEffect(() => {
 
       {isAuthenticated && user && showRealtimeCollaboration && (
         <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
-          <RealtimeCollaboration user={user} selectedGroup={selectedGroup} />
+          {memoizedCollaboration}
         </View>
       )}
 
@@ -453,6 +447,7 @@ useEffect(() => {
           userProfile={userProfile}
           selectedGroup={selectedGroup}
           setSelectedGroup={setSelectedGroup}
+          accessToken={session?.access_token}
         />
       )}
     </NavigationContainer>
