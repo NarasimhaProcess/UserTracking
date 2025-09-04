@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, FlatList, KeyboardAvoidingView, Platform, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
-import { supabase } from '../services/supabaseClient';
+import { supabase, supabaseUrl } from '../services/supabaseClient'; // Import supabaseUrl
 import * as ImagePicker from 'expo-image-picker';
 import { Video } from 'expo-av';
 import * as tus from 'tus-js-client';
@@ -141,7 +141,6 @@ const GlobalChatAndPresence = ({ user, userProfile, selectedGroup, setSelectedGr
         return;
     }
 
-    // Double-check file size before uploading.
     if (selectedMedia.fileSize > MAX_FILE_SIZE_BYTES) {
       Alert.alert('File Too Large', `Cannot upload files larger than ${MAX_FILE_SIZE_MB}MB.`);
       setUploading(false);
@@ -158,8 +157,10 @@ const GlobalChatAndPresence = ({ user, userProfile, selectedGroup, setSelectedGr
       const response = await fetch(file.uri);
       const blob = await response.blob();
 
+      console.log("Starting TUS upload with token:", accessToken); // DIAGNOSTIC LOG
+
       const upload = new tus.Upload(blob, {
-        endpoint: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/upload/resumable`,
+        endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
         retryDelays: [0, 3000, 5000, 10000, 20000],
         headers: {
           authorization: `Bearer ${accessToken}`,
@@ -224,16 +225,21 @@ const GlobalChatAndPresence = ({ user, userProfile, selectedGroup, setSelectedGr
       <View style={[styles.groupSelectionContainer, { top: 70 }]}>
         <TextInput style={styles.searchInput} placeholder="Search groups..." value={searchQuery} onChangeText={setSearchQuery} />
         <Text style={styles.sectionTitle}>Your Groups:</Text>
-        <FlatList
-          data={filteredGroups}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={[styles.groupButton, selectedGroup?.id === item.id && styles.selectedGroupButton]} onPress={() => setSelectedGroup(item)}>
-              <Text style={styles.groupButtonText}>{item.name}</Text>
-            </TouchableOpacity>
-          )}
-          horizontal
-        />
+        {filteredGroups.length > 0 ? (
+            <FlatList
+              data={filteredGroups}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={[styles.groupButton, selectedGroup?.id === item.id && styles.selectedGroupButton]} onPress={() => setSelectedGroup(item)}>
+                  <Text style={styles.groupButtonText}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+              horizontal
+            />
+        ) : (
+            <Text style={styles.noGroupsText}>You are not a member of any groups.</Text>
+        )}
+
         {selectedGroup && (
           <View style={styles.selectedGroupInfo}>
             <Text style={styles.sectionTitle}>Users in {selectedGroup.name} ({groupUsers.length} online):</Text>
@@ -242,32 +248,38 @@ const GlobalChatAndPresence = ({ user, userProfile, selectedGroup, setSelectedGr
         )}
       </View>
 
-      <View style={[styles.chatWindow, { top: 70 }]}>
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item, index) => `${item.id}-${index}`}
-          renderItem={({ item }) => (
-            <View style={[styles.messageBubble, item.sender_id === user.id ? styles.sentMessageBubble : styles.receivedMessageBubble]}>
-              <Text style={item.sender_id === user.id ? styles.sentMessageSender : styles.messageSender}>{item.sender?.name || item.sender_email || 'Anonymous'}:</Text>
-              {item.text ? <Text style={item.sender_id === user.id ? styles.sentMessageText : styles.messageText}>{item.text}</Text> : null}
-              {renderMediaMessage(item)}
+      {selectedGroup ? (
+        <View style={[styles.chatWindow, { top: 70 }]}>
+            <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item, index) => `${item.id}-${index}`}
+            renderItem={({ item }) => (
+                <View style={[styles.messageBubble, item.sender_id === user.id ? styles.sentMessageBubble : styles.receivedMessageBubble]}>
+                <Text style={item.sender_id === user.id ? styles.sentMessageSender : styles.messageSender}>{item.sender?.name || item.sender_email || 'Anonymous'}:</Text>
+                {item.text ? <Text style={item.sender_id === user.id ? styles.sentMessageText : styles.messageText}>{item.text}</Text> : null}
+                {renderMediaMessage(item)}
+                </View>
+            )}
+            />
+            {selectedMedia && (
+            <View style={styles.previewContainer}>
+                <Image source={{ uri: selectedMedia.uri }} style={styles.previewImage} />
+                <TouchableOpacity onPress={() => setSelectedMedia(null)} style={styles.removePreviewButton}><Text style={styles.removePreviewText}>X</Text></TouchableOpacity>
             </View>
-          )}
-        />
-        {selectedMedia && (
-          <View style={styles.previewContainer}>
-            <Image source={{ uri: selectedMedia.uri }} style={styles.previewImage} />
-            <TouchableOpacity onPress={() => setSelectedMedia(null)} style={styles.removePreviewButton}><Text style={styles.removePreviewText}>X</Text></TouchableOpacity>
-          </View>
-        )}
-        <View style={styles.inputContainer}>
-          <TouchableOpacity onPress={() => handleMediaPick(false)} style={styles.attachButton}><Text style={styles.attachButtonText}>📁</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => handleMediaPick(true)} style={styles.attachButton}><Text style={styles.attachButtonText}>📷</Text></TouchableOpacity>
-          <TextInput style={styles.textInput} value={newMessage} onChangeText={setNewMessage} placeholder="Type message..." />
-          {uploading ? <ActivityIndicator /> : <Button title="Send" onPress={sendMessage} />}
+            )}
+            <View style={styles.inputContainer}>
+            <TouchableOpacity onPress={() => handleMediaPick(false)} style={styles.attachButton}><Text style={styles.attachButtonText}>📁</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => handleMediaPick(true)} style={styles.attachButton}><Text style={styles.attachButtonText}>📷</Text></TouchableOpacity>
+            <TextInput style={styles.textInput} value={newMessage} onChangeText={setNewMessage} placeholder="Type message..." />
+            {uploading ? <ActivityIndicator /> : <Button title="Send" onPress={sendMessage} />}
+            </View>
         </View>
-      </View>
+      ) : (
+        <View style={[styles.chatWindow, styles.chatDisabled, { top: 70 }]}>
+            <Text style={styles.noGroupsText}>Select a group to start chatting.</Text>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 };
@@ -277,6 +289,7 @@ const styles = StyleSheet.create({
     groupSelectionContainer: { position: 'absolute', left: 10, right: 10, backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 10, padding: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5, zIndex: 1000 },
     searchInput: { height: 40, borderColor: '#ccc', borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, marginBottom: 10, backgroundColor: '#fff' },
     sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 5, color: '#333' },
+    noGroupsText: { color: '#8E8E93', fontStyle: 'italic' },
     groupButton: { backgroundColor: '#007AFF', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, marginRight: 10, marginBottom: 5 },
     selectedGroupButton: { backgroundColor: '#0056b3' },
     groupButtonText: { color: 'white', fontWeight: 'bold' },
@@ -284,6 +297,7 @@ const styles = StyleSheet.create({
     userItem: { backgroundColor: '#f0f0f0', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 15, marginRight: 10 },
     userName: { fontSize: 12, color: '#333' },
     chatWindow: { position: 'absolute', right: 10, bottom: 10, width: 320, backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 10, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5, zIndex: 999, padding: 10, justifyContent: 'flex-end' },
+    chatDisabled: { justifyContent: 'center', alignItems: 'center' },
     messageBubble: { backgroundColor: '#e0e0e0', borderRadius: 8, padding: 8, marginBottom: 5, alignSelf: 'flex-start', maxWidth: '95%' },
     sentMessageBubble: { alignSelf: 'flex-end', backgroundColor: '#007AFF' },
     receivedMessageBubble: { alignSelf: 'flex-start', backgroundColor: '#e0e0e0' },
