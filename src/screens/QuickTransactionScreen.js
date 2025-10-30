@@ -33,7 +33,7 @@ const getCurrentTime = () => {
   return `${hours}:${minutes}`;
 };
 
-export default function QuickTransactionScreen({ navigation, user }) {
+export default function QuickTransactionScreen({ navigation, user, route }) {
   // console.log('QuickTransactionScreen: user prop:', user);
   const [amount, setAmount] = useState('');
   const [remarks, setRemarks] = useState('');
@@ -99,29 +99,8 @@ export default function QuickTransactionScreen({ navigation, user }) {
                 userGroup.groups?.group_areas?.forEach(groupArea => {
                   const area = groupArea.area_master;
                   if (area && !areaIdSet.has(area.id)) {
-                    // Apply client-side filtering for 'user' type if conditions are met
-                    if (user?.user_type === 'user') { // Using user.user_type here
-                      const areaStartTime = area.start_time_filter ? area.start_time_filter.substring(0, 5) : '';
-                      const areaEndTime = area.end_time_filter ? area.end_time_filter.substring(0, 5) : '';
-
-                                            if (
-                        !area.enable_day || // If enable_day is false, always include
-                        (area.enable_day && // If enable_day is true, check other conditions
-                        area.day_of_week === currentDayName &&
-                        (
-                          (areaStartTime === '00:00' && areaEndTime === '00:00') || // Special case for 24 hours
-                          (areaStartTime <= areaEndTime && currentTime >= areaStartTime && currentTime <= areaEndTime) || // Case 1: Does not cross midnight
-                          (areaStartTime > areaEndTime && (currentTime >= areaStartTime || currentTime <= areaEndTime))   // Case 2: Crosses midnight
-                        ))
-                      ) {
-                        areaIdSet.add(area.id);
-                        areaList.push({ id: area.id, area_name: area.area_name });
-                      }
-                    } else {
-                      // For other user types, add without time filtering
-                      areaIdSet.add(area.id);
-                      areaList.push({ id: area.id, area_name: area.area_name });
-                    }
+                    areaIdSet.add(area.id);
+                    areaList.push({ id: area.id, area_name: area.area_name });
                   }
                 });
               });
@@ -169,6 +148,27 @@ export default function QuickTransactionScreen({ navigation, user }) {
     fetchData();
     fetchTransactions();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (route.params?.customer) {
+      const customer = route.params.customer;
+      setSelectedAreaId(customer.area_id);
+      const area = allAreas.find(a => a.id === customer.area_id);
+      if (area) {
+        setAreaSearchText(area.area_name);
+      }
+      const customersInArea = allCustomers.filter(cust => cust.area_id === customer.area_id);
+      setCustomersInSelectedArea(customersInArea);
+      const fullCustomer = allCustomers.find(c => c.id === customer.id);
+      if (fullCustomer) {
+        setSelectedCustomer(fullCustomer);
+        setCustomerSearchText(fullCustomer.name);
+        if (fullCustomer.repayment_amount) {
+          setAmount(String(fullCustomer.repayment_amount));
+        }
+      }
+    }
+  }, [route.params?.customer, allAreas, allCustomers]);
 
   // Filter areas based on search text
   useEffect(() => {

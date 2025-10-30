@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   FlatList,
   TextInput,
+  Linking,
 } from 'react-native';
 import { supabase } from '../services/supabaseClient';
 import { locationTracker } from '../services/locationTracker';
@@ -23,6 +24,7 @@ import { useNavigation } from '@react-navigation/native';
 import AreaSearchBar from '../components/AreaSearchBar';
 import LargeChartModal from '../components/LargeChartModal';
 import CalculatorModal from '../components/CalculatorModal';
+import CommunicationModal from '../components/CommunicationModal';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
@@ -52,6 +54,8 @@ export default function DashboardScreen({ user, userProfile }) {
   const [groupAreas, setGroupAreas] = useState([]);
   const [selectedAreaId, setSelectedAreaId] = useState(null);
   const [selectedAreaName, setSelectedAreaName] = useState('');
+  const [isCommunicationModalVisible, setIsCommunicationModalVisible] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   // Chart and List State
   const [chartData, setChartData] = useState([]);
@@ -99,6 +103,13 @@ export default function DashboardScreen({ user, userProfile }) {
       setDisplayedCustomerList(filtered);
     }, 500); // 500ms debounce delay
   }, []);
+
+  const navigation = useNavigation();
+
+  const handleQuickTransaction = (customer) => {
+    setIsCommunicationModalVisible(false);
+    navigation.navigate('QuickTransaction', { customer: customer });
+  };
 
   useEffect(() => {
     // Check tracking status on initial load
@@ -362,33 +373,37 @@ export default function DashboardScreen({ user, userProfile }) {
       };
     };
 
-    const paidToday = data.filter(customer => customer.payment_status === 'Paid Today').map(c => ({
-      id: `${c.card_no}-${c.customer_name}`,
-      name: c.customer_name,
-      mobile: c.mobile,
-      book_no: c.card_no,
-      expected_repayment_amount: c.expected_repayment_amount,
-      start_date: c.start_date,
-      end_date: c.end_date,
-      transaction_date: c.transaction_date, // Assuming this field exists in the data
-      days_to_complete: c.days_to_complete,
-      totalAmountReceived: c["totalAmountReceived"]
-    })).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
+    const paidToday = data.filter(customer => customer.payment_status === 'Paid Today').map(c => {
+      console.log('DashboardScreen: Processing paidToday customer:', c.card_no, c.customer_name);
+      return {
+        id: `${c.card_no}-${c.customer_name}`,
+        name: c.customer_name,
+        mobile: c.mobile,
+        book_no: c.card_no,
+        repayment_amount: c.expected_repayment_amount,
+        start_date: c.start_date,
+        end_date: c.end_date,
+        transaction_date: c.transaction_date, // Assuming this field exists in the data
+        days_to_complete: c.days_to_complete,
+        totalAmountReceived: c["totalAmountReceived"]
+      };
+    }).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
 
-    const notPaidToday = data.filter(customer => customer.payment_status === 'Not Paid Today').map(c => ({
-      id: `${c.card_no}-${c.customer_name}`,
-      name: c.customer_name,
-      mobile: c.mobile,
-      book_no: c.card_no,
-      expected_repayment_amount: c.expected_repayment_amount,
-      start_date: c.start_date,
-      end_date: c.end_date,
-      transaction_date: c.transaction_date, // Assuming this field exists in the data
-      days_to_complete: c.days_to_complete,
-      totalAmountReceived: c["totalAmountReceived"]
-    })).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
-
-    // Fetch daily payment summary
+    const notPaidToday = data.filter(customer => customer.payment_status === 'Not Paid Today').map(c => {
+      console.log('DashboardScreen: Processing notPaidToday customer:', c.card_no, c.customer_name);
+      return {
+        id: `${c.card_no}-${c.customer_name}`,
+        name: c.customer_name,
+        mobile: c.mobile,
+        book_no: c.card_no,
+        repayment_amount: c.expected_repayment_amount,
+        start_date: c.start_date,
+        end_date: c.end_date,
+        transaction_date: c.transaction_date, // Assuming this field exists in the data
+        days_to_complete: c.days_to_complete,
+        totalAmountReceived: c["totalAmountReceived"]
+      };
+    }).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
     const today = new Date().toISOString().slice(0, 10); // Get current date in YYYY-MM-DD format
     const { data: paymentSummary, error: summaryError } = await supabase.rpc('get_daily_payment_summary', { p_area_id: areaId, p_date: today });
 
@@ -458,6 +473,11 @@ export default function DashboardScreen({ user, userProfile }) {
 
   const handleCustomerPress = (customerId) => {
     setExpandedCustomerId(prevId => (prevId === customerId ? null : customerId));
+  };
+
+  const handleCustomerLongPress = (customer) => {
+    setSelectedCustomer(customer);
+    setIsCommunicationModalVisible(true);
   };
 
   const handlePieSliceClick = async (data) => {
@@ -641,7 +661,7 @@ ${customer ? customer.book_no : ''}`;
         keyExtractor={item => item.id.toString()}
         renderItem={({ item }) => (
           <View style={styles.customerItemContainer}>
-            <TouchableOpacity onPress={() => handleCustomerPress(item.id)}>
+            <TouchableOpacity onPress={() => handleCustomerPress(item.id)} onLongPress={() => handleCustomerLongPress(item)}>
               <View style={styles.customerItem}>
                 <Text style={[styles.customerBookNo, { flex: 1 }]}>{item.book_no}</Text>
                 <Text style={[styles.customerName, { flex: 2.5 }]}>{item.name}</Text>
@@ -695,6 +715,13 @@ ${customer ? customer.book_no : ''}`;
         chartData={largeChartData}
         chartTitle={largeChartTitle}
         customerDataForModal={customerList}
+      />
+
+      <CommunicationModal
+        visible={isCommunicationModalVisible}
+        customer={selectedCustomer}
+        onClose={() => setIsCommunicationModalVisible(false)}
+        onQuickTransaction={handleQuickTransaction}
       />
 
       
