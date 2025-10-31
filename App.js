@@ -422,7 +422,7 @@ useEffect(() => {
               {(props) => <UserExpensesScreen {...props} user={user} userProfile={userProfile} />}
             </Stack.Screen>
             <Stack.Screen name="QuickTransaction">
-              {(props) => <QuickTransactionScreen {...props} user={user} />}
+              {(props) => <QuickTransactionScreen {...props} user={userProfile} />}
             </Stack.Screen>
             <Stack.Screen name="BankTransaction">
               {(props) => <BankTransactionScreen {...props} user={user} userProfile={userProfile} />}

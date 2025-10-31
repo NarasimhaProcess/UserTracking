@@ -17,6 +17,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { NetInfoService } from '../services/NetInfoService';
 import { OfflineStorageService } from '../services/OfflineStorageService';
 import { v4 as uuidv4 } from 'uuid';
+import AreaSearchBar from '../components/AreaSearchBar';
 
 const getDayName = () => {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -82,10 +83,10 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
         areaList = offlineAreas;
       } else if (isConnected) {
         // If user is superadmin, fetch all areas
-        if (userProfile?.user_type === 'superadmin') {
+        if (userProfile?.user_type?.toLowerCase() === 'superadmin' || userProfile?.user_type?.toLowerCase() === 'admin') {
           const { data, error } = await supabase
             .from('area_master')
-            .select('id, area_name')
+            .select('id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter')
             .order('area_name', { ascending: true });
           if (error) {
             Alert.alert('Error', 'Failed to load all areas for superadmin.');
@@ -125,12 +126,12 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
                       ))
                     ) {
                       areaIdSet.add(area.id);
-                      areaList.push({ id: area.id, area_name: area.area_name });
+                      areaList.push(area); // Push the entire area object
                     }
                   } else {
                     // For other user types, add without time filtering
                     areaIdSet.add(area.id);
-                    areaList.push({ id: area.id, area_name: area.area_name });
+                    areaList.push(area); // Push the entire area object
                   }
                 }
               });
@@ -345,39 +346,15 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
             </TouchableOpacity>
             <Text style={styles.sectionHeader}>Add New Expense</Text>
 
-            {/* Area Search Input */}
             <Text style={styles.inputLabel}>Area:</Text>
-            <TextInput
-              style={styles.input}
-              value={areaSearchText}
-              onChangeText={(text) => {
-                setAreaSearchText(text);
-                setShowAreaDropdown(true); // Show dropdown when typing
-                setSelectedAreaId(null); // Clear selected area when typing
+            <AreaSearchBar
+              areas={allAreas}
+              onAreaSelect={(id, name) => {
+                setSelectedAreaId(id);
+                setAreaSearchText(name);
               }}
-              placeholder="Search Area by Name"
-              onFocus={() => setShowAreaDropdown(true)} // Show dropdown when input is focused
+              selectedAreaName={areaSearchText}
             />
-            {showAreaDropdown && filteredAreas.length > 0 && (
-              <View style={styles.dropdownContainer}>
-                <FlatList
-                  data={filteredAreas}
-                  keyExtractor={(item) => item.id.toString()}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setSelectedAreaId(item.id);
-                        setAreaSearchText(item.area_name);
-                        setShowAreaDropdown(false);
-                      }}
-                    >
-                      <Text>{item.area_name}</Text>
-                    </TouchableOpacity>
-                  )}
-                />
-              </View>
-            )}
 
             <Text style={styles.inputLabel}>Expense Amount</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>

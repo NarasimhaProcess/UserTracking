@@ -19,6 +19,7 @@ import * as FileSystem from 'expo-file-system';
 import { NetInfoService } from '../services/NetInfoService';
 import { OfflineStorageService } from '../services/OfflineStorageService';
 import { v4 as uuidv4 } from 'uuid';
+import AreaSearchBar from '../components/AreaSearchBar';
 
 const getDayName = () => {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -49,6 +50,7 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
 
   // New states for customer dropdown
   const [allCustomers, setAllCustomers] = useState([]); // Stores all customers
+  let fetchedCustomers = [];
   const [customersInSelectedArea, setCustomersInSelectedArea] = useState([]); // Customers filtered by area
   const [selectedCustomer, setSelectedCustomer] = useState(null); // The actual selected customer object
   const [customerSearchText, setCustomerSearchText] = useState('');
@@ -65,17 +67,19 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       setLoading(true);
       const isConnected = await NetInfoService.isNetworkAvailable();
 
-      let fetchedAreas = [];
-      let fetchedCustomers = [];
+      console.log('QuickTransactionScreen: user.id:', user?.id);
+      console.log('QuickTransactionScreen: user.user_type:', user?.user_type);
 
+      let fetchedAreas = [];
+      // ...
       if (isConnected) {
         try {
           let areaList = [];
           // If user is superadmin, fetch all areas
-          if (user?.user_type === 'superadmin') {
+          if (user?.user_type?.toLowerCase() === 'superadmin' || user?.user_type?.toLowerCase() === 'admin') {
             const { data, error } = await supabase
               .from('area_master')
-              .select('id, area_name')
+              .select('id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter')
               .order('area_name', { ascending: true });
             if (error) {
               Alert.alert('Error', 'Failed to load all areas for superadmin.');
@@ -93,22 +97,50 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
 
             if (userGroupsError) {
               Alert.alert('Error', 'Failed to load areas based on user groups.');
-            } else {
+            }
+            else {
+              console.log('QuickTransactionScreen: userGroupsData (raw from Supabase):', userGroupsData);
+              console.log('QuickTransactionScreen: currentDayName:', currentDayName);
+              console.log('QuickTransactionScreen: currentTime:', currentTime);
               const areaIdSet = new Set();
-              userGroupsData.forEach(userGroup => {
-                userGroup.groups?.group_areas?.forEach(groupArea => {
-                  const area = groupArea.area_master;
-                  if (area && !areaIdSet.has(area.id)) {
-                    areaIdSet.add(area.id);
-                    areaList.push({ id: area.id, area_name: area.area_name });
+              const areas = userGroupsData
+                .flatMap(userGroup => userGroup.groups?.group_areas || [])
+                .map(groupArea => groupArea.area_master)
+                .filter(Boolean);
+
+              areas.forEach(area => {
+                if (area && !areaIdSet.has(area.id)) {
+                    // Apply client-side filtering for 'user' type if conditions are met
+                    if (user?.user_type === 'user') {
+                      const areaStartTime = area.start_time_filter ? area.start_time_filter.substring(0, 5) : '';
+                      const areaEndTime = area.end_time_filter ? area.end_time_filter.substring(0, 5) : '';
+
+                      const isTimeFiltered = (
+                        !area.enable_day ||
+                        (area.enable_day &&
+                        area.day_of_week === currentDayName &&
+                        (
+                          (areaStartTime === '00:00' && areaEndTime === '00:00') ||
+                          (areaStartTime <= areaEndTime && currentTime >= areaStartTime && currentTime <= areaEndTime) ||
+                          (areaStartTime > areaEndTime && (currentTime >= areaStartTime || currentTime <= areaEndTime))
+                        ))
+                      );
+                      console.log('QuickTransactionScreen: Area time filter result for', area.area_name, ':', isTimeFiltered);
+
+                      if (isTimeFiltered) {
+                        areaIdSet.add(area.id);
+                        areaList.push(area);
+                      }
+                    } else {
+                      areaIdSet.add(area.id);
+                      areaList.push(area);
+                    }
                   }
-                });
               });
             }
           }
-          fetchedAreas = areaList;
+          fetchedAreas = areaList; // <--- fetchedAreas is set here
           await OfflineStorageService.saveOfflineAreas(areaList); // Save to offline storage
-
           // Fetch all customers
           const { data: customersData, error: customersError } = await supabase
             .from('customers')
@@ -133,6 +165,7 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       }
 
       setAllAreas(fetchedAreas);
+      console.log('QuickTransactionScreen: allAreas after setting:', fetchedAreas); // Add this log
       // Set initial selected area if available
       if (fetchedAreas.length > 0) {
         setSelectedAreaId(fetchedAreas[0].id);
@@ -142,33 +175,42 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
         setAreaSearchText('');
       }
       setAllCustomers(fetchedCustomers);
+      fetchTransactions();
       setLoading(false);
+
+      let initialSelectedAreaId = null;
+      let initialAreaSearchText = '';
+
+      // Handle customer passed via route.params after all data is loaded
+      if (route.params?.customer) {
+        const customer = route.params.customer;
+        const area = fetchedAreas.find(a => a.id === customer.area_id);
+        if (area) {
+          initialSelectedAreaId = area.id;
+          initialAreaSearchText = area.area_name;
+        }
+        const fullCustomer = fetchedCustomers.find(c => c.id === customer.id);
+        if (fullCustomer) {
+          setSelectedCustomer(fullCustomer);
+          setCustomerSearchText(fullCustomer.name);
+          if (fullCustomer.repayment_amount) {
+            setAmount(String(fullCustomer.repayment_amount));
+          }
+        }
+      }
+
+      // If no customer from route.params or area not found, default to first area if available
+      if (!initialSelectedAreaId && fetchedAreas.length > 0) {
+        initialSelectedAreaId = fetchedAreas[0].id;
+        initialAreaSearchText = fetchedAreas[0].area_name;
+      }
+
+      setSelectedAreaId(initialSelectedAreaId);
+      setAreaSearchText(initialAreaSearchText);
     };
 
     fetchData();
-    fetchTransactions();
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (route.params?.customer) {
-      const customer = route.params.customer;
-      setSelectedAreaId(customer.area_id);
-      const area = allAreas.find(a => a.id === customer.area_id);
-      if (area) {
-        setAreaSearchText(area.area_name);
-      }
-      const customersInArea = allCustomers.filter(cust => cust.area_id === customer.area_id);
-      setCustomersInSelectedArea(customersInArea);
-      const fullCustomer = allCustomers.find(c => c.id === customer.id);
-      if (fullCustomer) {
-        setSelectedCustomer(fullCustomer);
-        setCustomerSearchText(fullCustomer.name);
-        if (fullCustomer.repayment_amount) {
-          setAmount(String(fullCustomer.repayment_amount));
-        }
-      }
-    }
-  }, [route.params?.customer, allAreas, allCustomers]);
+  }, [user, route.params?.customer]); // Add route.params.customer to dependency array
 
   // Filter areas based on search text
   useEffect(() => {
@@ -560,40 +602,16 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
           </TouchableOpacity>
           <Text style={styles.header}>Quick Transaction</Text>
 
-          {/* Area Search Input */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Area:</Text>
-            <TextInput
-              style={styles.input}
-              value={areaSearchText}
-              onChangeText={(text) => {
-                setAreaSearchText(text);
-                setShowAreaDropdown(true); // Show dropdown when typing
-                setSelectedAreaId(null); // Clear selected area when typing
+            <AreaSearchBar
+              areas={allAreas}
+              onAreaSelect={(id, name) => {
+                setSelectedAreaId(id);
+                setAreaSearchText(name);
               }}
-              placeholder="Search Area by Name"
-              onFocus={() => setShowAreaDropdown(true)} // Show dropdown when input is focused
+              selectedAreaName={areaSearchText}
             />
-            {showAreaDropdown && filteredAreas.length > 0 && (
-              <View style={styles.dropdownContainer}>
-                <FlatList
-                  data={filteredAreas}
-                  keyExtractor={(item) => item.id.toString()}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setSelectedAreaId(item.id);
-                        setAreaSearchText(item.area_name);
-                        setShowAreaDropdown(false);
-                      }}
-                    >
-                      <Text>{item.area_name}</Text>
-                    </TouchableOpacity>
-                  )}
-                />
-              </View>
-            )}
           </View>
 
           {selectedAreaId && ( // Only show customer selection if an area is selected

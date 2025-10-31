@@ -126,7 +126,7 @@ export default function DashboardScreen({ user, userProfile }) {
       let areaList = [];
       let error = null;
 
-      if (userProfile?.user_type === 'superadmin') {
+      if (userProfile?.user_type?.toLowerCase() === 'superadmin' || userProfile?.user_type?.toLowerCase() === 'admin') {
         // Superadmin can view all areas
         const { data, error: fetchError } = await supabase
           .from('area_master')
@@ -376,17 +376,17 @@ export default function DashboardScreen({ user, userProfile }) {
     const paidToday = data.filter(customer => customer.payment_status === 'Paid Today').map(c => {
       console.log('DashboardScreen: Processing paidToday customer:', c.card_no, c.customer_name);
       return {
-        id: `${c.card_no}-${c.customer_name}`,
-        name: c.customer_name,
-        mobile: c.mobile,
-        book_no: c.card_no,
-        repayment_amount: c.expected_repayment_amount,
-        start_date: c.start_date,
-        end_date: c.end_date,
-        transaction_date: c.transaction_date, // Assuming this field exists in the data
-        days_to_complete: c.days_to_complete,
-        totalAmountReceived: c["totalAmountReceived"]
-      };
+              id: c.id,
+              name: c.customer_name,
+              mobile: c.mobile,
+              book_no: c.card_no,
+              repayment_amount: c.expected_repayment_amount,
+              start_date: c.start_date,
+              end_date: c.end_date,
+              transaction_date: c.transaction_date, // Assuming this field exists in the data
+              days_to_complete: c.days_to_complete,
+              totalAmountReceived: c["totalAmountReceived"],
+              area_id: c.area_id,      };
     }).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
 
     const notPaidToday = data.filter(customer => customer.payment_status === 'Not Paid Today').map(c => {
