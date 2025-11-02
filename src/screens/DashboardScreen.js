@@ -108,6 +108,78 @@ export default function DashboardScreen({ user, userProfile }) {
 
   
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    // Re-fetch payment data for the currently selected area
+    if (selectedAreaId) {
+      // Creating a temporary function to call the async data fetching logic
+      const refetch = async () => {
+        await fetchPaymentData(selectedAreaId);
+        setRefreshing(false);
+      };
+      refetch();
+    } else {
+      setRefreshing(false);
+    }
+  }, [selectedAreaId]);
+
+  const generateAndShareCsv = async () => {
+    if (!selectedAreaId) {
+      Alert.alert('No Area Selected', 'Please select an area to generate the CSV.');
+      return;
+    }
+
+    // Fetch data directly using the RPC for CSV generation to ensure consistency
+    const { data, error } = await supabase.rpc('get_customer_payment_status_for_csv', { p_area_id: selectedAreaId });
+
+    if (error) {
+      console.error('Error calling get_customer_payment_status_for_csv for CSV:', error);
+      Alert.alert('Error', 'Failed to fetch data for CSV export.');
+      return;
+    }
+
+    if (data.length === 0) {
+      Alert.alert('No Data', 'No transaction data available for today to export.');
+      return;
+    }
+
+    const header = ['Area Name', 'Card No.', 'Customer Name', 'Mobile', 'Email', 'Payment Status', 'Expected Repayment Amount', 'Start Date', 'End Date'].join(',');
+    const rows = data.map(row => [
+      `"${row.area_name || ''}"`,
+      `"${row.card_no || ''}"`,
+      `"${row.customer_name || ''}"`,
+      `"${row.mobile || ''}"`,
+      `"${row.email || ''}"`,
+      `"${row.payment_status || ''}"`,
+      `"${row.expected_repayment_amount || 0}"`,
+      `"${row.start_date || ''}"`,
+      `"${row.end_date || ''}"`,
+    ].join(','));
+
+    const csvContent = [header, ...rows].join('\n');
+    const fileName = `${selectedAreaName.replace(/[^a-zA-Z0-9]/g, '_')}_transactions_${new Date().toISOString().slice(0, 10)}.csv`;
+    const fileUri = FileSystem.cacheDirectory + fileName;
+
+    try {
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+      console.log('CSV written to:', fileUri);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          UTI: 'public.csv',
+          subject: 'Today\'s Transaction Report',
+          recipients: [],
+        });
+      } else {
+        Alert.alert('Sharing not available', 'Sharing is not available on your device.');
+      }
+    } catch (error) {
+      console.error('Error generating or sharing CSV:', error);
+      Alert.alert('Error', 'Failed to generate or share CSV.');
+    }
+  };
+
   const handleQuickTransaction = (customer) => {
     setIsCommunicationModalVisible(false);
     navigation.navigate('QuickTransaction', { customer: customer });
@@ -120,9 +192,13 @@ export default function DashboardScreen({ user, userProfile }) {
     }
   }, [userProfile]);
 
+
+
+
+
   useEffect(() => {
     if (!user?.id) return;
-    
+
     async function fetchAreas() {
       let areaList = [];
       let error = null;
@@ -168,6 +244,8 @@ export default function DashboardScreen({ user, userProfile }) {
                   ) {
                     areaIdSet.add(area.id);
                     areaList.push(area);
+                  } else {
+                    console.log('Area filtered out by time/day:', area.area_name);
                   }
                 } else {
                   // For other user types, add without time filtering
@@ -181,304 +259,32 @@ export default function DashboardScreen({ user, userProfile }) {
         error = fetchError;
       }
 
-        
-
       if (error) {
         console.error("Error fetching areas:", error);
         return;
       }
       setGroupAreas(areaList);
+
+      // Auto-select area if only one is available
+      if (areaList.length === 1) {
+        setSelectedAreaId(areaList[0].id);
+        setSelectedAreaName(areaList[0].area_name);
+      } else if (areaList.length > 1) {
+        // If multiple areas, do not pre-select, clear any previous selection
+        setSelectedAreaId(null);
+        setSelectedAreaName('');
+      }
     }
 
     fetchAreas();
-  }, [user, userProfile]); // Added userProfile to dependency array
+  }, [user, userProfile]);
 
-  useEffect(() => {
-    if (groupAreas.length > 0 && !selectedAreaId) {
-      setSelectedAreaId(groupAreas[0].id);
-      setSelectedAreaName(groupAreas[0].area_name);
-    }
-  }, [groupAreas]);
 
-  useEffect(() => {
-    if (groupAreas.length > 0 && !selectedAreaId) {
-      setSelectedAreaId(groupAreas[0].id);
-      setSelectedAreaName(groupAreas[0].area_name);
-    }
-  }, [groupAreas]);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    // Re-fetch payment data for the currently selected area
-    if (selectedAreaId) {
-      // Creating a temporary function to call the async data fetching logic
-      const refetch = async () => {
-        await fetchPaymentData(selectedAreaId);
-        setRefreshing(false);
-      };
-      refetch();
-    } else {
-      setRefreshing(false);
-    }
-  }, [selectedAreaId]);
 
-  const generateAndShareCsv = async () => {
-    if (!selectedAreaId) {
-      Alert.alert('No Area Selected', 'Please select an area to generate the CSV.');
-      return;
-    }
 
-    // Fetch data directly using the RPC for CSV generation to ensure consistency
-    const { data, error } = await supabase.rpc('get_customer_payment_status_for_csv', { p_area_id: selectedAreaId });
 
-    if (error) {
-      console.error('Error calling get_customer_payment_status_for_csv for CSV:', error);
-      Alert.alert('Error', 'Failed to fetch data for CSV export.');
-      return;
-    }
 
-    if (data.length === 0) {
-      Alert.alert('No Data', 'No transaction data available for today to export.');
-      return;
-    }
-
-    const header = ['Area Name', 'Card No.', 'Customer Name', 'Mobile', 'Email', 'Payment Status', 'Expected Repayment Amount', 'Start Date', 'End Date'].join(',');
-    const rows = data.map(row => [
-      `"${row.area_name || ''}"`, 
-      `"${row.card_no || ''}"`, 
-      `"${row.customer_name || ''}"`, 
-      `"${row.mobile || ''}"`, 
-      `"${row.email || ''}"`, 
-      `"${row.payment_status || ''}"`, 
-      `"${row.expected_repayment_amount || 0}"`, 
-      `"${row.start_date || ''}"`, 
-      `"${row.end_date || ''}"`, 
-    ].join(','));
-
-    const csvContent = [header, ...rows].join('\n');
-    const fileName = `${selectedAreaName.replace(/[^a-zA-Z0-9]/g, '_')}_transactions_${new Date().toISOString().slice(0, 10)}.csv`;
-    const fileUri = FileSystem.cacheDirectory + fileName;
-
-    try {
-      await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
-      console.log('CSV written to:', fileUri);
-
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'text/csv',
-          UTI: 'public.csv',
-          subject: 'Today\'s Transaction Report',
-          recipients: [],
-        });
-      } else {
-        Alert.alert('Sharing not available', 'Sharing is not available on your device.');
-      }
-    } catch (error) {
-      console.error('Error generating or sharing CSV:', error);
-      Alert.alert('Error', 'Failed to generate or share CSV.');
-    }
-  };
-
-  // This function will be passed to the useEffect hook
-  const fetchPaymentData = async (areaId) => {
-    if (!areaId || !user?.id) {
-      setChartData([]);
-      setBarChartData(null);
-      setCustomerList([]);
-      setCustomerListTitle('');
-      setLoadingChart(false);
-      return;
-    }
-
-    setLoadingChart(true);
-    setBarChartData(null);
-    setCustomerList([]);
-    setCustomerListTitle('');
-
-    // Fetch current_balance from area_master
-    const { data: areaData, error: areaError } = await supabase
-      .from('area_master')
-      .select('current_balance')
-      .eq('id', areaId)
-      .single();
-
-    if (areaError) {
-      console.error('Error fetching area_master current_balance:', areaError);
-      // Continue with other data even if areaData fails
-    }
-
-    const currentBalance = areaData?.current_balance || 0;
-    setAreaCurrentBalance(currentBalance);
-    console.log('Dashboard - currentBalance:', currentBalance);
-
-    // Fetch sum of amount_given for pending customers in this area
-    const { data: pendingCustomersData, error: pendingCustomersError } = await supabase
-      .from('customers') // Assuming 'customers' table
-      .select('amount_given')
-      .eq('area_id', areaId)
-      .in('status', ['pending', 'Pending']); // Assuming 'status' column and 'pending' value, checking for case sensitivity
-
-    let totalAmountGivenPendingCalculated = 0;
-    if (pendingCustomersData) {
-      totalAmountGivenPendingCalculated = pendingCustomersData.reduce((sum, customer) => sum + (customer.amount_given || 0), 0);
-    }
-    setTotalAmountGivenPending(totalAmountGivenPendingCalculated);
-    console.log('Dashboard - totalAmountGivenPendingCalculated:', totalAmountGivenPendingCalculated);
-
-    if (pendingCustomersError) {
-      console.error('Error fetching pending customers amount_given:', pendingCustomersError);
-    }
-
-    // Fetch sum of expenses for this area
-    const { data: expensesData, error: expensesError } = await supabase
-      .from('user_expenses') // Corrected table name
-      .select('amount')
-      .eq('area_id', areaId);
-
-    let totalExpensesCalculated = 0;
-    if (expensesData) {
-      totalExpensesCalculated = expensesData.reduce((sum, expense) => sum + (expense.amount || 0), 0);
-    }
-    setTotalExpenses(totalExpensesCalculated);
-    console.log('Dashboard - totalExpensesCalculated:', totalExpensesCalculated);
-
-    if (expensesError) {
-      console.error('Error fetching expenses:', expensesError);
-    }
-
-    const { data, error } = await supabase.rpc('get_customer_payment_status_for_csv', { p_area_id: areaId });
-
-    if (error) {
-      console.error('Error calling get_customer_payment_status_for_csv:', error);
-      setLoadingChart(false);
-      return;
-    }
-
-    const calculateCustomerDetails = (customer) => {
-      const totalAmountToPay = (customer.expected_repayment_amount || 0) * (customer.days_to_complete || 0);
-      const totalAmountReceived = parseFloat(customer["totalAmountReceived"]) || 0;
-
-      const calculatedRepaymentPeriod = (customer.expected_repayment_amount && customer.expected_repayment_amount !== 0)
-        ? ((totalAmountToPay - totalAmountReceived) / customer.expected_repayment_amount)
-        : 0; // Handle division by zero
-
-      const remainingPeriods = (customer.days_to_complete || 0) - calculatedRepaymentPeriod;
-
-      return {
-        ...customer,
-        totalAmountToPay: totalAmountToPay.toFixed(2),
-        repaymentPeriod: calculatedRepaymentPeriod.toFixed(2),
-        completionPeriods: customer.days_to_complete || 0,
-        remainingPeriods: remainingPeriods.toFixed(2),
-        totalAmountReceived: totalAmountReceived.toFixed(2),
-      };
-    };
-
-    const paidToday = data.filter(customer => customer.payment_status === 'Paid Today').map(c => {
-      console.log('DashboardScreen: Processing paidToday customer:', c.card_no, c.customer_name);
-      return {
-        id: c.id,
-        name: c.customer_name,
-        mobile: c.mobile,
-        book_no: c.card_no,
-        expected_repayment_amount: c.expected_repayment_amount,
-        start_date: c.start_date,
-        end_date: c.end_date,
-        transaction_date: c.transaction_date, // Assuming this field exists in the data
-        days_to_complete: c.days_to_complete,
-        totalAmountReceived: c["totalAmountReceived"],
-        area_id: c.area_id,
-      };
-    }).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
-
-    const notPaidToday = data.filter(customer => customer.payment_status === 'Not Paid Today').map(c => {
-      console.log('DashboardScreen: Processing notPaidToday customer:', c.card_no, c.customer_name);
-      return {
-        id: c.id,
-        name: c.customer_name,
-        mobile: c.mobile,
-        book_no: c.card_no,
-        expected_repayment_amount: c.expected_repayment_amount,
-        start_date: c.start_date,
-        end_date: c.end_date,
-        transaction_date: c.transaction_date, // Assuming this field exists in the data
-        days_to_complete: c.days_to_complete,
-        totalAmountReceived: c["totalAmountReceived"],
-        area_id: c.area_id,
-      };
-    }).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
-    
-    const today = new Date().toISOString().slice(0, 10); // Get current date in YYYY-MM-DD format
-    const { data: paymentSummary, error: summaryError } = await supabase.rpc('get_daily_payment_summary', { p_area_id: areaId, p_date: today });
-
-    if (summaryError) {
-      console.error('Error calling get_daily_payment_summary:', summaryError);
-      // Continue with other data even if summary fails
-    }
-
-    let cashTotal = 0;
-    let upiTotal = 0;
-
-    if (paymentSummary) {
-      paymentSummary.forEach(item => {
-        if (item.payment_mode && item.payment_mode.toLowerCase() === 'cash') {
-          cashTotal += parseFloat(item.total_amount);
-        } else if (item.payment_mode && item.payment_mode.toLowerCase() === 'upi') {
-          upiTotal += parseFloat(item.total_amount);
-        } else if (item.payment_mode && item.payment_mode.toLowerCase() === 'paid by cash') { // Added for robustness
-          cashTotal += parseFloat(item.total_amount);
-        } else if (item.payment_mode && item.payment_mode.toLowerCase() === 'paid by upi') { // Added for robustness
-          upiTotal += parseFloat(item.total_amount);
-        }
-      });
-    }
-
-    setTotalPaidCash(cashTotal);
-    setTotalPaidUPI(upiTotal);
-    console.log('Dashboard - cashTotal:', cashTotal);
-    console.log('Dashboard - upiTotal:', upiTotal);
-
-    const notPaidAmount = notPaidToday.reduce((acc, customer) => acc + (customer.expected_repayment_amount || 0), 0);
-    setTotalNotPaid(notPaidAmount);
-
-    // Calculate Cash on Hand
-    // Assumption: 'amount given agreed of pending customers' is approximated by totalNotPaid
-    const calculatedCashOnHand = currentBalance + (cashTotal + upiTotal) - totalAmountGivenPendingCalculated - totalExpensesCalculated;
-    setCashOnHand(calculatedCashOnHand);
-    console.log('Dashboard - calculatedCashOnHand:', calculatedCashOnHand);
-
-    setPaidTodayCustomers(paidToday);
-    setNotPaidTodayCustomers(notPaidToday);
-
-    setChartData([
-      { name: 'Paid Today', population: paidToday.length, color: '#4CAF50', legendFontColor: '#7F7F7F', legendFontSize: 15 },
-      { name: 'Not Paid Today', population: notPaidToday.length, color: '#F44336', legendFontColor: '#7F7F7F', legendFontSize: 15 },
-    ]);
-
-    // Set Paid Today customers as default displayed list and bar chart
-    setCustomerListTitle('Customers Who Paid Today');
-    setCustomerList(paidToday);
-    setDisplayedCustomerList(paidToday);
-    if (paidToday.length > 0) {
-      setBarChartData({
-        labels: paidToday.map(c => c.name.substring(0, 10)),
-        datasets: [{ data: paidToday.map(c => c.expected_repayment_amount || 0) }],
-      });
-    } else {
-      setBarChartData(null);
-    }
-
-    setLoadingChart(false);
-  };
-
-  useEffect(() => {
-    fetchPaymentData(selectedAreaId);
-  }, [selectedAreaId, user]);
-
-  const handleCustomerLongPress = (customer) => {
-    setSelectedCustomer(customer);
-    setIsCommunicationModalVisible(true);
-  };
 
   const handlePieSliceClick = async (data) => {
     console.log('Pie slice clicked:', data);
@@ -527,6 +333,7 @@ export default function DashboardScreen({ user, userProfile }) {
                   setSelectedAreaName(name);
                 }}
                 selectedAreaName={selectedAreaName}
+                onChangeText={handleSearchChange}
               />
             </View>
 
@@ -644,12 +451,7 @@ export default function DashboardScreen({ user, userProfile }) {
           </View>
         }
         keyExtractor={item => item.id ? item.id.toString() : Math.random().toString()}
-        renderItem={({ item }) => (
-          <CustomerListItem 
-            item={item} 
-            onLongPress={handleCustomerLongPress}
-          />
-        )}
+
         ListEmptyComponent={() => (
           !selectedAreaId ? 
           <Text style={styles.emptyListText}>Please select an area to see customer details.</Text> :

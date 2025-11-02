@@ -8,21 +8,37 @@ import {
   StyleSheet,
 } from 'react-native';
 
-export default function AreaSearchBar({ areas, onAreaSelect, selectedAreaName }) {
+export default function AreaSearchBar({ areas, onAreaSelect, selectedAreaName, onChangeText }) {
   const [query, setQuery] = useState(selectedAreaName || '');
   const [suggestions, setSuggestions] = useState([]);
 
+  useEffect(() => {
+    setQuery(selectedAreaName || '');
+  }, [selectedAreaName]);
+
   const handleInputChange = (text) => {
     setQuery(text);
+    onChangeText(text);
     if (text) {
       const filteredAreas = areas.filter(area =>
         area.area_name.toLowerCase().includes(text.toLowerCase())
       );
       setSuggestions(filteredAreas);
     } else {
-      setSuggestions([]);
+      setSuggestions(areas); // Show all areas if search text is empty
     }
   };
+
+  useEffect(() => {
+    if (query) {
+      const filteredAreas = areas.filter(area =>
+        area.area_name.toLowerCase().includes(query.toLowerCase())
+      );
+      setSuggestions(filteredAreas);
+    } else {
+      setSuggestions(areas);
+    }
+  }, [query, areas]);
 
   const handleSelectArea = (area) => {
     setQuery(area.area_name);

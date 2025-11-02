@@ -189,7 +189,21 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   const [areaId, setAreaId] = useState(null);
   const [areas, setAreas] = useState([]);
   const [areaSearch, setAreaSearch] = useState(''); // For filtering customer list
+  const [filteredAreas, setFilteredAreas] = useState([]); // New state for filtered areas
   const [selectedAreaName, setSelectedAreaName] = useState(''); // For AreaSearchBar display
+
+  // Filter areas based on search text
+  useEffect(() => {
+    if (areaSearch) {
+      const lowerCaseSearchText = areaSearch.toLowerCase();
+      const filtered = areas.filter(area =>
+        area.area_name.toLowerCase().includes(lowerCaseSearchText)
+      );
+      setFilteredAreas(filtered);
+    } else {
+      setFilteredAreas(areas); // Show all areas if search text is empty
+    }
+  }, [areaSearch, areas]);
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
   const [remarks, setRemarks] = useState('');
@@ -329,72 +343,82 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
     return /\.(jpe?g|png|gif)$/i.test(doc.file_name);
   };
 
+
+
   useEffect(() => {
     async function fetchAreas() {
-      if (userProfile?.user_type === 'superadmin') {
-        // Superadmin fetches all areas
-        const { data, error } = await supabase
-          .from('area_master')
-          .select('id, area_name');
-        
-        if (error) {
-          console.error('fetchAreas (superadmin): Error fetching areas:', error);
-          return;
-        }
-        setAreas(data || []);
-      } else {
-        // Fetch areas for user's groups
-        console.log('fetchAreas: Fetching areas for user ID:', user?.id);
-        const currentDayName = getDayName();
-        const currentTime = getCurrentTime();
+      // Fetch all areas initially, regardless of search text
+      if (areas.length === 0) {
+        if (userProfile?.user_type === 'superadmin') {
+          // Superadmin fetches all areas
+          const { data, error } = await supabase
+            .from('area_master')
+            .select('id, area_name');
+          
+          if (error) {
+            console.error('fetchAreas (superadmin): Error fetching areas:', error);
+            return;
+          }
+          setAreas(data || []);
+        } else {
+          // Fetch areas for user's groups
+          console.log('fetchAreas: Fetching areas for user ID:', user?.id);
+          const currentDayName = getDayName();
+          const currentTime = getCurrentTime();
 
-        const { data, error } = await supabase
-          .from('user_groups')
-          .select('group_id, groups (group_areas (area_master (id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter)))') // Select new columns
-          .eq('user_id', user.id);
-        
-        if (error) {
-          console.error('fetchAreas: Error fetching user groups:', error);
-          return;
-        }
+          const { data, error } = await supabase
+            .from('user_groups')
+            .select('group_id, groups (group_areas (area_master (id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter)))') // Select new columns
+            .eq('user_id', user.id);
+          
+          if (error) {
+            console.error('fetchAreas: Error fetching user groups:', error);
+            return;
+          }
 
-        console.log('fetchAreas: User groups data:', data);
+          console.log('fetchAreas: User groups data:', data);
 
-        const areaList = [];
-        (data || []).forEach(g => {
-          (g.groups?.group_areas || []).forEach(ga => {
-            const area = ga.area_master;
-            if (area && !areaList.find(a => a.id === area.id)) {
-              // Apply client-side filtering for 'user' type if conditions are met
-              if (userProfile?.user_type === 'user') {
-                const areaStartTime = area.start_time_filter ? area.start_time_filter.substring(0, 5) : '';
-                const areaEndTime = area.end_time_filter ? area.end_time_filter.substring(0, 5) : '';
+          const areaList = [];
+          const areaIdSet = new Set(); // Define areaIdSet here
+          (data || []).forEach(g => {
+            (g.groups?.group_areas || []).forEach(ga => {
+              const area = ga.area_master;
+              if (area && !areaIdSet.has(area.id)) {
+                // Apply client-side filtering for 'user' type if conditions are met
+                if (userProfile?.user_type === 'user') {
+                  const areaStartTime = area.start_time_filter ? area.start_time_filter.substring(0, 5) : '';
+                  const areaEndTime = area.end_time_filter ? area.end_time_filter.substring(0, 5) : '';
 
-                if (
-                  !area.enable_day || // If enable_day is false, always include
-                  (area.enable_day && // If enable_day is true, check other conditions
-                  area.day_of_week === currentDayName &&
-                  (
-                    (areaStartTime === '00:00' && areaEndTime === '00:00') || // Special case for 24 hours
-                    (areaStartTime <= areaEndTime && currentTime >= areaStartTime && currentTime <= areaEndTime) || // Case 1: Does not cross midnight
-                    (areaStartTime > areaEndTime && (currentTime >= areaStartTime || currentTime <= areaEndTime))   // Case 2: Crosses midnight
-                  ))
-                ) {
+                  const isTimeFiltered = (
+                    !area.enable_day ||
+                    (area.enable_day &&
+                    area.day_of_week === currentDayName &&
+                    (
+                      (areaStartTime === '00:00' && areaEndTime === '00:00') ||
+                      (areaStartTime <= areaEndTime && currentTime >= areaStartTime && currentTime <= areaEndTime) ||
+                      (areaStartTime > areaEndTime && (currentTime >= areaStartTime || currentTime <= areaEndTime))
+                    ))
+                  );
+
+                  if (isTimeFiltered) {
+                    areaIdSet.add(area.id);
+                    areaList.push(area);
+                  }
+                } else {
+                  // For other user types, add without time filtering
+                  areaIdSet.add(area.id);
                   areaList.push(area);
                 }
-              } else {
-                // For other user types, add without time filtering
-                areaList.push(area);
               }
-            }
+            });
           });
-        });
-        console.log('fetchAreas: Constructed area list:', areaList);
-        setAreas(areaList);
+          console.log('fetchAreas: Constructed area list:', areaList);
+          setAreas(areaList);
+        }
       }
     }
     if (user?.id) fetchAreas();
-  }, [user?.id, userProfile]);
+  }, [user?.id, userProfile]); // Removed areaSearch from dependencies
 
   // Fetch accessible user IDs and area IDs based on group memberships
   useEffect(() => {
@@ -493,8 +517,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   }, [user, search, areaSearch, areas, areaId, accessibleUserIds, accessibleAreaIds, userProfile]); // Dependencies for useCallback
 
   useEffect(() => {
-    if (user?.id) fetchCustomers();
-  }, [user?.id, fetchCustomers]);
+    if (user?.id && areaId) fetchCustomers();
+  }, [user?.id, areaId, fetchCustomers]);
 
   // Fetch repayment plans on mount and extract unique frequencies
   useEffect(() => {
@@ -1950,7 +1974,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   return (
     <View style={styles.container}>
       <AreaSearchBar
-        areas={areas}
+        areas={filteredAreas}
+        onChangeText={setAreaSearch}
         onAreaSelect={(id, name) => {
           console.log('Area selected:', { id, name });
           setAreaId(id);
