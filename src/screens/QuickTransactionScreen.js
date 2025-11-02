@@ -222,15 +222,14 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
   };
 
   const fetchTransactions = async (customerId = null) => { // Added customerId parameter
-    if (!user?.id) return;
+    // if (!user?.id) return; // Removed user ID check
 
     let fetchedOnlineTransactions = [];
     if (await NetInfoService.isNetworkAvailable()) {
       try {
         let query = supabase
           .from('transactions')
-          .select('*, customers(name, book_no)') // Select all transaction fields and customer name/book_no
-          .eq('user_id', user.id);
+          .select('*, customers(name, book_no)'); // Removed .eq('user_id', user.id)
 
         if (customerId) { // Filter by customerId if provided
           query = query.eq('customer_id', customerId);

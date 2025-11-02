@@ -146,9 +146,11 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
       if (areaList.length > 0) {
         setSelectedAreaId(areaList[0].id);
         setAreaSearchText(areaList[0].area_name);
+        console.log('fetchAreas: Initial selectedAreaId:', areaList[0].id, 'areaName:', areaList[0].area_name); // Debug log
       } else {
         setSelectedAreaId(null);
         setAreaSearchText('');
+        console.log('fetchAreas: No areas found.'); // Debug log
       }
     } catch (error) {
       console.error('Error fetching areas:', error);
@@ -169,157 +171,309 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
     }
   }, [areaSearchText, allAreas]);
 
-  useEffect(() => {
-    fetchUserExpenses(allAreas);
-    syncOfflineExpenses();
-  }, [user?.id, selectedAreaId, allAreas]);
+    useEffect(() => {
 
-  const syncOfflineExpenses = async () => {
-    const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
-    if (offlineExpenses.length > 0 && await NetInfoService.isNetworkAvailable()) {
-      Alert.alert('Syncing', 'Syncing offline expenses...');
-      for (const expense of offlineExpenses) {
-        try {
-          const { error } = await supabase.from('user_expenses').insert(expense);
-          if (error) {
-            throw error;
+      console.log('useEffect fetchUserExpenses trigger: user.id:', user?.id, 'selectedAreaId:', selectedAreaId, 'allAreas count:', allAreas.length);
+
+      fetchUserExpenses(allAreas);
+
+      syncOfflineExpenses();
+
+    }, [user?.id, selectedAreaId, allAreas]);
+
+  
+
+    const syncOfflineExpenses = async () => {
+
+      const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
+
+      if (offlineExpenses.length > 0 && await NetInfoService.isNetworkAvailable()) {
+
+        Alert.alert('Syncing', 'Syncing offline expenses...');
+
+        for (const expense of offlineExpenses) {
+
+          try {
+
+            const { error } = await supabase.from('user_expenses').insert(expense);
+
+            if (error) {
+
+              throw error;
+
+            }
+
+          } catch (error) {
+
+            console.error('Error syncing offline expense:', error);
+
+            Alert.alert('Error', 'Failed to sync some expenses. Please try again later.');
+
+            return; // Stop syncing if there is an error
+
           }
-        } catch (error) {
-          console.error('Error syncing offline expense:', error);
-          Alert.alert('Error', 'Failed to sync some expenses. Please try again later.');
-          return; // Stop syncing if there is an error
+
         }
+
+        await OfflineStorageService.clearOfflineExpenses();
+
+        Alert.alert('Success', 'Offline expenses synced successfully!');
+
+        fetchUserExpenses();
+
       }
-      await OfflineStorageService.clearOfflineExpenses();
-      Alert.alert('Success', 'Offline expenses synced successfully!');
-      fetchUserExpenses();
-    }
-  };
 
-  const handleAddExpense = async () => {
-    const finalExpenseType = expenseType === 'Other' ? otherExpenseType : expenseType;
-
-    if (!expenseAmount || !finalExpenseType) {
-      Alert.alert('Error', 'Amount and Expense Type are required.');
-      return;
-    }
-
-    if (!selectedAreaId) {
-      Alert.alert('Error', 'Please select an Area.');
-      return;
-    }
-
-    if (!user?.id) {
-      Alert.alert('Error', 'User not logged in.');
-      return;
-    }
-
-    const expense = {
-      id: uuidv4(),
-      user_id: user.id,
-      area_id: selectedAreaId, // Add area_id here
-      amount: parseFloat(expenseAmount),
-      expense_type: finalExpenseType,
-      remarks: expenseRemarks,
-      created_at: selectedDate.toISOString(),
     };
 
-    if (!await NetInfoService.isNetworkAvailable()) {
-      await OfflineStorageService.saveOfflineExpense(expense);
-      Alert.alert('Offline', 'Expense saved locally and will be synced when you are back online.');
-      setExpenseAmount('');
-      setExpenseType('');
-      setOtherExpenseType('');
-      setExpenseRemarks('');
-      fetchUserExpenses();
-    } else {
-      try {
-        const { error } = await supabase.from('user_expenses').insert(expense);
+  
 
-        if (error) {
-          Alert.alert('Error', error.message);
-        } else {
-          Alert.alert('Success', 'Expense added successfully!');
-          setExpenseAmount('');
-          setExpenseType('');
-          setOtherExpenseType(''); // Clear the other field as well
-          setExpenseRemarks('');
-          fetchUserExpenses(); // Refresh the list
-        }
-      } catch (error) {
-        console.error('Error adding expense:', error);
-        Alert.alert('Error', 'Failed to add expense.');
-      }
-    }
-  };
+    const handleAddExpense = async () => {
 
-  const fetchUserExpenses = async (accessibleAreas) => {
-    if (!user?.id) return;
+      const finalExpenseType = expenseType === 'Other' ? otherExpenseType : expenseType;
 
-    const accessibleAreaIds = accessibleAreas.map(area => area.id);
+  
 
-    if (!await NetInfoService.isNetworkAvailable()) {
-      const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
-      let allExpenses = [...offlineExpenses.map(e => ({...e, isOffline: true}))];
+      if (!expenseAmount || !finalExpenseType) {
 
-      // Filter by accessible areas for regular users
-      if (userProfile?.user_type !== 'superadmin' && accessibleAreaIds.length > 0) {
-        allExpenses = allExpenses.filter(expense => accessibleAreaIds.includes(expense.area_id));
+        Alert.alert('Error', 'Amount and Expense Type are required.');
+
+        return;
+
       }
 
-      if (selectedAreaId) {
-        allExpenses = allExpenses.filter(expense => expense.area_id === selectedAreaId);
+  
+
+      if (!selectedAreaId) {
+
+        Alert.alert('Error', 'Please select an Area.');
+
+        return;
+
       }
 
-      setUserExpenses(allExpenses);
-      setFilteredUserExpenses(allExpenses);
-      const total = allExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
-      setTotalExpenses(total);
-    } else {
-      try {
-        let query = supabase
-          .from('user_expenses')
-          .select('*, area_master(area_name)')
-          .eq('user_id', user.id);
+  
 
-        // Filter by accessible areas for regular users
-        if (userProfile?.user_type !== 'superadmin' && accessibleAreaIds.length > 0) {
-          query = query.in('area_id', accessibleAreaIds);
+      if (!user?.id) {
+
+        Alert.alert('Error', 'User not logged in.');
+
+        return;
+
+      }
+
+  
+
+      const expense = {
+
+        id: uuidv4(),
+
+        user_id: user.id,
+
+        area_id: selectedAreaId, // Add area_id here
+
+        amount: parseFloat(expenseAmount),
+
+        expense_type: finalExpenseType,
+
+        remarks: expenseRemarks,
+
+        created_at: selectedDate.toISOString(),
+
+      };
+
+  
+
+      if (!await NetInfoService.isNetworkAvailable()) {
+
+        await OfflineStorageService.saveOfflineExpense(expense);
+
+        Alert.alert('Offline', 'Expense saved locally and will be synced when you are back online.');
+
+        setExpenseAmount('');
+
+        setExpenseType('');
+
+        setOtherExpenseType('');
+
+        setExpenseRemarks('');
+
+        fetchUserExpenses();
+
+      } else {
+
+        try {
+
+          const { error } = await supabase.from('user_expenses').insert(expense);
+
+  
+
+          if (error) {
+
+            Alert.alert('Error', error.message);
+
+          } else {
+
+            Alert.alert('Success', 'Expense added successfully!');
+
+            setExpenseAmount('');
+
+            setExpenseType('');
+
+            setOtherExpenseType(''); // Clear the other field as well
+
+            setExpenseRemarks('');
+
+            fetchUserExpenses(); // Refresh the list
+
+          }
+
+        } catch (error) {
+
+          console.error('Error adding expense:', error);
+
+          Alert.alert('Error', 'Failed to add expense.');
+
         }
 
-        if (selectedAreaId) {
-          query = query.eq('area_id', selectedAreaId);
-        }
+      }
 
-        const { data, error } = await query.order('created_at', { ascending: false });
+    };
 
-        if (error) {
-          console.error('Error fetching user expenses:', error);
-        }
+  
+
+    const fetchUserExpenses = async (accessibleAreas) => {
+
+      console.log('fetchUserExpenses called with user.id:', user?.id, 'selectedAreaId:', selectedAreaId, 'accessibleAreas count:', accessibleAreas.length);
+
+      if (!user?.id) return;
+
+  
+
+      const accessibleAreaIds = accessibleAreas.map(area => area.id);
+
+  
+
+      if (!await NetInfoService.isNetworkAvailable()) {
 
         const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
-        let allExpenses = [...(data || []), ...offlineExpenses.map(e => ({...e, isOffline: true}))];
 
-        // Filter offline expenses by accessible areas for regular users
+        let allExpenses = [...offlineExpenses.map(e => ({...e, isOffline: true}))];
+
+  
+
+        // Filter by accessible areas for regular users
+
         if (userProfile?.user_type !== 'superadmin' && accessibleAreaIds.length > 0) {
+
           allExpenses = allExpenses.filter(expense => accessibleAreaIds.includes(expense.area_id));
+
         }
+
+  
 
         if (selectedAreaId) {
+
           allExpenses = allExpenses.filter(expense => expense.area_id === selectedAreaId);
+
         }
 
-        setUserExpenses(allExpenses);
-        setFilteredUserExpenses(allExpenses);
-        const total = allExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
-        setTotalExpenses(total);
-      } catch (error) {
-        console.error('Error fetching user expenses:', error);
-      }
-    }
-  };
+        console.log('fetchUserExpenses (offline): allExpenses after filtering:', allExpenses);
 
-  const renderExpenseItem = ({ item }) => (
+        setUserExpenses(allExpenses);
+
+        setFilteredUserExpenses(allExpenses);
+
+        const total = allExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+
+        setTotalExpenses(total);
+
+      } else {
+
+        try {
+
+                  let query = supabase
+
+                    .from('user_expenses')
+
+                    .select('*, area_master(area_name)'); // Removed .eq('user_id', user.id);
+
+  
+
+          // Filter by accessible areas for regular users
+
+          if (userProfile?.user_type !== 'superadmin' && accessibleAreaIds.length > 0) {
+
+            query = query.in('area_id', accessibleAreaIds);
+
+          }
+
+  
+
+          if (selectedAreaId) {
+
+            query = query.eq('area_id', selectedAreaId);
+
+          }
+
+          console.log('fetchUserExpenses (online): Supabase query built.');
+
+          const { data, error } = await query.order('created_at', { ascending: false });
+
+  
+
+          if (error) {
+
+            console.error('Error fetching user expenses:', error);
+
+          }
+
+          console.log('fetchUserExpenses (online): Data from Supabase:', data);
+
+          const offlineExpenses = await OfflineStorageService.getOfflineExpenses();
+
+          let allExpenses = [...(data || []), ...offlineExpenses.map(e => ({...e, isOffline: true}))];
+
+  
+
+          // Filter offline expenses by accessible areas for regular users
+
+          if (userProfile?.user_type !== 'superadmin' && accessibleAreaIds.length > 0) {
+
+            allExpenses = allExpenses.filter(expense => accessibleAreaIds.includes(expense.area_id));
+
+          }
+
+  
+
+          if (selectedAreaId) {
+
+            allExpenses = allExpenses.filter(expense => expense.area_id === selectedAreaId);
+
+          }
+
+          console.log('fetchUserExpenses (online): allExpenses after filtering:', allExpenses);
+
+          setUserExpenses(allExpenses);
+
+          setFilteredUserExpenses(allExpenses);
+
+          const total = allExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+
+          setTotalExpenses(total);
+
+        } catch (error) {
+
+          console.error('Error fetching user expenses:', error);
+
+        }
+
+      }
+
+    };
+
+  
+
+    const renderExpenseItem = ({ item }) => (
     <View style={[styles.expenseRow, item.isOffline && styles.offlineRow]}>
       <View style={styles.amountContainer}>
         <Text style={styles.rowText}>{`₹${item.amount}`}</Text>

@@ -225,6 +225,8 @@ useEffect(() => {
             await loadUserProfile(session.user.id);
           } else {
             setUserProfile(null);
+            // Stop tracking when user logs out
+            await locationTracker.stopTracking();
           }
         }
       );
@@ -303,7 +305,10 @@ useEffect(() => {
   const handleAuthSuccess = async (sessionData) => {
     console.log('handleAuthSuccess: sessionData:', sessionData); // Log sessionData here
     setSession(sessionData);
-    await loadUserProfile(sessionData.user.id);
+    const profile = await loadUserProfile(sessionData.user.id);
+    if (profile?.location_status === 1) {
+      await locationTracker.startTracking(sessionData.user.id, sessionData.user.email);
+    }
   };
 
   // ---------------- Header ----------------
