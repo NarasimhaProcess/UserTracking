@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Image,
   FlatList, // Added FlatList
+  Linking, // Added Linking
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../services/supabaseClient';
@@ -56,8 +57,20 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
   const [customerSearchText, setCustomerSearchText] = useState('');
   const [filteredCustomers, setFilteredCustomers] = useState([]); // Customers filtered by search text within selected area
 
-  // Fetch all areas and all customers on component mount
-   // Add route.params.customer to dependency array
+  // Handle customer passed from dashboard
+  useEffect(() => {
+    if (route.params?.customer && allAreas.length > 0) {
+      // Set the selected area based on the customer's area_id
+      const customerArea = allAreas.find(area => area.id === route.params.customer.area_id);
+      if (customerArea) {
+        setSelectedAreaId(customerArea.id);
+        setAreaSearchText(customerArea.area_name);
+      }
+      // Directly call handleCustomerSelect with the customer's ID
+      // This will trigger fetching of transactions and other details
+      handleCustomerSelect(route.params.customer.id);
+    }
+  }, [route.params?.customer, allAreas]); // Add allAreas to dependency array
 
   useEffect(() => {
     const fetchAreas = async () => {
@@ -274,13 +287,14 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       try {
         const { data, error } = await supabase
           .from('customers')
-          .select('id, name, book_no, repayment_amount, area_id')
+          .select('id, name, book_no, repayment_amount, area_id, days_to_complete, start_date, end_date, mobile')
           .eq('area_id', areaId);
 
         if (error) {
           Alert.alert('Error', 'Failed to load customers for the selected area.');
         } else {
           fetchedCustomers = data || [];
+          console.log('Fetched customers (online):', fetchedCustomers); // Debug log
           await OfflineStorageService.saveOfflineCustomers(fetchedCustomers);
         }
       } catch (error) {
@@ -289,6 +303,7 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
     } else {
       fetchedCustomers = await OfflineStorageService.getOfflineCustomers();
       fetchedCustomers = fetchedCustomers.filter(c => c.area_id === areaId);
+      console.log('Fetched customers (offline):', fetchedCustomers); // Debug log
       Alert.alert('Offline Mode', 'Loading customers for the selected area from offline storage.');
     }
 
@@ -315,15 +330,82 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
 
   // Fetch transactions based on selected customer
   useEffect(() => {
-    fetchTransactions(selectedCustomer?.id);
+    if (selectedCustomer) { // Only fetch transactions if a customer is selected
+      fetchTransactions(selectedCustomer.id);
+    } else {
+      setTransactions([]); // Clear transactions if no customer is selected
+    }
   }, [selectedCustomer]);
 
-  const handleCustomerSelect = (customerId) => {
+  const handleCustomerSelect = async (customerId) => {
     const foundCustomer = filteredCustomers.find(cust => cust.id === customerId);
-    setSelectedCustomer(foundCustomer);
-    if (foundCustomer && foundCustomer.repayment_amount) {
-      setAmount(String(foundCustomer.repayment_amount)); // Pre-populate amount
+    console.log('handleCustomerSelect: foundCustomer initially:', foundCustomer); // Debug log
+
+    if (foundCustomer) {
+      let customerDetails = { ...foundCustomer };
+      console.log('handleCustomerSelect: customerDetails before fetching additional data:', customerDetails); // Debug log
+      const isConnected = await NetInfoService.isNetworkAvailable();
+
+      if (isConnected) {
+        try {
+          // Fetch Total Paid Amount (totalAmountReceived in dashboard logic)
+          const { data: transactionsData, error: transactionsError } = await supabase
+            .from('transactions')
+            .select('amount')
+            .eq('customer_id', customerId)
+            .eq('transaction_type', 'repayment'); // Assuming 'repayment' is the type for paid amounts
+
+          let totalAmountReceived = 0;
+          if (transactionsError) {
+            console.error('Error fetching transactions for paid amount:', transactionsError);
+            Alert.alert('Error', 'Failed to fetch paid amount for customer.');
+          } else {
+            totalAmountReceived = transactionsData.reduce((sum, transaction) => sum + transaction.amount, 0);
+            customerDetails.totalPaidAmount = totalAmountReceived; // Keep for display consistency
+          }
+
+          // Apply dashboard's calculation logic for periods
+          const expectedRepaymentAmount = foundCustomer.repayment_amount || 0;
+          const daysToComplete = foundCustomer.days_to_complete || 0;
+
+          const totalAmountToPay = expectedRepaymentAmount * daysToComplete;
+
+          let calculatedRepaymentPeriod = 0;
+          if (expectedRepaymentAmount !== 0) {
+            calculatedRepaymentPeriod = (totalAmountToPay - totalAmountReceived) / expectedRepaymentAmount;
+          }
+
+          const remainingPeriods = daysToComplete - calculatedRepaymentPeriod;
+          const paidPeriods = daysToComplete - remainingPeriods; // Derived paid periods
+
+          customerDetails.totalAmountToPay = totalAmountToPay;
+          customerDetails.paidPeriods = remainingPeriods; // Corrected: This should be the actual paid periods
+          customerDetails.totalPendingPeriods = paidPeriods; // Corrected: This should be the actual pending periods
+          customerDetails.totalAmountPending = totalAmountToPay - totalAmountReceived; // New calculation
+
+        } catch (error) {
+          console.error("Error in handleCustomerSelect while fetching additional data:", error);
+          Alert.alert('Error', 'Failed to load full customer details online.');
+        }
+      } else {
+        // Handle offline scenario: For now, set to N/A or 0
+        customerDetails.totalPaidAmount = 'N/A (Offline)';
+        customerDetails.totalAmountToPay = 'N/A (Offline)';
+        customerDetails.paidPeriods = 'N/A (Offline)';
+        customerDetails.totalPendingPeriods = 'N/A (Offline)';
+        Alert.alert('Offline Mode', 'Additional customer details not available offline.');
+      }
+
+      console.log('handleCustomerSelect: customerDetails after all processing:', customerDetails); // Debug log
+      setSelectedCustomer(customerDetails);
+
+      if (foundCustomer.repayment_amount) {
+        setAmount(String(foundCustomer.repayment_amount));
+      } else {
+        setAmount('');
+      }
     } else {
+      setSelectedCustomer(null);
       setAmount('');
     }
   };
@@ -477,11 +559,7 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       Alert.alert('Error', 'Please select a Payment Type (Cash or UPI).');
       return;
     }
-    // New validation for UPI image
-    if (paymentType === 'upi' && !paymentProofImage) {
-      Alert.alert('Error', 'Please upload a payment proof image for UPI transactions.');
-      return;
-    }
+    // UPI image upload is now optional
 
     setLoading(true);
     const transaction = {
@@ -505,7 +583,8 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       setAmount('');
       setRemarks('');
       setLoading(false); // Stop loading here as no network operation
-      fetchTransactions(); // Refresh the list after saving offline
+      fetchTransactions(selectedCustomer.id); // Refresh the list after saving offline, for the selected customer
+      handleCustomerSelect(selectedCustomer.id); // Refresh customer amount details
     } else {
       try {
         // Remove the temporary id before sending to Supabase
@@ -521,7 +600,8 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
           Alert.alert('Success', 'Transaction added successfully!');
           setAmount('');
           setRemarks('');
-          fetchTransactions(); // Refresh the list after saving online
+          fetchTransactions(selectedCustomer.id); // Refresh the list after saving online, for the selected customer
+          handleCustomerSelect(selectedCustomer.id); // Refresh customer amount details
         }
       } catch (error) {
         Alert.alert('Error', 'Failed to add transaction.');
@@ -544,6 +624,40 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       {item.isOffline && <MaterialIcons name="cloud-off" size={24} color="gray" />}
     </View>
   );
+
+  const handleCall = (phoneNumber) => {
+    if (phoneNumber) {
+      Linking.openURL(`tel:${phoneNumber}`);
+    } else {
+      Alert.alert('Error', 'Phone number not available.');
+    }
+  };
+
+  const handleSMS = (phoneNumber) => {
+    if (phoneNumber) {
+      Linking.openURL(`sms:${phoneNumber}`);
+    } else {
+      Alert.alert('Error', 'Phone number not available.');
+    }
+  };
+
+  const handleWhatsAppCall = (phoneNumber) => {
+    if (phoneNumber) {
+      Linking.openURL(`whatsapp://send?phone=${phoneNumber}&text=Hi`); // WhatsApp call link is usually part of chat
+      // For direct call, it's more complex and often not directly supported by Linking.
+      // This will open chat, user can initiate call from there.
+    } else {
+      Alert.alert('Error', 'Phone number not available.');
+    }
+  };
+
+  const handleWhatsAppSMS = (phoneNumber) => {
+    if (phoneNumber) {
+      Linking.openURL(`whatsapp://send?phone=${phoneNumber}&text=Hi`);
+    } else {
+      Alert.alert('Error', 'Phone number not available.');
+    }
+  };
 
   return (
     <FlatList
@@ -610,9 +724,92 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
 
               {selectedCustomer && (
                 <View style={styles.customerInfoCard}>
-                  <Text style={styles.customerInfoText}>Selected Customer: {selectedCustomer.name}</Text>
-                  <Text style={styles.customerInfoText}>Card No: {selectedCustomer.book_no}</Text>
-                  <Text style={styles.customerInfoText}>Repayment Amount: {selectedCustomer.repayment_amount || 'N/A'}</Text>
+                  <View style={styles.customerDetailsContainer}>
+                    {/* Basic Customer Info - similar to CustomerListItem's initial display */}
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Customer Name:</Text>
+                      <Text style={styles.customerDetailValue}>{selectedCustomer.name}</Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Card No:</Text>
+                      <Text style={styles.customerDetailValue}>{selectedCustomer.book_no}</Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Mobile:</Text>
+                      <Text style={styles.customerDetailValue}>{selectedCustomer.mobile || 'N/A'}</Text>
+                    </View>
+
+                    {/* Detailed Info - matching CustomerListItem's expanded view order */}
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Total Amount to Pay:</Text>
+                      <Text style={styles.customerDetailValue}>
+                        {selectedCustomer.totalAmountToPay !== undefined ? `₹${selectedCustomer.totalAmountToPay.toFixed(2)}` : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Total Periods:</Text>
+                      <Text style={styles.customerDetailValue}>
+                        {selectedCustomer.days_to_complete !== undefined ? selectedCustomer.days_to_complete : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Repayment Amount:</Text>
+                      <Text style={styles.customerDetailValue}>₹{selectedCustomer.repayment_amount || 'N/A'}</Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Pending Repayment Period:</Text>
+                      <Text style={[styles.customerDetailValue, styles.customerDetailPendingText]}>
+                        {selectedCustomer.totalPendingPeriods !== undefined ? selectedCustomer.totalPendingPeriods.toFixed(2) : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Paid Repayment Period:</Text>
+                      <Text style={[styles.customerDetailValue, styles.customerDetailPaidText]}>
+                        {selectedCustomer.paidPeriods !== undefined ? selectedCustomer.paidPeriods.toFixed(2) : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Total Amount Received:</Text>
+                      <Text style={[styles.customerDetailValue, styles.customerDetailHighlightText]}>
+                        {selectedCustomer.totalPaidAmount !== undefined ? `₹${selectedCustomer.totalPaidAmount.toFixed(2)}` : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Total Amount Pending:</Text>
+                      <Text style={[styles.customerDetailValue, styles.customerDetailPendingText]}>
+                        {selectedCustomer.totalAmountPending !== undefined ? `₹${selectedCustomer.totalAmountPending.toFixed(2)}` : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Start Date:</Text>
+                      <Text style={styles.customerDetailValue}>{selectedCustomer.start_date || 'N/A'}</Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>End Date:</Text>
+                      <Text style={styles.customerDetailValue}>{selectedCustomer.end_date || 'N/A'}</Text>
+                    </View>
+                    {/* Communication Actions */}
+                    {selectedCustomer.mobile && (
+                      <View style={styles.communicationActionsContainer}>
+                        <TouchableOpacity onPress={() => handleCall(selectedCustomer.mobile)} style={styles.communicationButton}>
+                          <MaterialIcons name="call" size={24} color="#007AFF" />
+                          <Text style={styles.communicationButtonText}>Call</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleSMS(selectedCustomer.mobile)} style={styles.communicationButton}>
+                          <MaterialIcons name="sms" size={24} color="#007AFF" />
+                          <Text style={styles.communicationButtonText}>SMS</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleWhatsAppCall(selectedCustomer.mobile)} style={styles.communicationButton}>
+                          <MaterialIcons name="logo-whatsapp" size={24} color="#25D366" />
+                          <Text style={styles.communicationButtonText}>WA Call</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleWhatsAppSMS(selectedCustomer.mobile)} style={styles.communicationButton}>
+                          <MaterialIcons name="chat" size={24} color="#25D366" />
+                          <Text style={styles.communicationButtonText}>WA Chat</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
                 </View>
               )}
             </>
@@ -865,5 +1062,58 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     color: '#888',
+  },
+  // Styles from CustomerListItem for consistency
+  customerDetailsCard: { // Renamed from customerItemContainer for clarity
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 0, // Adjust margin as needed for QuickTransactionScreen layout
+    paddingHorizontal: 20,
+    borderRadius: 8, // Assuming customerInfoCard already has this
+    marginBottom: 20, // Assuming customerInfoCard already has this
+    borderLeftWidth: 5, // Assuming customerInfoCard already has this
+    borderLeftColor: '#007AFF', // Assuming customerInfoCard already has this
+  },
+  customerDetailRow: { // Renamed from customerItem for clarity
+    flexDirection: 'row',
+    justifyContent: 'space-between', // Changed from flex-start to space-between for label-value pairs
+    paddingVertical: 4, // Adjusted for detail lines
+  },
+  customerDetailLabel: { // New style for labels
+    fontSize: 14,
+    color: '#8E8E93', // Similar to customerBookNo/Mobile in CustomerListItem
+    textAlign: 'left',
+    flex: 1,
+  },
+  customerDetailValue: { // New style for values
+    fontSize: 14,
+    color: '#1C1C1E', // Similar to customerName in CustomerListItem
+    textAlign: 'right',
+    flex: 1,
+  },
+  customerDetailPendingText: { // Renamed from pendingText
+    color: 'red',
+  },
+  customerDetailPaidText: { // New style for paid text
+    color: 'green',
+  },
+  customerDetailHighlightText: { // New style for highlighted text (e.g., Total Amount Received)
+    color: 'blue',
+  },
+  communicationActionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+  },
+  communicationButton: {
+    alignItems: 'center',
+    padding: 5,
+  },
+  communicationButtonText: {
+    fontSize: 12,
+    color: '#555',
+    marginTop: 2,
   },
 });
