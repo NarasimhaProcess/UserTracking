@@ -228,7 +228,7 @@ useEffect(() => {
       );
 
       await checkAuthStatus();
-      await handleBiometricLogin();
+      // await handleBiometricLogin();
       await locationTracker.init();
       setIsLoading(false);
 
@@ -317,9 +317,17 @@ useEffect(() => {
 
         if (success) {
           console.log('Biometric authentication successful');
-          // This part needs to be updated to handle session properly
-          // For now, we will rely on checkAuthStatus to get the session
-          await checkAuthStatus();
+          const refreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
+          if (refreshToken) {
+            const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+            if (error) {
+              Alert.alert('Error', 'Could not refresh your session. Please log in with your password.');
+            } else if (data.session) {
+              handleAuthSuccess(data.session);
+            }
+          } else {
+            Alert.alert('Error', 'Could not find a refresh token. Please log in with your password.');
+          }
         } else {
           console.log('Biometric authentication failed or was cancelled.');
         }

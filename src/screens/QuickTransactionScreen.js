@@ -141,25 +141,13 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
           }
           fetchedAreas = areaList; // <--- fetchedAreas is set here
           await OfflineStorageService.saveOfflineAreas(areaList); // Save to offline storage
-          // Fetch all customers
-          const { data: customersData, error: customersError } = await supabase
-            .from('customers')
-            .select('id, name, book_no, repayment_amount, area_id');
-
-          if (customersError) {
-            Alert.alert('Error', 'Failed to load customers.');
-          } else {
-            fetchedCustomers = customersData || [];
-            await OfflineStorageService.saveOfflineCustomers(fetchedCustomers); // Save to offline storage
-          }
         } catch (error) {
           Alert.alert('Error', 'Failed to load initial data online.');
         }
       } else {
         // Offline: Load from local storage
         fetchedAreas = await OfflineStorageService.getOfflineAreas();
-        fetchedCustomers = await OfflineStorageService.getOfflineCustomers();
-        Alert.alert('Offline Mode', 'Loading areas and customers from offline storage.');
+        Alert.alert('Offline Mode', 'Loading areas from offline storage.');
         // console.log('QuickTransactionScreen: Loaded Areas (Offline):', fetchedAreas);
         // console.log('QuickTransactionScreen: Loaded Customers (Offline):', fetchedCustomers);
       }
@@ -174,7 +162,6 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
         setSelectedAreaId(null);
         setAreaSearchText('');
       }
-      setAllCustomers(fetchedCustomers);
       fetchTransactions();
       setLoading(false);
 
@@ -188,14 +175,6 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
         if (area) {
           initialSelectedAreaId = area.id;
           initialAreaSearchText = area.area_name;
-        }
-        const fullCustomer = fetchedCustomers.find(c => c.id === customer.id);
-        if (fullCustomer) {
-          setSelectedCustomer(fullCustomer);
-          setCustomerSearchText(fullCustomer.name);
-          if (fullCustomer.repayment_amount) {
-            setAmount(String(fullCustomer.repayment_amount));
-          }
         }
       }
 
@@ -325,23 +304,45 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
     setTransactions(allTransactions);
   };
 
-  // Filter customers by selected area whenever selectedAreaId or allCustomers changes
+  // Fetch customers for the selected area
   useEffect(() => {
-    if (selectedAreaId && allCustomers.length > 0) {
-      const filteredByArea = allCustomers.filter(cust => cust.area_id === selectedAreaId);
-      setCustomersInSelectedArea(filteredByArea);
-      setFilteredCustomers(filteredByArea); // Reset filteredCustomers when area changes
-      setSelectedCustomer(null); // Reset selected customer when area changes
-      setAmount(''); // Clear amount when area changes
-      setCustomerSearchText(''); // Clear search text when area changes
-    } else {
-      setCustomersInSelectedArea([]);
-      setFilteredCustomers([]);
-      setSelectedCustomer(null);
-      setAmount('');
-      setCustomerSearchText('');
+    if (selectedAreaId) {
+      fetchCustomersForArea(selectedAreaId);
     }
-  }, [selectedAreaId, allCustomers]);
+  }, [selectedAreaId]);
+
+  const fetchCustomersForArea = async (areaId) => {
+    setLoading(true);
+    const isConnected = await NetInfoService.isNetworkAvailable();
+    let fetchedCustomers = [];
+
+    if (isConnected) {
+      try {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('id, name, book_no, repayment_amount, area_id')
+          .eq('area_id', areaId);
+
+        if (error) {
+          Alert.alert('Error', 'Failed to load customers for the selected area.');
+        } else {
+          fetchedCustomers = data || [];
+          await OfflineStorageService.saveOfflineCustomers(fetchedCustomers);
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Failed to load customers online.');
+      }
+    } else {
+      fetchedCustomers = await OfflineStorageService.getOfflineCustomers();
+      fetchedCustomers = fetchedCustomers.filter(c => c.area_id === areaId);
+      Alert.alert('Offline Mode', 'Loading customers for the selected area from offline storage.');
+    }
+
+    setCustomersInSelectedArea(fetchedCustomers);
+    setFilteredCustomers(fetchedCustomers);
+    setLoading(false);
+  };
+
 
   // Filter customers based on search text within the selected area's customers
   useEffect(() => {
@@ -349,7 +350,8 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       const lowerCaseSearchText = customerSearchText.toLowerCase();
       const filtered = customersInSelectedArea.filter(cust =>
         (cust.name && cust.name.toLowerCase().includes(lowerCaseSearchText)) ||
-        (cust.book_no && cust.book_no.toLowerCase().includes(lowerCaseSearchText))
+        (cust.book_no && cust.book_no.toLowerCase().includes(lowerCaseSearchText)) ||
+        (cust.id && cust.id.toString().includes(customerSearchText)) // Search by ID
       );
       setFilteredCustomers(filtered);
     } else {

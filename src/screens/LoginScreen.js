@@ -59,6 +59,11 @@ export default function LoginScreen({ navigation, route, onAuthSuccess }) {
           onAuthSuccess(data.session, navigation);
         }
 
+        // Store the refresh token for biometric login
+        if (data.session.refresh_token) {
+          await AsyncStorage.setItem('REFRESH_TOKEN', data.session.refresh_token);
+        }
+
         // Register for push notifications and save token
         try {
           const pushToken = await registerForPushNotificationsAsync(data.user); // Pass the user object

@@ -228,8 +228,19 @@ class LocationTracker {
     }
 
     try {
+      // Stop foreground tracking
+      if (this.watchId) {
+        this.watchId.remove();
+        this.watchId = null;
+      }
+
+      // Stop background tracking
+      await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+
+      this.isTracking = false;
+      
       // Update users table with latest lat/lon and updated_at, but do NOT set location_status
-      if (this.currentUser && this.lastLocation && await NetInfoService.isNetworkAvailable()) {
+      if (this.currentUser && this.currentUserEmail && this.lastLocation && await NetInfoService.isNetworkAvailable()) {
         const { coords, timestamp } = this.lastLocation;
         const deviceName = Device.deviceName || 'MobileApp';
         const deviceId = Application.androidId || 'unknownid';
@@ -251,16 +262,6 @@ class LocationTracker {
         }
       }
 
-      // Stop foreground tracking
-      if (this.watchId) {
-        Location.stopLocationUpdatesAsync(this.watchId); // Correct way to stop watchPositionAsync
-        this.watchId = null;
-      }
-
-      // Stop background tracking
-      await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-
-      this.isTracking = false;
       this.currentUser = null;
       this.currentUserEmail = null;
       this.lastLocation = null;

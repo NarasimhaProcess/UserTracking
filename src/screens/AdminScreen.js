@@ -1324,6 +1324,21 @@ export default function AdminScreen({ navigation, user, userProfile }) {
       return;
     }
 
+    // Fetch existing customers
+    const { data: existingCustomers, error: existingCustomersError } = await supabase
+      .from('customers')
+      .select('name, mobile, email');
+
+    if (existingCustomersError) {
+      Alert.alert('Error', 'Failed to fetch existing customers.');
+      console.error('Existing customers fetch error:', existingCustomersError);
+      return;
+    }
+
+    const existingCustomerIdentities = new Set(
+      existingCustomers.map(c => `${c.name?.toLowerCase()}|${c.mobile}|${c.email?.toLowerCase()}`)
+    );
+
     Alert.alert(
       'Confirm Upload',
       `Are you sure you want to upload ${uploadedCustomers.length} customers to the selected Area?`,
@@ -1333,64 +1348,74 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           text: 'Upload',
           onPress: async () => {
             try {
-              const customersToInsert = uploadedCustomers.map(customer => {
-                const matchedPlan = allRepaymentPlans.find(plan => {
-                  console.log(`Attempting to match: CSV Frequency=${customer.repayment_frequency}, CSV Periods=${customer.periods}, Plan Frequency=${plan.frequency}, Plan Periods=${plan.periods}`);
-                  return plan.frequency === customer.repayment_frequency.toLowerCase() &&
-                  plan.periods === parseInt(customer.periods.trim());
+              const customersToInsert = uploadedCustomers
+                .filter(customer => {
+                  const identity = `${customer.name?.toLowerCase()}|${customer.mobile}|${customer.email?.toLowerCase()}`;
+                  return !existingCustomerIdentities.has(identity);
+                })
+                .map(customer => {
+                  const matchedPlan = allRepaymentPlans.find(plan => {
+                    console.log(`Attempting to match: CSV Frequency=${customer.repayment_frequency}, CSV Periods=${customer.periods}, Plan Frequency=${plan.frequency}, Plan Periods=${plan.periods}`);
+                    return plan.frequency === customer.repayment_frequency.toLowerCase() &&
+                    plan.periods === parseInt(customer.periods.trim());
+                  });
+
+                  if (!matchedPlan) {
+                    throw new Error(`Repayment plan not found for: ${customer.repayment_frequency} with ${customer.periods} periods`);
+                  }
+
+                  // Calculate end_date in the app
+                  const startDate = new Date(customer.start_date);
+                  let endDate = new Date(startDate);
+                  const periods = parseInt(customer.periods);
+
+                  if (isNaN(periods)) {
+                    throw new Error(`Invalid periods value for ${customer.name}: ${customer.periods}`);
+                  }
+
+                  switch (customer.repayment_frequency.toLowerCase()) {
+                    case 'daily':
+                      endDate.setDate(startDate.getDate() + periods);
+                      break;
+                    case 'weekly':
+                      endDate.setDate(startDate.getDate() + (periods * 7));
+                      break;
+                    case 'monthly':
+                      endDate.setMonth(startDate.getMonth() + periods);
+                      break;
+                    case 'yearly':
+                      endDate.setFullYear(startDate.getFullYear() + periods);
+                      break;
+                    default:
+                      throw new Error(`Unknown repayment frequency for ${customer.name}: ${customer.repayment_frequency}`);
+                  }
+
+                  // Format end_date to YYYY-MM-DD string
+                  const formattedEndDate = endDate.toISOString().split('T')[0];
+
+                  return {
+                    name: customer.name,
+                    mobile: customer.mobile,
+                    email: customer.email,
+                    book_no: customer.cardno, // Map cardno from CSV to book_no in DB
+                    customer_type: customer.customer_type,
+                    start_date: customer.start_date,
+                    amount_given: parseFloat(customer.amount_given),
+                    repayment_amount: parseFloat(customer.repayment_amount),
+                    end_date: formattedEndDate, // Calculated in app
+                    area_id: selectedUploadAreaId,
+                    repayment_plan_id: matchedPlan.id,
+                    days_to_complete: parseInt(customer.periods),
+                    user_id: user.id,
+                    repayment_frequency: customer.repayment_frequency,
+                    remarks: "bulkupload",
+                  };
                 });
 
-                if (!matchedPlan) {
-                  throw new Error(`Repayment plan not found for: ${customer.repayment_frequency} with ${customer.periods} periods`);
-                }
-
-                // Calculate end_date in the app
-                const startDate = new Date(customer.start_date);
-                let endDate = new Date(startDate);
-                const periods = parseInt(customer.periods);
-
-                if (isNaN(periods)) {
-                  throw new Error(`Invalid periods value for ${customer.name}: ${customer.periods}`);
-                }
-
-                switch (customer.repayment_frequency.toLowerCase()) {
-                  case 'daily':
-                    endDate.setDate(startDate.getDate() + periods);
-                    break;
-                  case 'weekly':
-                    endDate.setDate(startDate.getDate() + (periods * 7));
-                    break;
-                  case 'monthly':
-                    endDate.setMonth(startDate.getMonth() + periods);
-                    break;
-                  case 'yearly':
-                    endDate.setFullYear(startDate.getFullYear() + periods);
-                    break;
-                  default:
-                    throw new Error(`Unknown repayment frequency for ${customer.name}: ${customer.repayment_frequency}`);
-                }
-
-                // Format end_date to YYYY-MM-DD string
-                const formattedEndDate = endDate.toISOString().split('T')[0];
-
-                return {
-                  name: customer.name,
-                  mobile: customer.mobile,
-                  email: customer.email,
-                  book_no: customer.cardno, // Map cardno from CSV to book_no in DB
-                  customer_type: customer.customer_type,
-                  start_date: customer.start_date,
-                  amount_given: parseFloat(customer.amount_given),
-                  repayment_amount: parseFloat(customer.repayment_amount),
-                  end_date: formattedEndDate, // Calculated in app
-                  area_id: selectedUploadAreaId,
-                  repayment_plan_id: matchedPlan.id,
-                  days_to_complete: parseInt(customer.periods),
-                  user_id: user.id,
-                  repayment_frequency: customer.repayment_frequency,
-                  remarks: "bulkupload",
-                };
-              });
+              if (customersToInsert.length === 0) {
+                Alert.alert('No New Customers', 'All customers in the CSV file already exist in the database.');
+                return;
+              }
 
               const { error } = await supabase
                 .from('customers') // Assuming your customer table is named 'customers'
@@ -1400,7 +1425,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
                 throw error;
               }
 
-              Alert.alert('Success', `${uploadedCustomers.length} customers uploaded successfully!`);
+              Alert.alert('Success', `${customersToInsert.length} of ${uploadedCustomers.length} customers uploaded successfully!`);
               setShowCustomerUploadModal(false);
               setSelectedUploadAreaId('');
             } catch (error) {

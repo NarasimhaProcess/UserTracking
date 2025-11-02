@@ -25,6 +25,7 @@ import AreaSearchBar from '../components/AreaSearchBar';
 import LargeChartModal from '../components/LargeChartModal';
 import CalculatorModal from '../components/CalculatorModal';
 import CommunicationModal from '../components/CommunicationModal';
+import CustomerListItem from '../components/CustomerListItem';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
@@ -72,7 +73,6 @@ export default function DashboardScreen({ user, userProfile }) {
   const [largeChartType, setLargeChartType] = useState('');
   const [largeChartData, setLargeChartData] = useState(null);
   const [largeChartTitle, setLargeChartTitle] = useState('');
-  const [expandedCustomerId, setExpandedCustomerId] = useState(null);
   const [totalPaidCash, setTotalPaidCash] = useState(0);
   const [totalPaidUPI, setTotalPaidUPI] = useState(0);
   const [totalNotPaid, setTotalNotPaid] = useState(0);
@@ -255,7 +255,7 @@ export default function DashboardScreen({ user, userProfile }) {
     ].join(','));
 
     const csvContent = [header, ...rows].join('\n');
-        const fileName = `${selectedAreaName.replace(/[^a-zA-Z0-9]/g, '_ ')}_transactions_${new Date().toISOString().slice(0, 10)}.csv`;
+    const fileName = `${selectedAreaName.replace(/[^a-zA-Z0-9]/g, '_')}_transactions_${new Date().toISOString().slice(0, 10)}.csv`;
     const fileUri = FileSystem.cacheDirectory + fileName;
 
     try {
@@ -376,34 +376,37 @@ export default function DashboardScreen({ user, userProfile }) {
     const paidToday = data.filter(customer => customer.payment_status === 'Paid Today').map(c => {
       console.log('DashboardScreen: Processing paidToday customer:', c.card_no, c.customer_name);
       return {
-              id: c.id,
-              name: c.customer_name,
-              mobile: c.mobile,
-              book_no: c.card_no,
-              repayment_amount: c.expected_repayment_amount,
-              start_date: c.start_date,
-              end_date: c.end_date,
-              transaction_date: c.transaction_date, // Assuming this field exists in the data
-              days_to_complete: c.days_to_complete,
-              totalAmountReceived: c["totalAmountReceived"],
-              area_id: c.area_id,      };
+        id: c.id,
+        name: c.customer_name,
+        mobile: c.mobile,
+        book_no: c.card_no,
+        expected_repayment_amount: c.expected_repayment_amount,
+        start_date: c.start_date,
+        end_date: c.end_date,
+        transaction_date: c.transaction_date, // Assuming this field exists in the data
+        days_to_complete: c.days_to_complete,
+        totalAmountReceived: c["totalAmountReceived"],
+        area_id: c.area_id,
+      };
     }).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
 
     const notPaidToday = data.filter(customer => customer.payment_status === 'Not Paid Today').map(c => {
       console.log('DashboardScreen: Processing notPaidToday customer:', c.card_no, c.customer_name);
       return {
-        id: `${c.card_no}-${c.customer_name}`,
+        id: c.id,
         name: c.customer_name,
         mobile: c.mobile,
         book_no: c.card_no,
-        repayment_amount: c.expected_repayment_amount,
+        expected_repayment_amount: c.expected_repayment_amount,
         start_date: c.start_date,
         end_date: c.end_date,
         transaction_date: c.transaction_date, // Assuming this field exists in the data
         days_to_complete: c.days_to_complete,
-        totalAmountReceived: c["totalAmountReceived"]
+        totalAmountReceived: c["totalAmountReceived"],
+        area_id: c.area_id,
       };
     }).map(calculateCustomerDetails).sort((a, b) => new Date(a.transaction_date) - new Date(b.transaction_date));
+    
     const today = new Date().toISOString().slice(0, 10); // Get current date in YYYY-MM-DD format
     const { data: paymentSummary, error: summaryError } = await supabase.rpc('get_daily_payment_summary', { p_area_id: areaId, p_date: today });
 
@@ -471,10 +474,6 @@ export default function DashboardScreen({ user, userProfile }) {
     fetchPaymentData(selectedAreaId);
   }, [selectedAreaId, user]);
 
-  const handleCustomerPress = (customerId) => {
-    setExpandedCustomerId(prevId => (prevId === customerId ? null : customerId));
-  };
-
   const handleCustomerLongPress = (customer) => {
     setSelectedCustomer(customer);
     setIsCommunicationModalVisible(true);
@@ -501,154 +500,139 @@ export default function DashboardScreen({ user, userProfile }) {
     
 
     if (customers.length > 0) {
-        const newBarChartData = {
-            labels: customers.map(c => c.name.substring(0, 20)),
-            datasets: [{ data: customers.map(c => c.expected_repayment_amount || 0) }],
-        };
-        console.log('Setting bar chart data:', newBarChartData);
-        setBarChartData(newBarChartData);
+      const newBarChartData = {
+        labels: customers.map(c => c.name.substring(0, 20)),
+        datasets: [{ data: customers.map(c => c.expected_repayment_amount || 0) }],
+      };
+      console.log('Setting bar chart data:', newBarChartData);
+      setBarChartData(newBarChartData);
     } else {
-        console.log('No customers, clearing bar chart data');
-        setBarChartData(null);
+      console.log('No customers, clearing bar chart data');
+      setBarChartData(null);
     }
-  };
-
-  
-
-  const renderHeader = () => {
-    const navigation = useNavigation();
-    return (
-      <View>
-        <View style={styles.searchContainer}>
-          <AreaSearchBar
-            areas={groupAreas}
-            onAreaSelect={(id, name) => {
-              setSelectedAreaId(id);
-              setSelectedAreaName(name);
-            }}
-            selectedAreaName={selectedAreaName}
-          />
-        </View>
-
-        {selectedAreaId && (
-          <>
-            <View style={styles.card}>
-              <View style={styles.cardTitleContainer}>
-                <Text style={styles.cardTitle}>Customer Payment Status</Text>
-                <TouchableOpacity onPress={generateAndShareCsv} style={styles.shareButton}>
-                  <MaterialIcons name="share" size={24} color="#007AFF" />
-                </TouchableOpacity>
-              </View>
-              {loadingChart ? (
-                <ActivityIndicator size="large" color="#007AFF" />
-              ) : (
-                <PieChart
-                  data={chartData}
-                  width={Dimensions.get('window').width - 64}
-                  height={220}
-                  chartConfig={chartConfig}
-                  accessor={"population"}
-                  backgroundColor={"transparent"}
-                  paddingLeft={"15"}
-                  onDataPointClick={handlePieSliceClick}
-                />
-              )}
-              {!loadingChart && (
-                <View style={styles.legendContainer}>
-                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Paid Today' }) }>
-                    <View style={[styles.legendColor, { backgroundColor: '#4CAF50' }]} />
-                    <Text style={styles.legendText}>Paid Today ({paidTodayCustomers.length})</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Not Paid Today' }) }>
-                    <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
-                    <Text style={styles.legendText}>Not Paid Today ({notPaidTodayCustomers.length})</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-              {!loadingChart && (
-                <View style={styles.totalsContainer}>
-                  <Text style={styles.totalText}>Paid by Cash: ₹{formatNumberWithCommas(totalPaidCash.toFixed(2))}</Text>
-                  <Text style={styles.totalText}>Paid by UPI: ₹{formatNumberWithCommas(totalPaidUPI.toFixed(2))}</Text>
-                  <Text style={[styles.totalText, styles.paidTotalText]}>Total Paid: ₹{formatNumberWithCommas((totalPaidCash + totalPaidUPI).toFixed(2))}</Text>
-                  <Text style={[styles.totalText, styles.notPaidTotalText]}>Not Paid (Today): ₹{formatNumberWithCommas(totalNotPaid.toFixed(2))}</Text>
-                </View>
-              )}
-              {!loadingChart && (
-                <View style={styles.totalsContainer}>
-                  <Text style={styles.totalText}>Area Current Balance: ₹{formatNumberWithCommas(areaCurrentBalance.toFixed(2))}</Text>
-                  <Text style={styles.totalText}>+ Total Paid Today: ₹{formatNumberWithCommas((totalPaidCash + totalPaidUPI).toFixed(2))}</Text>
-                  <Text style={styles.totalText}>- Pending Customer(s): ₹{formatNumberWithCommas(totalAmountGivenPending.toFixed(2))}</Text>
-                  <Text style={styles.totalText}>- Total Expenses: ₹{formatNumberWithCommas(totalExpenses.toFixed(2))}</Text>
-                  <Text style={[styles.totalText, styles.cashOnHandText]}>Cash on Hand: {cashOnHand >= 0 ? '+' : ''}₹{formatNumberWithCommas(cashOnHand.toFixed(2))}</Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={styles.viewLargerButton}
-                onPress={() => {
-                  setLargeChartType('pie');
-                  setLargeChartData(chartData);
-                  setLargeChartTitle('Customer Payment Status');
-                  setShowLargeChartModal(true);
-                }}
-              >
-                <Text style={styles.viewLargerButtonText}>View Larger</Text>
-              </TouchableOpacity>
-            </View>
-
-            {barChartData && (
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>{customerListTitle}</Text>
-                <ScrollView horizontal={true}>
-                  <BarChart
-                    data={barChartData}
-                    width={Math.max(Dimensions.get('window').width - 64, barChartData.labels.length * 70)} // Increased multiplier
-                    height={300}
-                    yAxisLabel="₹"
-                    chartConfig={chartConfig}
-                    verticalLabelRotation={60}
-                    fromZero={true}
-                    showValuesOnTopOfBars={true}
-                    renderValues={(value, index) => {                      const customer = displayedCustomerList[index];                      console.log('Dashboard BarChart - Customer:', customer);
-                      return `₹${value.toFixed(0)}
-${customer ? customer.book_no : ''}`;
-                    }}
-                    style={{ paddingRight: 30, paddingLeft: 10 }}
-                  />
-                </ScrollView>
-                <TouchableOpacity
-                  style={styles.viewLargerButton}
-                  onPress={() => {
-                    setLargeChartType('bar');
-                    setLargeChartData(barChartData);
-                    setLargeChartTitle(customerListTitle);
-                    setShowLargeChartModal(true);
-                  }}
-                >
-                  <Text style={styles.viewLargerButtonText}>View Larger</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </>
-        )}
-
-        
-      <TextInput
-          style={[styles.customerSearchInput, { marginHorizontal: 16, marginBottom: 16 }]} // Apply margin here
-          placeholder="Search customers by card no., name, or mobile."
-          value={customerSearchQuery}
-          onChangeText={handleSearchChange}
-        />
-      </View>
-    );
   };
 
   return (
     <View style={styles.container}>
       <FlatList
         data={displayedCustomerList}
-        ListHeaderComponent={() => (
-          <>
-            {renderHeader()}
+        ListHeaderComponent={
+          <View>
+            <View style={styles.searchContainer}>
+              <AreaSearchBar
+                areas={groupAreas}
+                onAreaSelect={(id, name) => {
+                  setSelectedAreaId(id);
+                  setSelectedAreaName(name);
+                }}
+                selectedAreaName={selectedAreaName}
+              />
+            </View>
+
+            {selectedAreaId && (
+              <>
+                <View style={styles.card}>
+                  <View style={styles.cardTitleContainer}>
+                    <Text style={styles.cardTitle}>Customer Payment Status</Text>
+                    <TouchableOpacity onPress={generateAndShareCsv} style={styles.shareButton}>
+                      <MaterialIcons name="share" size={24} color="#007AFF" />
+                    </TouchableOpacity>
+                  </View>
+                  {loadingChart ? (
+                    <ActivityIndicator size="large" color="#007AFF" />
+                  ) : (
+                    <PieChart
+                      data={chartData}
+                      width={Dimensions.get('window').width - 64}
+                      height={220}
+                      chartConfig={chartConfig}
+                      accessor={"population"}
+                      backgroundColor={"transparent"}
+                      paddingLeft={"15"}
+                      onDataPointClick={handlePieSliceClick}
+                    />
+                  )}
+                  {!loadingChart && (
+                    <View style={styles.legendContainer}>
+                      <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Paid Today' })}>
+                        <View style={[styles.legendColor, { backgroundColor: '#4CAF50' }]} />
+                        <Text style={styles.legendText}>Paid Today ({paidTodayCustomers.length})</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.legendItem} onPress={() => handlePieSliceClick({ name: 'Not Paid Today' })}>
+                        <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
+                        <Text style={styles.legendText}>Not Paid Today ({notPaidTodayCustomers.length})</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {!loadingChart && (
+                    <View style={styles.totalsContainer}>
+                      <Text style={styles.totalText}>Paid by Cash: ₹{formatNumberWithCommas(totalPaidCash.toFixed(2))}</Text>
+                      <Text style={styles.totalText}>Paid by UPI: ₹{formatNumberWithCommas(totalPaidUPI.toFixed(2))}</Text>
+                      <Text style={[styles.totalText, styles.paidTotalText]}>Total Paid: ₹{formatNumberWithCommas((totalPaidCash + totalPaidUPI).toFixed(2))}</Text>
+                      <Text style={[styles.totalText, styles.notPaidTotalText]}>Not Paid (Today): ₹{formatNumberWithCommas(totalNotPaid.toFixed(2))}</Text>
+                    </View>
+                  )}
+                  {!loadingChart && (
+                    <View style={styles.totalsContainer}>
+                      <Text style={styles.totalText}>Area Current Balance: ₹{formatNumberWithCommas(areaCurrentBalance.toFixed(2))}</Text>
+                      <Text style={styles.totalText}>+ Total Paid Today: ₹{formatNumberWithCommas((totalPaidCash + totalPaidUPI).toFixed(2))}</Text>
+                      <Text style={styles.totalText}>- Pending Customer(s): ₹{formatNumberWithCommas(totalAmountGivenPending.toFixed(2))}</Text>
+                      <Text style={styles.totalText}>- Total Expenses: ₹{formatNumberWithCommas(totalExpenses.toFixed(2))}</Text>
+                      <Text style={[styles.totalText, styles.cashOnHandText]}>Cash on Hand: {cashOnHand >= 0 ? '+' : ''}₹{formatNumberWithCommas(cashOnHand.toFixed(2))}</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    style={styles.viewLargerButton}
+                    onPress={() => {
+                      setLargeChartType('pie');
+                      setLargeChartData(chartData);
+                      setLargeChartTitle('Customer Payment Status');
+                      setShowLargeChartModal(true);
+                    }}
+                  >
+                    <Text style={styles.viewLargerButtonText}>View Larger</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {barChartData && (
+                  <View style={styles.card}>
+                    <Text style={styles.cardTitle}>{customerListTitle}</Text>
+                    <ScrollView horizontal={true}>
+                      <BarChart
+                        data={barChartData}
+                        width={Math.max(Dimensions.get('window').width - 64, barChartData.labels.length * 70)}
+                        height={300}
+                        yAxisLabel="₹"
+                        chartConfig={chartConfig}
+                        verticalLabelRotation={60}
+                        fromZero={true}
+                        showValuesOnTopOfBars={true}
+                        style={{ paddingRight: 30, paddingLeft: 10 }}
+                      />
+                    </ScrollView>
+                    <TouchableOpacity
+                      style={styles.viewLargerButton}
+                      onPress={() => {
+                        setLargeChartType('bar');
+                        setLargeChartData(barChartData);
+                        setLargeChartTitle(customerListTitle);
+                        setShowLargeChartModal(true);
+                      }}
+                    >
+                      <Text style={styles.viewLargerButtonText}>View Larger</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+
+            <TextInput
+              style={[styles.customerSearchInput, { marginHorizontal: 16, marginBottom: 16 }]}
+              placeholder="Search customers by card no., name, or mobile."
+              value={customerSearchQuery}
+              onChangeText={handleSearchChange}
+            />
+
             {selectedAreaId && displayedCustomerList.length > 0 && (
               <View style={styles.customerListHeaderContainer}>
                 <Text style={[styles.customerListHeaderText, { flex: 1 }]}>Card No.</Text>
@@ -656,40 +640,22 @@ ${customer ? customer.book_no : ''}`;
                 <Text style={[styles.customerListHeaderText, { flex: 2 }]}>Mobile</Text>
               </View>
             )}
-          </>
-        )}
-        keyExtractor={item => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.customerItemContainer}>
-            <TouchableOpacity onPress={() => handleCustomerPress(item.id)} onLongPress={() => handleCustomerLongPress(item)}>
-              <View style={styles.customerItem}>
-                <Text style={[styles.customerBookNo, { flex: 1 }]}>{item.book_no}</Text>
-                <Text style={[styles.customerName, { flex: 2.5 }]}>{item.name}</Text>
-                <Text style={[styles.customerMobile, { flex: 2 }]}>{item.mobile} (₹{item.expected_repayment_amount})</Text>
-              </View>
-            </TouchableOpacity>
-            {expandedCustomerId === item.id && (
-              <View style={styles.customerDetailsContainer}>
-                <Text style={styles.detailText}>Total Amount to Pay: ₹{item.totalAmountToPay}</Text>
-                <Text style={styles.detailText}>Total Periods: {item.completionPeriods}</Text>
-                <Text style={styles.detailText}>Repayment Amount: ₹{item.expected_repayment_amount}</Text>
-                <Text style={[styles.detailText, styles.pendingText]}>Pending Repayment Period: {item.repaymentPeriod}</Text>
-                <Text style={[styles.detailText, { color: 'green' }]}>Paid Repayment Period: {item.remainingPeriods}</Text>
-                <Text style={[styles.detailText, { color: 'blue' }]}>Total Amount Received: ₹{item.totalAmountReceived}</Text>
-                <Text style={styles.detailText}>Start Date: {item.start_date}</Text>
-                <Text style={[styles.detailText, { color: 'blue' }]}>End Date: {item.end_date}</Text>
-                <Text style={styles.detailText}>Transaction Date: {item.transaction_date}</Text>
-              </View>
-            )}
           </View>
+        }
+        keyExtractor={item => item.id ? item.id.toString() : Math.random().toString()}
+        renderItem={({ item }) => (
+          <CustomerListItem 
+            item={item} 
+            onLongPress={handleCustomerLongPress}
+          />
         )}
         ListEmptyComponent={() => (
-            !selectedAreaId ? 
-            <Text style={styles.emptyListText}>Please select an area to see customer details.</Text> :
-            <Text style={styles.emptyListText}>No customers to display for the selected criteria.</Text>
+          !selectedAreaId ? 
+          <Text style={styles.emptyListText}>Please select an area to see customer details.</Text> :
+          <Text style={styles.emptyListText}>No customers to display for the selected criteria.</Text>
         )}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        keyboardShouldPersistTaps="always" // Add this line
+        keyboardShouldPersistTaps="always"
       />
 
       <Modal
@@ -723,8 +689,6 @@ ${customer ? customer.book_no : ''}`;
         onClose={() => setIsCommunicationModalVisible(false)}
         onQuickTransaction={handleQuickTransaction}
       />
-
-      
     </View>
   );
 }
@@ -747,15 +711,15 @@ const chartConfig = {
   propsForLabels: {
     fontSize: 10,
   },
-  paddingLeft: 120, // Further increased padding for y-axis labels
-  paddingRight: 20, // Added padding to the right
+  paddingLeft: 120,
+  paddingRight: 20,
   formatYLabel: (yLabel) => {
     const value = parseFloat(yLabel);
-    if (value >= 10000000) { // 1 Crore
+    if (value >= 10000000) {
       return `₹${(value / 10000000).toFixed(value % 10000000 === 0 ? 0 : 1)} Cr`;
-    } else if (value >= 100000) { // 1 Lakh
+    } else if (value >= 100000) {
       return `₹${(value / 100000).toFixed(value % 100000 === 0 ? 0 : 1)} L`;
-    } else if (value >= 1000) { // 1 Thousand
+    } else if (value >= 1000) {
       return `₹${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} K`;
     } else {
       return `₹${value.toFixed(0)}`;
@@ -935,10 +899,10 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
   },
   emptyListText: {
-      textAlign: 'center',
-      marginTop: 20,
-      fontSize: 16,
-      color: '#8E8E93',
+    textAlign: 'center',
+    marginTop: 20,
+    fontSize: 16,
+    color: '#8E8E93',
   },
   viewLargerButton: {
     marginTop: 10,
@@ -998,7 +962,7 @@ const styles = StyleSheet.create({
     color: 'red',
   },
   cashOnHandText: {
-    color: '#007AFF', // A distinct color for Cash on Hand
+    color: '#007AFF',
     fontWeight: 'bold',
   },
 });
