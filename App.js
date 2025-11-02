@@ -31,8 +31,10 @@ import CustomerMapScreen from './src/screens/CustomerMapScreen';
 import BirthdayScreen from './src/screens/BirthdayScreen';
 import MarriageScreen from './src/screens/MarriageScreen';
 import UserExpensesScreen from './src/screens/UserExpensesScreen';
-import QuickTransactionScreen from './src/screens/QuickTransactionScreen';
+
+
 import QuickTransactionButton from './src/components/QuickTransactionButton';
+import QuickTransactionScreen from './src/screens/QuickTransactionScreen';
 import BankTransactionScreen from './src/screens/BankTransactionScreen';
 
 // Services
@@ -379,6 +381,7 @@ useEffect(() => {
           <TouchableOpacity onPress={() => setShowGlobalChat(prev => !prev)} style={{ marginRight: 15 }}>
             <MaterialIcons name={showGlobalChat ? "chat-bubble" : "chat-bubble-outline"} size={24} color="#007AFF" />
           </TouchableOpacity>
+          
           <QuickTransactionButton onPress={() => navigation.navigate('QuickTransaction')} />
           <TouchableOpacity onPress={() => navigation.navigate('Expenses')} style={{ marginRight: 15 }}>
             <MaterialIcons name="receipt-long" size={24} color="#007AFF" />
@@ -429,6 +432,7 @@ useEffect(() => {
             <Stack.Screen name="Expenses">
               {(props) => <UserExpensesScreen {...props} user={user} userProfile={userProfile} />}
             </Stack.Screen>
+
             <Stack.Screen name="QuickTransaction">
               {(props) => <QuickTransactionScreen {...props} user={userProfile} />}
             </Stack.Screen>

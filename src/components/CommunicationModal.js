@@ -9,12 +9,7 @@ const CommunicationModal = ({ visible, customer, onClose, onQuickTransaction }) 
   }
 
   const options = [
-    {
-      title: 'Quick Transaction',
-      icon: 'flash',
-      color: '#f0ad4e',
-      action: () => onQuickTransaction(customer),
-    },
+
     {
       title: 'WhatsApp SMS',
       icon: 'whatsapp',

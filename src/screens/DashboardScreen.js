@@ -106,13 +106,14 @@ export default function DashboardScreen({ user, userProfile }) {
 
   const navigation = useNavigation();
 
+  
+
   const handleQuickTransaction = (customer) => {
     setIsCommunicationModalVisible(false);
     navigation.navigate('QuickTransaction', { customer: customer });
   };
 
   useEffect(() => {
-    // Check tracking status on initial load
     setIsTracking(locationTracker.getTrackingStatus());
     if (userProfile) {
       setIsTracking(userProfile.location_status === 1);
