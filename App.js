@@ -8,8 +8,6 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, Linking } from 
 import Icon from 'react-native-vector-icons/FontAwesome';
 import { MaterialIcons } from '@expo/vector-icons';
 import CalculatorModal from './src/components/CalculatorModal';
-import * as LocalAuthentication from 'expo-local-authentication';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import RealtimeCollaboration from './src/components/RealtimeCollaboration';
 import GlobalChatAndPresence from './src/components/GlobalChatAndPresence';
 import * as Notifications from 'expo-notifications';
@@ -220,6 +218,8 @@ useEffect(() => {
     const initializeApp = async () => {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (_event, session) => {
+          console.log('onAuthStateChange event:', _event);
+          console.log('onAuthStateChange session:', session);
           setSession(session);
           if (session) {
             await loadUserProfile(session.user.id);
@@ -229,10 +229,14 @@ useEffect(() => {
         }
       );
 
+      // First, try to get an existing session
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      console.log('initializeApp: initialSession from getSession:', initialSession);
+      setSession(initialSession);
       await checkAuthStatus();
-      // await handleBiometricLogin();
       await locationTracker.init();
       setIsLoading(false);
+      console.log('initializeApp: isAuthenticated after init:', isAuthenticated); // Log isAuthenticated here
 
       return () => subscription.unsubscribe();
     };
@@ -266,12 +270,7 @@ useEffect(() => {
           .select('group_id')
           .eq('user_id', userId);
 
-        if (userGroupLinkError) {
-          console.error('❌ Error fetching user group links:', userGroupLinkError);
-          return [];
-        }
-
-        if (!userGroupLinks || userGroupLinks.length === 0) {
+        if (userGroupLinks || userGroupLinks.length === 0) {
           return [];
         }
 
@@ -302,41 +301,9 @@ useEffect(() => {
   };
 
   const handleAuthSuccess = async (sessionData) => {
+    console.log('handleAuthSuccess: sessionData:', sessionData); // Log sessionData here
     setSession(sessionData);
     await loadUserProfile(sessionData.user.id);
-  };
-
-  const handleBiometricLogin = async () => {
-    try {
-      const isBiometricsEnabled = await AsyncStorage.getItem('BIOMETRICS_ENABLED');
-      const userEmail = await AsyncStorage.getItem('BIOMETRICS_EMAIL');
-
-      if (isBiometricsEnabled === 'true' && userEmail) {
-        const { success } = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Log in with your fingerprint or Face ID',
-          cancelLabel: 'Use Password',
-        });
-
-        if (success) {
-          console.log('Biometric authentication successful');
-          const refreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
-          if (refreshToken) {
-            const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-            if (error) {
-              Alert.alert('Error', 'Could not refresh your session. Please log in with your password.');
-            } else if (data.session) {
-              handleAuthSuccess(data.session);
-            }
-          } else {
-            Alert.alert('Error', 'Could not find a refresh token. Please log in with your password.');
-          }
-        } else {
-          console.log('Biometric authentication failed or was cancelled.');
-        }
-      }
-    } catch (error) {
-      console.error('Error during biometric login attempt:', error);
-    }
   };
 
   // ---------------- Header ----------------

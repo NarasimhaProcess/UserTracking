@@ -18,7 +18,7 @@ export default function AreaSearchBar({ areas, onAreaSelect, selectedAreaName, o
 
   const handleInputChange = (text) => {
     setQuery(text);
-    onChangeText(text);
+    // onChangeText(text); // Removed as it's not always provided by parent
     if (text) {
       const filteredAreas = areas.filter(area =>
         area.area_name.toLowerCase().includes(text.toLowerCase())

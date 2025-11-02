@@ -11,6 +11,7 @@ import {
   Image,
   FlatList, // Added FlatList
   Linking, // Added Linking
+  Platform, // Added Platform
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../services/supabaseClient';
@@ -287,7 +288,7 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       try {
         const { data, error } = await supabase
           .from('customers')
-          .select('id, name, book_no, repayment_amount, area_id, days_to_complete, start_date, end_date, mobile')
+          .select('id, name, book_no, repayment_amount, area_id, days_to_complete, start_date, end_date, mobile, latitude, longitude')
           .eq('area_id', areaId);
 
         if (error) {
@@ -659,6 +660,21 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
     }
   };
 
+  const handleGetDirections = (latitude, longitude) => {
+    if (latitude && longitude) {
+      const scheme = Platform.select({ ios: 'maps:0,0?q=', android: 'geo:0,0?q=' });
+      const latLng = `${latitude},${longitude}`;
+      const label = 'Customer Location';
+      const url = Platform.select({
+        ios: `${scheme}${label}@${latLng}`,
+        android: `${scheme}${latLng}(${label})`
+      });
+      Linking.openURL(url);
+    } else {
+      Alert.alert('Error', 'Customer location not available.');
+    }
+  };
+
   return (
     <FlatList
       data={transactions}
@@ -807,6 +823,12 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
                           <MaterialIcons name="chat" size={24} color="#25D366" />
                           <Text style={styles.communicationButtonText}>WA Chat</Text>
                         </TouchableOpacity>
+                        {selectedCustomer.latitude && selectedCustomer.longitude && (
+                          <TouchableOpacity onPress={() => handleGetDirections(selectedCustomer.latitude, selectedCustomer.longitude)} style={styles.communicationButton}>
+                            <MaterialIcons name="directions" size={24} color="#007AFF" />
+                            <Text style={styles.communicationButtonText}>Map</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     )}
                   </View>
