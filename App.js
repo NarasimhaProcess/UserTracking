@@ -12,6 +12,7 @@ import RealtimeCollaboration from './src/components/RealtimeCollaboration';
 import GlobalChatAndPresence from './src/components/GlobalChatAndPresence';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync } from './src/services/notificationService';
+import * as SecureStore from 'expo-secure-store';
 
 // Screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -29,7 +30,6 @@ import CustomerMapScreen from './src/screens/CustomerMapScreen';
 import BirthdayScreen from './src/screens/BirthdayScreen';
 import MarriageScreen from './src/screens/MarriageScreen';
 import UserExpensesScreen from './src/screens/UserExpensesScreen';
-
 
 import QuickTransactionButton from './src/components/QuickTransactionButton';
 import QuickTransactionScreen from './src/screens/QuickTransactionScreen';
@@ -95,7 +95,7 @@ function NewsTabs() {
 // ---------------- Tab Navigator ----------------
 
 function TabNavigator({ route }) {
-  const { user, userProfile } = route.params || {};
+  const { user, userProfile, handleLogout } = route.params || {};
   const isAdmin = userProfile?.user_type === 'admin' || userProfile?.user_type === 'superadmin';
   const isCustomer = userProfile?.user_type === 'customer';
   const isUser = userProfile?.user_type === 'user';
@@ -174,7 +174,7 @@ function TabNavigator({ route }) {
           tabBarIcon: ({ color, size }) => <Text style={{ color, fontSize: size }}>👤</Text>,
         }}
       >
-        {(props) => <ProfileScreen {...props} user={user} userProfile={userProfile} />}
+        {(props) => <ProfileScreen {...props} user={user} userProfile={userProfile} onLogout={handleLogout} />}
       </Tab.Screen>
     </Tab.Navigator>
   );
@@ -199,31 +199,36 @@ export default function App() {
     return <RealtimeCollaboration user={user} userProfile={userProfile} />
   }, [user, userProfile]);
 
- // 🔔 Push notifications
-useEffect(() => {
-  const registerNotifications = async () => {
-    if (user) {
-      try {
-        await registerForPushNotificationsAsync(user);
-      } catch (error) {
-        console.error('❌ Error in registerForPushNotificationsAsync:', error);
+  // 🔔 Push notifications
+  useEffect(() => {
+    const registerNotifications = async () => {
+      if (user) {
+        try {
+          await registerForPushNotificationsAsync(user);
+        } catch (error) {
+          console.error('❌ Error in registerForPushNotificationsAsync:', error);
+        }
       }
-    }
-  };
-  registerNotifications();
-}, [user]);
+    };
+    registerNotifications();
+  }, [user]);
 
   // ---------------- Initialization ----------------
   useEffect(() => {
     const initializeApp = async () => {
+      await loadSession();
+      
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (_event, session) => {
           console.log('onAuthStateChange event:', _event);
           console.log('onAuthStateChange session:', session);
-          setSession(session);
           if (session) {
+            await SecureStore.setItemAsync('userSession', JSON.stringify(session));
+            setSession(session);
             await loadUserProfile(session.user.id);
           } else {
+            await SecureStore.deleteItemAsync('userSession');
+            setSession(null);
             setUserProfile(null);
             // Stop tracking when user logs out
             await locationTracker.stopTracking();
@@ -231,19 +236,27 @@ useEffect(() => {
         }
       );
 
-      // First, try to get an existing session
-      const { data: { session: initialSession } } = await supabase.auth.getSession();
-      console.log('initializeApp: initialSession from getSession:', initialSession);
-      setSession(initialSession);
-      await checkAuthStatus();
-      await locationTracker.init();
       setIsLoading(false);
-      console.log('initializeApp: isAuthenticated after init:', isAuthenticated); // Log isAuthenticated here
 
       return () => subscription.unsubscribe();
     };
     initializeApp();
   }, []);
+
+  const loadSession = async () => {
+    try {
+      const sessionData = await SecureStore.getItemAsync('userSession');
+      if (sessionData) {
+        const parsedSession = JSON.parse(sessionData);
+        setSession(parsedSession);
+        if (parsedSession?.user?.id) {
+          await loadUserProfile(parsedSession.user.id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load session from secure store', error);
+    }
+  };
 
   const loadUserProfile = async (userId) => {
     const { data } = await supabase.from('users').select('*').eq('id', userId).single();
@@ -294,21 +307,19 @@ useEffect(() => {
     }
   };
 
-  const checkAuthStatus = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    setSession(session);
-    if (session) {
-      await loadUserProfile(session.user.id);
-    }
-  };
-
   const handleAuthSuccess = async (sessionData) => {
     console.log('handleAuthSuccess: sessionData:', sessionData); // Log sessionData here
+    await SecureStore.setItemAsync('userSession', JSON.stringify(sessionData));
     setSession(sessionData);
     const profile = await loadUserProfile(sessionData.user.id);
     if (profile?.location_status === 1) {
       await locationTracker.startTracking(sessionData.user.id, sessionData.user.email);
     }
+  };
+
+  const handleLogout = async () => {
+    await SecureStore.deleteItemAsync('userSession');
+    await supabase.auth.signOut();
   };
 
   // ---------------- Header ----------------
@@ -395,7 +406,7 @@ useEffect(() => {
               options={({ navigation }) => renderHeader({ navigation })}
             >
               {(props) => (
-                <TabNavigator {...props} route={{ params: { user, userProfile } }} />
+                <TabNavigator {...props} route={{ params: { user, userProfile, handleLogout } }} />
               )}
             </Stack.Screen>
             <Stack.Screen name="CustomerMap">

@@ -287,7 +287,7 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       try {
         const { data, error } = await supabase
           .from('customers')
-          .select('id, name, book_no, repayment_amount, area_id, days_to_complete, start_date, end_date, mobile, latitude, longitude')
+          .select('id, name, book_no, repayment_amount, area_id, days_to_complete, start_date, end_date, mobile, latitude, longitude, landmark, address')
           .eq('area_id', areaId);
 
         if (error) {
@@ -751,6 +751,14 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
                     <View style={styles.customerDetailRow}>
                       <Text style={styles.customerDetailLabel}>Mobile:</Text>
                       <Text style={styles.customerDetailValue}>{selectedCustomer.mobile || 'N/A'}</Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Landmark:</Text>
+                      <Text style={styles.customerDetailValue}>{selectedCustomer.landmark || 'N/A'}</Text>
+                    </View>
+                    <View style={styles.customerDetailRow}>
+                      <Text style={styles.customerDetailLabel}>Address:</Text>
+                      <Text style={styles.customerDetailValue}>{selectedCustomer.address || 'N/A'}</Text>
                     </View>
 
                     {/* Detailed Info - matching CustomerListItem's expanded view order */}

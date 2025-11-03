@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { NetInfoService } from '../services/NetInfoService';
 import { OfflineStorageService } from '../services/OfflineStorageService';
 import { v4 as uuidv4 } from 'uuid';
 import AreaSearchBar from '../components/AreaSearchBar';
+import { debounce } from 'lodash';
 
 const getDayName = () => {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -64,170 +65,6 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
     setSelectedDate(new Date()); // Keep defaulting to today
     fetchAreas(); // Fetch areas on component mount
   }, []);
-
-  // Removed: callProxyRequest function and related proxy logic.
-  // The app now connects directly to Supabase.
-
-  // Removed: useEffect that called proxy-request for tenant-specific expenses.
-  // The app now connects directly to Supabase.
-
-  // Fetch areas logic
-  const fetchAreas = async () => {
-    try {
-      let areaList = [];
-      const isConnected = await NetInfoService.isNetworkAvailable();
-
-      // Try to load from offline storage first
-      const offlineAreas = await OfflineStorageService.getOfflineAreas();
-      if (offlineAreas.length > 0) {
-        areaList = offlineAreas;
-      } else if (isConnected) {
-        // If user is superadmin, fetch all areas
-        if (userProfile?.user_type?.toLowerCase() === 'superadmin' || userProfile?.user_type?.toLowerCase() === 'admin') {
-          const { data, error } = await supabase
-            .from('area_master')
-            .select('id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter')
-            .order('area_name', { ascending: true });
-          if (error) {
-            Alert.alert('Error', 'Failed to load all areas for superadmin.');
-          } else {
-            areaList = data || [];
-          }
-        } else { // For other user types, fetch areas based on user groups
-          const currentDayName = getDayName();
-          const currentTime = getCurrentTime();
-
-          const { data: userGroupsData, error: userGroupsError } = await supabase
-            .from('user_groups')
-            .select('groups(group_areas(area_master(id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter)))') // Select new columns
-            .eq('user_id', user?.id);
-
-          if (userGroupsError) {
-            Alert.alert('Error', 'Failed to load areas based on user groups.');
-          } else {
-            const areaIdSet = new Set();
-            userGroupsData.forEach(userGroup => {
-              userGroup.groups?.group_areas?.forEach(groupArea => {
-                const area = groupArea.area_master;
-                if (area && !areaIdSet.has(area.id)) {
-                  // Apply client-side filtering for 'user' type if conditions are met
-                  if (userProfile?.user_type === 'user') { // Using userProfile.user_type here
-                    const areaStartTime = area.start_time_filter ? area.start_time_filter.substring(0, 5) : '';
-                    const areaEndTime = area.end_time_filter ? area.end_time_filter.substring(0, 5) : '';
-
-                    if (
-                      !area.enable_day || // If enable_day is false, always include
-                      (area.enable_day && // If enable_day is true, check other conditions
-                      area.day_of_week === currentDayName &&
-                      (
-                        (areaStartTime === '00:00' && areaEndTime === '00:00') || // Special case for 24 hours
-                        (areaStartTime <= areaEndTime && currentTime >= areaStartTime && currentTime <= areaEndTime) || // Case 1: Does not cross midnight
-                        (areaStartTime > areaEndTime && (currentTime >= areaStartTime || currentTime <= areaEndTime))   // Case 2: Crosses midnight
-                      ))
-                    ) {
-                      areaIdSet.add(area.id);
-                      areaList.push(area); // Push the entire area object
-                    }
-                  } else {
-                    // For other user types, add without time filtering
-                    areaIdSet.add(area.id);
-                    areaList.push(area); // Push the entire area object
-                  }
-                }
-              });
-            });
-          }
-        }
-        await OfflineStorageService.saveOfflineAreas(areaList); // Save to offline storage
-      }
-
-      setAllAreas(areaList);
-      setFilteredAreas(areaList); // Initially, filtered areas are all areas
-      if (areaList.length > 0) {
-        setSelectedAreaId(areaList[0].id);
-        setAreaSearchText(areaList[0].area_name);
-        console.log('fetchAreas: Initial selectedAreaId:', areaList[0].id, 'areaName:', areaList[0].area_name); // Debug log
-      } else {
-        setSelectedAreaId(null);
-        setAreaSearchText('');
-        console.log('fetchAreas: No areas found.'); // Debug log
-      }
-    } catch (error) {
-      console.error('Error fetching areas:', error);
-      Alert.alert('Error', 'Failed to load areas.');
-    }
-  };
-
-import { debounce } from 'lodash';
-
-const getDayName = () => {
-  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const d = new Date();
-  return days[d.getDay()];
-};
-
-const getCurrentTime = () => {
-  const d = new Date();
-  const hours = d.getHours().toString().padStart(2, '0');
-  const minutes = d.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
-};
-
-export default function UserExpensesScreen({ navigation, user, userProfile }) {
-  // User Expenses State
-  const [expenseAmount, setExpenseAmount] = useState('');
-  const [expenseType, setExpenseType] = useState('');
-  const [otherExpenseType, setOtherExpenseType] = useState('');
-  const [expenseRemarks, setExpenseRemarks] = useState('');
-  const [userExpenses, setUserExpenses] = useState([]);
-  const [filteredUserExpenses, setFilteredUserExpenses] = useState([]);
-  const [totalExpenses, setTotalExpenses] = useState(0);
-  const [showExpenseCalculatorModal, setShowExpenseCalculatorModal] = useState(false);
-  const [calculatorTarget, setCalculatorTarget] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [dates, setDates] = useState([]);
-
-  // New states for Area Search
-  const [allAreas, setAllAreas] = useState([]);
-  const [selectedAreaId, setSelectedAreaId] = useState(null);
-  const [areaSearchText, setAreaSearchText] = useState('');
-  const [filteredAreas, setFilteredAreas] = useState([]);
-  const [showAreaDropdown, setShowAreaDropdown] = useState(false);
-  const [searching, setSearching] = useState(false);
-
-  useEffect(() => {
-    const today = new Date();
-    const pastThreeDays = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 3);
-    const dates = [];
-    for (let dt = pastThreeDays; dt <= today; dt.setDate(dt.getDate() + 1)) {
-      dates.push(new Date(dt));
-    }
-    setDates(dates);
-    setSelectedDate(new Date()); // Keep defaulting to today
-    fetchAreas(); // Fetch areas on component mount
-  }, []);
-
-  const debouncedSearch = useCallback(
-    debounce((text) => {
-      setSearching(true);
-      if (text) {
-        const lowerCaseSearchText = text.toLowerCase();
-        const filtered = allAreas.filter(area =>
-          area.area_name.toLowerCase().includes(lowerCaseSearchText)
-        );
-        setFilteredAreas(filtered);
-      } else {
-        setFilteredAreas(allAreas);
-      }
-      setSearching(false);
-    }, 300),
-    [allAreas]
-  );
-
-  // Filter areas based on search text
-  useEffect(() => {
-    debouncedSearch(areaSearchText);
-  }, [areaSearchText, debouncedSearch]);
 
     useEffect(() => {
 

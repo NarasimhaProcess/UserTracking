@@ -211,6 +211,28 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   const [editingCustomerType, setEditingCustomerType] = useState(null);
   const [customerTypeName, setCustomerTypeName] = useState('');
   const [customerTypeDescription, setCustomerTypeDescription] = useState('');
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [customerForm, setCustomerForm] = useState({
+    name: '',
+    mobile: '',
+    email: '',
+    book_no: '',
+    customer_type: '',
+    start_date: '',
+    amount_given: '',
+    repayment_amount: '',
+    repayment_frequency: '',
+    periods: '',
+    remarks: '',
+    area_id: '',
+    repayment_plan_id: '',
+    days_to_complete: '',
+    latitude: '',
+    longitude: '',
+    landmark: '',
+    address: '',
+  });
 
   
 
@@ -350,7 +372,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     try {
       let query = supabase
         .from('customers')
-        .select('*, repayment_plans(name, frequency), area_master(area_name), latitude, longitude') // Added latitude and longitude
+        .select('*, repayment_plans(name, frequency), area_master(area_name), latitude, longitude, landmark, address') // Added latitude and longitude, landmark, and address
         .order('created_at', { ascending: false });
 
       // Filter by selected area if an area is selected
@@ -869,6 +891,8 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           <Text style={styles.itemDetail}>Card No: {item.book_no}</Text>
           <Text style={styles.itemDetail}>Type: {item.customer_type}</Text>
           <Text style={styles.itemDetail}>Status: {item.status}</Text>
+          <Text style={styles.itemDetail}>Landmark: {item.landmark}</Text>
+          <Text style={styles.itemDetail}>Address: {item.address}</Text>
           {item.repayment_plans && (
             <Text style={styles.itemDetail}>Plan: {item.repayment_plans.name} ({item.repayment_plans.frequency})</Text>
           )}
@@ -885,6 +909,12 @@ export default function AdminScreen({ navigation, user, userProfile }) {
           )}
         </View>
         <View style={styles.itemActions}>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => handleEditCustomer(item)}
+          >
+            <Text style={styles.editButtonText}>Edit</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.viewTransactionsButton}
             onPress={() => toggleCustomerTransactions(item.id)}
@@ -964,11 +994,84 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     );
   };
 
-  const handleAddCustomerType = () => {
-    setEditingCustomerType(null);
-    setCustomerTypeName('');
-    setCustomerTypeDescription('');
-    setShowCustomerTypeModal(true);
+  const handleAddCustomer = () => {
+    setEditingCustomer(null);
+    setCustomerForm({
+      name: '',
+      mobile: '',
+      email: '',
+      book_no: '',
+      customer_type: '',
+      start_date: '',
+      amount_given: '',
+      repayment_amount: '',
+      repayment_frequency: '',
+      periods: '',
+      remarks: '',
+      area_id: '',
+      repayment_plan_id: '',
+      days_to_complete: '',
+      latitude: '',
+      longitude: '',
+      landmark: '',
+      address: '',
+    });
+    setShowCustomerModal(true);
+  };
+
+  const handleEditCustomer = (customer) => {
+    setEditingCustomer(customer);
+    setCustomerForm({
+      name: customer.name || '',
+      mobile: customer.mobile || '',
+      email: customer.email || '',
+      book_no: customer.book_no || '',
+      customer_type: customer.customer_type || '',
+      start_date: customer.start_date || '',
+      amount_given: customer.amount_given?.toString() || '',
+      repayment_amount: customer.repayment_amount?.toString() || '',
+      repayment_frequency: customer.repayment_frequency || '',
+      periods: customer.days_to_complete?.toString() || '',
+      remarks: customer.remarks || '',
+      area_id: customer.area_id || '',
+      repayment_plan_id: customer.repayment_plan_id || '',
+      days_to_complete: customer.days_to_complete?.toString() || '',
+      latitude: customer.latitude?.toString() || '',
+      longitude: customer.longitude?.toString() || '',
+      landmark: customer.landmark || '',
+      address: customer.address || '',
+    });
+    setShowCustomerModal(true);
+  };
+
+  const handleSaveCustomer = async () => {
+    if (!customerForm.name.trim() || !customerForm.mobile.trim() || !customerForm.book_no.trim() || !customerForm.area_id) {
+      Alert.alert('Error', 'Name, Mobile, Card No, and Area are required.');
+      return;
+    }
+
+    const customerData = {
+      name: customerForm.name.trim(),
+      mobile: customerForm.mobile.trim(),
+      email: customerForm.email.trim() || null,
+      book_no: customerForm.book_no.trim(),
+      customer_type: customerForm.customer_type || null,
+      start_date: customerForm.start_date || null,
+      amount_given: parseFloat(customerForm.amount_given) || 0,
+      repayment_amount: parseFloat(customerForm.repayment_amount) || 0,
+      repayment_frequency: customerForm.repayment_frequency || null,
+      periods: parseInt(customerForm.periods) || 0,
+      remarks: customerForm.remarks.trim() || null,
+      area_id: customerForm.area_id,
+      repayment_plan_id: customerForm.repayment_plan_id || null,
+      days_to_complete: parseInt(customerForm.days_to_complete) || 0,
+      latitude: parseFloat(customerForm.latitude) || null,
+      longitude: parseFloat(customerForm.longitude) || null,
+      landmark: customerForm.landmark.trim() || null,
+      address: customerForm.address.trim() || null,
+    };
+
+    handleSaveItem(customerData, 'customers', 'Customer', editingCustomer, loadCustomers, setShowCustomerModal);
   };
 
   const handleEditCustomerType = (type) => {
@@ -1303,146 +1406,179 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     setShowPlanModal(true);
   };
 
-  const handleUploadCustomers = async () => {
-    if (!selectedUploadAreaId) {
-      Alert.alert('Error', 'Please select an Area.');
-      return;
-    }
-    if (uploadedCustomers.length === 0) {
-      Alert.alert('Error', 'No customer data to upload. Please select a CSV file.');
-      return;
-    }
+ 
+const handleUploadCustomers = async () => {
+  if (!selectedUploadAreaId) {
+    Alert.alert('Error', 'Please select an Area.');
+    return;
+  }
+  if (uploadedCustomers.length === 0) {
+    Alert.alert('Error', 'No customer data to upload. Please select a CSV file.');
+    return;
+  }
 
-    // Fetch all repayment plans for lookup
-    const { data: allRepaymentPlans, error: plansError } = await supabase
-      .from('repayment_plans')
-      .select('id, name, frequency, periods');
+  // Fetch all repayment plans for lookup
+  const { data: allRepaymentPlans, error: plansError } = await supabase
+    .from('repayment_plans')
+    .select('id, name, frequency, periods');
 
-    if (plansError) {
-      Alert.alert('Error', 'Failed to fetch repayment plans for lookup.');
-      console.error('Plans fetch error:', plansError);
-      return;
-    }
+  if (plansError) {
+    Alert.alert('Error', 'Failed to fetch repayment plans for lookup.');
+    console.error('Plans fetch error:', plansError);
+    return;
+  }
 
-    // Fetch existing customers
-    const { data: existingCustomers, error: existingCustomersError } = await supabase
-      .from('customers')
-      .select('name, mobile, email');
+  // Fetch existing customers
+  const { data: existingCustomers, error: existingCustomersError } = await supabase
+    .from('customers')
+    .select('area_id, book_no');
 
-    if (existingCustomersError) {
-      Alert.alert('Error', 'Failed to fetch existing customers.');
-      console.error('Existing customers fetch error:', existingCustomersError);
-      return;
-    }
+  if (existingCustomersError) {
+    Alert.alert('Error', 'Failed to fetch existing customers.');
+    console.error('Existing customers fetch error:', existingCustomersError);
+    return;
+  }
 
-    const existingCustomerIdentities = new Set(
-      existingCustomers.map(c => `${c.name?.toLowerCase()}|${c.mobile}|${c.email?.toLowerCase()}`)
-    );
+  const existingCustomerIdentities = new Set(
+    existingCustomers.map(c => `${c.area_id}|${(c.book_no || '').trim().toLowerCase()}`)
+  );
 
-    Alert.alert(
-      'Confirm Upload',
-      `Are you sure you want to upload ${uploadedCustomers.length} customers to the selected Area?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Upload',
-          onPress: async () => {
-            try {
-              const customersToInsert = uploadedCustomers
-                .filter(customer => {
-                  // Basic validation for required fields
-                  if (!customer.cardno || !customer.name || !customer.mobile || !customer.area_id) {
-                    console.warn(`Skipping customer due to missing required fields: ${JSON.stringify(customer)}`);
-                    return false;
-                  }
-                  const identity = `${customer.name?.toLowerCase()}|${customer.mobile}|${customer.email?.toLowerCase()}`;
-                  return !existingCustomerIdentities.has(identity);
-                })
-                .map(customer => {
-                  const matchedPlan = allRepaymentPlans.find(plan => {
-                    console.log(`Attempting to match: CSV Frequency=${customer.repayment_frequency}, CSV Periods=${customer.periods}, Plan Frequency=${plan.frequency}, Plan Periods=${plan.periods}`);
-                    return plan.frequency === customer.repayment_frequency.toLowerCase() &&
-                    plan.periods === parseInt(customer.periods.trim());
-                  });
+  Alert.alert(
+    'Confirm Upload',
+    `Are you sure you want to upload ${uploadedCustomers.length} customers to the selected Area?`,
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Upload',
+        onPress: async () => {
+          try {
+            let customersToUpsert = [];
+            const skippedRows = [];
 
-                  if (!matchedPlan) {
-                    throw new Error(`Repayment plan not found for: ${customer.repayment_frequency} with ${customer.periods} periods`);
-                  }
-
-                  // Calculate end_date in the app
-                  const startDate = new Date(customer.start_date);
-                  let endDate = new Date(startDate);
-                  const periods = parseInt(customer.periods);
-
-                  if (isNaN(periods)) {
-                    throw new Error(`Invalid periods value for ${customer.name}: ${customer.periods}`);
-                  }
-
-                  switch (customer.repayment_frequency.toLowerCase()) {
-                    case 'daily':
-                      endDate.setDate(startDate.getDate() + periods);
-                      break;
-                    case 'weekly':
-                      endDate.setDate(startDate.getDate() + (periods * 7));
-                      break;
-                    case 'monthly':
-                      endDate.setMonth(startDate.getMonth() + periods);
-                      break;
-                    case 'yearly':
-                      endDate.setFullYear(startDate.getFullYear() + periods);
-                      break;
-                    default:
-                      throw new Error(`Unknown repayment frequency for ${customer.name}: ${customer.repayment_frequency}`);
-                  }
-
-                  // Format end_date to YYYY-MM-DD string
-                  const formattedEndDate = endDate.toISOString().split('T')[0];
-
-                  return {
-                    name: customer.name,
-                    mobile: customer.mobile,
-                    email: customer.email,
-                    book_no: customer.cardno, // Map cardno from CSV to book_no in DB
-                    customer_type: customer.customer_type,
-                    start_date: customer.start_date,
-                    amount_given: parseFloat(customer.amount_given),
-                    repayment_amount: parseFloat(customer.repayment_amount),
-                    end_date: formattedEndDate, // Calculated in app
-                    area_id: selectedUploadAreaId,
-                    repayment_plan_id: matchedPlan.id,
-                    days_to_complete: parseInt(customer.periods),
-                    user_id: user.id,
-                    repayment_frequency: customer.repayment_frequency,
-                    remarks: "bulkupload",
-                    landmark: customer.landmark || null,
-                    address: customer.address || null,
-                  };
+            uploadedCustomers.forEach((customer, index) => {
+              try {
+                const matchedPlan = allRepaymentPlans.find(plan => {
+                  console.log(`Attempting to match: CSV Frequency=${customer.repayment_frequency}, CSV Periods=${customer.periods}, Plan Frequency=${plan.frequency}, Plan Periods=${plan.periods}`);
+                  return plan.frequency === (customer.repayment_frequency || '').toLowerCase() &&
+                  plan.periods === parseInt((customer.periods || '0').trim());
                 });
 
-              if (customersToInsert.length === 0) {
-                Alert.alert('No New Customers', 'All customers in the CSV file already exist in the database.');
-                return;
+                if (!matchedPlan) {
+                  throw new Error(`Repayment plan not found for: ${customer.repayment_frequency} with ${customer.periods} periods`);
+                }
+
+                // Calculate end_date in the app
+                const startDate = new Date(customer.start_date);
+                let endDate = new Date(startDate);
+                const periods = parseInt(customer.periods);
+
+                if (isNaN(periods)) {
+                  throw new Error(`Invalid periods value for ${customer.name}: ${customer.periods}`);
+                }
+
+                switch ((customer.repayment_frequency || '').toLowerCase()) {
+                  case 'daily':
+                    endDate.setDate(startDate.getDate() + periods);
+                    break;
+                  case 'weekly':
+                    endDate.setDate(startDate.getDate() + (periods * 7));
+                    break;
+                  case 'monthly':
+                    endDate.setMonth(startDate.getMonth() + periods);
+                    break;
+                  case 'yearly':
+                    endDate.setFullYear(startDate.getFullYear() + periods);
+                    break;
+                  default:
+                    throw new Error(`Unknown repayment frequency for ${customer.name}: ${customer.repayment_frequency}`);
+                }
+
+                // Format end_date to YYYY-MM-DD string
+                const formattedEndDate = endDate.toISOString().split('T')[0];
+
+                customersToUpsert.push({
+                  name: customer.name || null,
+                  mobile: customer.mobile || null,
+                  email: customer.email || null,
+                  book_no: customer.cardno || null,
+                  customer_type: customer.customer_type || null,
+                  start_date: customer.start_date || null,
+                  amount_given: parseFloat(customer.amount_given) || 0,
+                  repayment_amount: parseFloat(customer.repayment_amount) || 0,
+                  end_date: formattedEndDate,
+                  area_id: selectedUploadAreaId,
+                  repayment_plan_id: matchedPlan.id,
+                  days_to_complete: parseInt(customer.periods) || 0,
+                  user_id: user.id,
+                  repayment_frequency: customer.repayment_frequency || null,
+                  remarks: "bulkupload",
+                  landmark: customer.landmark || null,
+                  address: customer.address || null,
+                });
+              } catch (error) {
+                console.error(`Skipping row ${index + 2} due to data transformation error:`, error.message, customer);
+                skippedRows.push({
+                  customerData: customer,
+                  error: error.message,
+                });
               }
+            });
 
-              const { error } = await supabase
-                .from('customers') // Assuming your customer table is named 'customers'
-                .insert(customersToInsert);
-
-              if (error) {
-                throw error;
-              }
-
-              Alert.alert('Success', `${customersToInsert.length} of ${uploadedCustomers.length} customers uploaded successfully!`);
-              setShowCustomerUploadModal(false);
-              setSelectedUploadAreaId('');
-            } catch (error) {
-              console.error('Error uploading customers:', error);
-              Alert.alert('Upload Error', `Failed to upload customers: ${error.message}`);
+            if (customersToUpsert.length === 0) {
+              Alert.alert('No Customers to Upload', 'No valid customers found in the CSV after processing.');
+              return;
             }
-          },
+
+            const { error } = await supabase
+              .from('customers')
+              .upsert(customersToUpsert, { onConflict: 'area_id,book_no' });
+
+            if (error) {
+              throw error;
+            }
+
+            let alertMessage = `${customersToUpsert.length} of ${uploadedCustomers.length} customers processed successfully!`;
+            if (skippedRows.length > 0) {
+              alertMessage += `\n\n${skippedRows.length} customers skipped due to data errors:`;
+              skippedRows.forEach(skip => {
+                const customerIdentifier = skip.customerData.name || skip.customerData.mobile || skip.customerData.cardno || 'Unknown Customer';
+                alertMessage += `\n- ${customerIdentifier}: ${skip.error}`;
+              });
+            }
+
+            Alert.alert('Upload Summary', alertMessage);
+            setShowCustomerUploadModal(false);
+            setSelectedUploadAreaId('');
+            setUploadedCustomers([]);
+          } catch (error) {
+            console.error('Error uploading customers:', error);
+            Alert.alert('Upload Error', `Failed to upload customers: ${error.message}`);
+          }
         },
-      ]
-    );
+      },
+    ]
+  );
+};
+  const parseCsvRow = (row) => {
+    const values = [];
+    let currentVal = '';
+    let inQuotes = false;
+    for (let i = 0; i < row.length; i++) {
+      const char = row[i];
+      if (char === '"' && i + 1 < row.length && row[i+1] === '"') {
+        currentVal += '"';
+        i++;
+      } else if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        values.push(currentVal.trim());
+        currentVal = '';
+      } else {
+        currentVal += char;
+      }
+    }
+    values.push(currentVal.trim());
+    return values;
   };
 
   const handlePickCsvFile = async () => {
@@ -1457,25 +1593,21 @@ export default function AdminScreen({ navigation, user, userProfile }) {
         const fileContent = await fetch(uri);
         const text = await fileContent.text();
 
-        // Simple CSV parsing (assumes no commas within fields and first row is header)
         const lines = text.trim().split('\n');
         if (lines.length === 0) {
           Alert.alert('Error', 'CSV file is empty.');
           return;
         }
 
-        const headers = lines[0].split(',').map(header => header.trim());
+        const headers = parseCsvRow(lines[0]);
         const parsedData = [];
 
         for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(',').map(value => value.trim());
-          if (values.length !== headers.length) {
-            console.warn(`Skipping row ${i + 1} due to column mismatch.`);
-            continue;
-          }
+          const values = parseCsvRow(lines[i]);
+          // Do not skip rows due to column mismatch. Attempt to map available values.
           const rowData = {};
           for (let j = 0; j < headers.length; j++) {
-            rowData[headers[j]] = values[j];
+            rowData[headers[j]] = values[j] || ''; // Assign value or empty string if missing
           }
           parsedData.push(rowData);
         }
@@ -2265,6 +2397,149 @@ export default function AdminScreen({ navigation, user, userProfile }) {
     </AdminModal>
   );
 
+  const renderCustomerModal = () => (
+    <AdminModal
+      visible={showCustomerModal}
+      onClose={() => setShowCustomerModal(false)}
+      title={editingCustomer ? 'Edit Customer' : 'Add New Customer'}
+      onSave={handleSaveCustomer}
+    >
+      <ScrollView keyboardShouldPersistTaps="handled">
+        <Text style={styles.formLabel}>Name:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Customer Name"
+          value={customerForm.name}
+          onChangeText={v => setCustomerForm(f => ({ ...f, name: v }))}
+        />
+
+        <Text style={styles.formLabel}>Mobile:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Mobile Number"
+          value={customerForm.mobile}
+          onChangeText={v => setCustomerForm(f => ({ ...f, mobile: v }))}
+          keyboardType="phone-pad"
+        />
+
+        <Text style={styles.formLabel}>Email:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Email (optional)"
+          value={customerForm.email}
+          onChangeText={v => setCustomerForm(f => ({ ...f, email: v }))}
+          keyboardType="email-address"
+        />
+
+        <Text style={styles.formLabel}>Card No:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Card Number"
+          value={customerForm.book_no}
+          onChangeText={v => setCustomerForm(f => ({ ...f, book_no: v }))}
+        />
+
+        <Text style={styles.formLabel}>Customer Type:</Text>
+        <Picker
+          selectedValue={customerForm.customer_type}
+          onValueChange={v => setCustomerForm(f => ({ ...f, customer_type: v }))}
+          style={styles.input}
+        >
+          <Picker.Item label="Select Type" value="" />
+          {customerTypes.map(type => (
+            <Picker.Item key={type.id} label={type.status_name} value={type.status_name} />
+          ))}
+        </Picker>
+
+        <Text style={styles.formLabel}>Start Date:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="YYYY-MM-DD"
+          value={customerForm.start_date}
+          onChangeText={v => setCustomerForm(f => ({ ...f, start_date: v }))}
+        />
+
+        <Text style={styles.formLabel}>Amount Given:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Amount Given"
+          value={customerForm.amount_given}
+          onChangeText={v => setCustomerForm(f => ({ ...f, amount_given: v }))}
+          keyboardType="numeric"
+        />
+
+        <Text style={styles.formLabel}>Repayment Amount:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Repayment Amount"
+          value={customerForm.repayment_amount}
+          onChangeText={v => setCustomerForm(f => ({ ...f, repayment_amount: v }))}
+          keyboardType="numeric"
+        />
+
+        <Text style={styles.formLabel}>Repayment Frequency:</Text>
+        <Picker
+          selectedValue={customerForm.repayment_frequency}
+          onValueChange={v => setCustomerForm(f => ({ ...f, repayment_frequency: v }))}
+          style={styles.input}
+        >
+          <Picker.Item label="Select Frequency" value="" />
+          <Picker.Item label="Daily" value="daily" />
+          <Picker.Item label="Weekly" value="weekly" />
+          <Picker.Item label="Monthly" value="monthly" />
+          <Picker.Item label="Yearly" value="yearly" />
+        </Picker>
+
+        <Text style={styles.formLabel}>Periods (Days/Weeks/Months/Years):</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Number of Periods"
+          value={customerForm.periods}
+          onChangeText={v => setCustomerForm(f => ({ ...f, periods: v }))}
+          keyboardType="numeric"
+        />
+
+        <Text style={styles.formLabel}>Area:</Text>
+        <Picker
+          selectedValue={customerForm.area_id}
+          onValueChange={v => setCustomerForm(f => ({ ...f, area_id: v }))}
+          style={styles.input}
+        >
+          <Picker.Item label="Select Area" value="" />
+          {allAreas.map(area => (
+            <Picker.Item key={area.id} label={area.area_name} value={area.id} />
+          ))}
+        </Picker>
+
+        <Text style={styles.formLabel}>Landmark:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Landmark (optional)"
+          value={customerForm.landmark}
+          onChangeText={v => setCustomerForm(f => ({ ...f, landmark: v }))}
+        />
+
+        <Text style={styles.formLabel}>Address:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Address (optional)"
+          value={customerForm.address}
+          onChangeText={v => setCustomerForm(f => ({ ...f, address: v }))}
+        />
+
+        <Text style={styles.formLabel}>Remarks:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Remarks (optional)"
+          value={customerForm.remarks}
+          onChangeText={v => setCustomerForm(f => ({ ...f, remarks: v }))}
+          multiline
+          numberOfLines={3}
+        />
+      </ScrollView>
+    </AdminModal>
+  );
+
   const renderGroupModal = () => (
     <AdminModal
       visible={showGroupModal}
@@ -2618,7 +2893,10 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             onChangeText={setCustomerDetailSearchQuery}
           />
 
-          <View style={{flexDirection: 'row'}}>
+          <View style={{flexDirection: 'row', marginBottom: 10}}>
+            <TouchableOpacity style={[styles.addButton, {flex: 1, marginRight: 10}]} onPress={handleAddCustomer}>
+              <Text style={styles.addButtonText}>+ Add Customer</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.addButton, {flex: 1}]} onPress={() => {
               if (!selectedCustomerAreaId) {
                 Alert.alert('No Area Selected', 'Please select an area first before uploading transactions.');
@@ -2706,6 +2984,7 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             contentContainerStyle={styles.listContainer}
           />
           {renderGroupModal()}
+          {renderCustomerModal()}
         </View>
       )}
 

@@ -163,6 +163,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
           setLatitude(data.latitude || null);
           setLongitude(data.longitude || null);
           setRemarks(data.remarks || '');
+          setLandmark(data.landmark || '');
+          setAddress(data.address || '');
           setAmountGiven(data.amount_given ? String(data.amount_given) : '');
           setRepaymentFrequency(data.repayment_frequency || '');
           setRepaymentAmount(data.repayment_amount ? String(data.repayment_amount) : '');
@@ -207,6 +209,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
   const [remarks, setRemarks] = useState('');
+  const [landmark, setLandmark] = useState('');
+  const [address, setAddress] = useState('');
   const [amountGiven, setAmountGiven] = useState('');
   const [daysToComplete, setDaysToComplete] = useState('');
   const [advanceAmount, setAdvanceAmount] = useState('');
@@ -1136,6 +1140,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
     setDaysToComplete('');
     setAdvanceAmount('');
     setLateFee('');
+    setLandmark('');
+    setAddress('');
     setRepaymentFrequency('');
     setRepaymentAmount('');
     setStartDate('');
@@ -1541,6 +1547,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
     setLatitude(item.latitude);
     setLongitude(item.longitude);
     setRemarks(item.remarks);
+    setLandmark(item.landmark || '');
+    setAddress(item.address || '');
     setAmountGiven(item.amount_given ? String(item.amount_given) : '');
     setRepaymentFrequency(item.repayment_frequency || '');
     // Filter plan options based on the customer's repayment frequency
@@ -1721,6 +1729,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
     latitude: typeof lat === 'number' ? lat : null,
     longitude: typeof lon === 'number' ? lon : null,
     remarks: remarks ? remarks.trim() : null,
+    landmark: landmark ? landmark.trim() : null,
+    address: address ? address.trim() : null,
     amount_given: parseFloat(amountGiven) || 0,
     repayment_frequency: repaymentFrequency,
     repayment_plan_id: Number(selectedPlanId),
@@ -1889,6 +1899,8 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       latitude,
       longitude,
       remarks,
+      landmark,
+      address,
       amount_given: Number(amountGiven),
       repayment_frequency: repaymentFrequency,
       repayment_plan_id: Number(selectedPlanId),
@@ -2179,13 +2191,39 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
               />
 
               <Text style={styles.sectionHeader}>Other</Text>
-              <Text style={styles.formLabel}>Area</Text>
-              <Picker selectedValue={areaId} onValueChange={setAreaId} style={styles.formPicker}>
-                <Picker.Item label="Select Area" value={null} />
-                  {areas.map(area => <Picker.Item key={area.id} label={area.area_name} value={area.id} />)}
-              </Picker>
-              <Text style={styles.formLabel}>Remarks</Text>
-              <TextInput value={remarks} onChangeText={setRemarks} style={styles.input} multiline numberOfLines={3} />
+        <Text style={styles.formLabel}>Area:</Text>
+        <Picker
+          selectedValue={areaId}
+          onValueChange={(itemValue) => setAreaId(itemValue)}
+          style={[styles.input, isMissing('Area') && styles.inputError]}
+          enabled={!isReadOnly}
+        >
+          <Picker.Item label="Select Area" value={null} />
+          {areas.map(area => (
+            <Picker.Item key={area.id} label={area.area_name} value={area.id} />
+          ))}
+        </Picker>
+
+        <Text style={styles.formLabel}>Landmark:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Landmark (optional)"
+          value={landmark}
+          onChangeText={setLandmark}
+          editable={!isReadOnly}
+        />
+
+        <Text style={styles.formLabel}>Address:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Address (optional)"
+          value={address}
+          onChangeText={setAddress}
+          editable={!isReadOnly}
+        />
+
+        <Text style={styles.formLabel}>Remarks:</Text>
+        <TextInput value={remarks} onChangeText={setRemarks} style={styles.input} multiline numberOfLines={3} />
               {missingFields.length > 0 && (
                 <Text style={{ color: 'red', marginBottom: 8 }}>All financial fields are mandatory. Please fill the highlighted fields.</Text>
               )}
