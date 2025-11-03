@@ -227,13 +227,11 @@ export default function App() {
           console.log('onAuthStateChange event:', _event);
           console.log('onAuthStateChange session:', session);
           if (session) {
-            await SecureStore.setItemAsync('userSession', JSON.stringify(session));
             setSession(session);
             if (session.user.id !== userProfile?.id) {
               await loadUserProfile(session.user.id);
             }
           } else {
-            await SecureStore.deleteItemAsync('userSession');
             setSession(null);
             setUserProfile(null);
             // Stop tracking when user logs out
@@ -302,7 +300,6 @@ export default function App() {
 
   const handleAuthSuccess = async (sessionData) => {
     console.log('handleAuthSuccess: sessionData:', sessionData); // Log sessionData here
-    await SecureStore.setItemAsync('userSession', JSON.stringify(sessionData));
     setSession(sessionData);
     const profile = await loadUserProfile(sessionData.user.id);
     if (profile?.location_status === 1) {
