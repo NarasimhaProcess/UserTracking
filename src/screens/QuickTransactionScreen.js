@@ -563,18 +563,18 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
 
     setLoading(true);
     const transaction = {
-      id: uuidv4(), // Generate a unique ID for offline storage
+      id: uuidv4(),
       customer_id: selectedCustomer.id,
       amount: parseFloat(amount),
       remarks: remarks,
       payment_mode: paymentType,
       upi_image: paymentType === 'upi' ? paymentProofImage : null,
       user_id: user.id,
-      area_id: selectedAreaId, // Add area_id here
+      area_id: selectedAreaId,
       transaction_type: 'repayment',
       latitude: user.latitude,
       longitude: user.longitude,
-      created_at: new Date().toISOString(), // Add created_at for offline transactions
+      created_at: new Date().toISOString(),
     };
 
     if (!await NetInfoService.isNetworkAvailable()) {
@@ -582,30 +582,29 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       Alert.alert('Offline', 'Transaction saved locally and will be synced when you are back online.');
       setAmount('');
       setRemarks('');
-      setLoading(false); // Stop loading here as no network operation
-      fetchTransactions(selectedCustomer.id); // Refresh the list after saving offline, for the selected customer
-      handleCustomerSelect(selectedCustomer.id); // Refresh customer amount details
+      setLoading(false);
+      fetchTransactions(selectedCustomer.id);
+      handleCustomerSelect(selectedCustomer.id);
+      navigation.goBack();
     } else {
       try {
-        // Remove the temporary id before sending to Supabase
         const { id, ...transactionToSync } = transaction;
         const { error } = await supabase
           .from('transactions')
           .insert(transactionToSync);
 
         if (error) {
-          // console.error('Supabase transaction insert error:', error);
           Alert.alert('Error', 'Failed to add transaction: ' + error.message);
         } else {
           Alert.alert('Success', 'Transaction added successfully!');
           setAmount('');
           setRemarks('');
-          fetchTransactions(selectedCustomer.id); // Refresh the list after saving online, for the selected customer
-          handleCustomerSelect(selectedCustomer.id); // Refresh customer amount details
+          fetchTransactions(selectedCustomer.id);
+          handleCustomerSelect(selectedCustomer.id);
+          navigation.goBack();
         }
       } catch (error) {
         Alert.alert('Error', 'Failed to add transaction.');
-        // console.error('Transaction add error:', error);
       } finally {
         setLoading(false);
       }

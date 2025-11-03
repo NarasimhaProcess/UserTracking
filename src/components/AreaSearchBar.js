@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   TextInput,
@@ -6,27 +6,38 @@ import {
   TouchableOpacity,
   Text,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
+import { debounce } from 'lodash';
 
 export default function AreaSearchBar({ areas, onAreaSelect, selectedAreaName, onChangeText }) {
   const [query, setQuery] = useState(selectedAreaName || '');
   const [suggestions, setSuggestions] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setQuery(selectedAreaName || '');
   }, [selectedAreaName]);
 
+  const debouncedSearch = useCallback(
+    debounce((text) => {
+      setLoading(true);
+      if (text) {
+        const filteredAreas = areas.filter(area =>
+          area.area_name.toLowerCase().includes(text.toLowerCase())
+        );
+        setSuggestions(filteredAreas);
+      } else {
+        setSuggestions(areas);
+      }
+      setLoading(false);
+    }, 300),
+    [areas]
+  );
+
   const handleInputChange = (text) => {
     setQuery(text);
-    // onChangeText(text); // Removed as it's not always provided by parent
-    if (text) {
-      const filteredAreas = areas.filter(area =>
-        area.area_name.toLowerCase().includes(text.toLowerCase())
-      );
-      setSuggestions(filteredAreas);
-    } else {
-      setSuggestions(areas); // Show all areas if search text is empty
-    }
+    debouncedSearch(text);
   };
 
   useEffect(() => {
@@ -54,6 +65,7 @@ export default function AreaSearchBar({ areas, onAreaSelect, selectedAreaName, o
         value={query}
         onChangeText={handleInputChange}
       />
+      {loading && <ActivityIndicator />}
       <FlatList
         style={[styles.suggestionsList, suggestions.length === 0 && { height: 0 }]} // Hide when no suggestions
         data={suggestions}
@@ -81,7 +93,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   suggestionsList: {
-    maxHeight: 150,
     borderWidth: 1,
     borderColor: '#E5E5EA',
     borderRadius: 8,

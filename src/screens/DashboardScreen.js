@@ -30,6 +30,8 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 
+import { debounce } from 'lodash';
+
 const getDayName = () => {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const d = new Date();
@@ -40,7 +42,6 @@ const getCurrentTime = () => {
   const d = new Date();
   const hours = d.getHours().toString().padStart(2, '0');
   const minutes = d.getMinutes().toString().padStart(2, '0');
-  // Assuming DB time format is HH:MM:SS or HH:MM. Using HH:MM for comparison.
   return `${hours}:${minutes}`;
 };
 
@@ -80,8 +81,7 @@ export default function DashboardScreen({ user, userProfile }) {
   const [areaCurrentBalance, setAreaCurrentBalance] = useState(0);
   const [totalAmountGivenPending, setTotalAmountGivenPending] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
-
-  const debounceTimeout = useRef(null);
+  const [searching, setSearching] = useState(false);
 
   const customerListRef = useRef(customerList);
 
@@ -89,20 +89,24 @@ export default function DashboardScreen({ user, userProfile }) {
     customerListRef.current = customerList;
   }, [customerList]);
 
-  const handleSearchChange = useCallback((text) => {
-    setCustomerSearchQuery(text);
-    if (debounceTimeout.current) {
-      clearTimeout(debounceTimeout.current);
-    }
-    debounceTimeout.current = setTimeout(() => {
+  const debouncedSearch = useCallback(
+    debounce((text) => {
+      setSearching(true);
       const filtered = customerListRef.current.filter(customer => 
         customer.name.toLowerCase().includes(text.toLowerCase()) ||
         customer.mobile.includes(text) ||
         (customer.book_no && customer.book_no.toLowerCase().includes(text.toLowerCase()))
       );
       setDisplayedCustomerList(filtered);
-    }, 500); // 500ms debounce delay
-  }, []);
+      setSearching(false);
+    }, 500),
+    []
+  );
+
+  const handleSearchChange = (text) => {
+    setCustomerSearchQuery(text);
+    debouncedSearch(text);
+  };
 
   const navigation = useNavigation();
 
@@ -627,12 +631,15 @@ export default function DashboardScreen({ user, userProfile }) {
               </>
             )}
 
-            <TextInput
-              style={[styles.customerSearchInput, { marginHorizontal: 16, marginBottom: 16 }]}
-              placeholder="Search customers by card no., name, or mobile."
-              value={customerSearchQuery}
-              onChangeText={handleSearchChange}
-            />
+            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+              <TextInput
+                style={[styles.customerSearchInput, { marginHorizontal: 16, marginBottom: 16, flex: 1 }]}
+                placeholder="Search customers by card no., name, or mobile."
+                value={customerSearchQuery}
+                onChangeText={handleSearchChange}
+              />
+              {searching && <ActivityIndicator />}
+            </View>
 
             {selectedAreaId && displayedCustomerList.length > 0 && (
               <View style={styles.customerListHeaderContainer}>

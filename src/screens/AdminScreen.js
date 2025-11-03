@@ -1350,6 +1350,11 @@ export default function AdminScreen({ navigation, user, userProfile }) {
             try {
               const customersToInsert = uploadedCustomers
                 .filter(customer => {
+                  // Basic validation for required fields
+                  if (!customer.cardno || !customer.name || !customer.mobile || !customer.area_id) {
+                    console.warn(`Skipping customer due to missing required fields: ${JSON.stringify(customer)}`);
+                    return false;
+                  }
                   const identity = `${customer.name?.toLowerCase()}|${customer.mobile}|${customer.email?.toLowerCase()}`;
                   return !existingCustomerIdentities.has(identity);
                 })
@@ -1409,6 +1414,8 @@ export default function AdminScreen({ navigation, user, userProfile }) {
                     user_id: user.id,
                     repayment_frequency: customer.repayment_frequency,
                     remarks: "bulkupload",
+                    landmark: customer.landmark || null,
+                    address: customer.address || null,
                   };
                 });
 
@@ -1485,8 +1492,8 @@ export default function AdminScreen({ navigation, user, userProfile }) {
   };
 
   const renderCustomerUploadModal = () => {
-    const csvColumnsDisplay = "name, mobile, email, cardno, customer_type, start_date (YYYY-MM-DD), amount_given, repayment_amount, repayment_frequency, periods";
-    const csvColumnsCopy = "name,mobile,email,cardno,customer_type,start_date,amount_given,repayment_amount,repayment_frequency,periods";
+    const csvColumnsDisplay = "name, mobile, email, cardno, customer_type, start_date (YYYY-MM-DD), amount_given, repayment_amount, repayment_frequency, periods, landmark, address";
+    const csvColumnsCopy = "name,mobile,email,cardno,customer_type,start_date,amount_given,repayment_amount,repayment_frequency,periods,landmark,address";
     const copyToClipboard = () => {
       Clipboard.setString(csvColumnsCopy);
       Alert.alert('Copied', 'CSV columns copied to clipboard.');

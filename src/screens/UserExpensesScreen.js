@@ -158,18 +158,76 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
     }
   };
 
+import { debounce } from 'lodash';
+
+const getDayName = () => {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const d = new Date();
+  return days[d.getDay()];
+};
+
+const getCurrentTime = () => {
+  const d = new Date();
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
+export default function UserExpensesScreen({ navigation, user, userProfile }) {
+  // User Expenses State
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseType, setExpenseType] = useState('');
+  const [otherExpenseType, setOtherExpenseType] = useState('');
+  const [expenseRemarks, setExpenseRemarks] = useState('');
+  const [userExpenses, setUserExpenses] = useState([]);
+  const [filteredUserExpenses, setFilteredUserExpenses] = useState([]);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [showExpenseCalculatorModal, setShowExpenseCalculatorModal] = useState(false);
+  const [calculatorTarget, setCalculatorTarget] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [dates, setDates] = useState([]);
+
+  // New states for Area Search
+  const [allAreas, setAllAreas] = useState([]);
+  const [selectedAreaId, setSelectedAreaId] = useState(null);
+  const [areaSearchText, setAreaSearchText] = useState('');
+  const [filteredAreas, setFilteredAreas] = useState([]);
+  const [showAreaDropdown, setShowAreaDropdown] = useState(false);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const today = new Date();
+    const pastThreeDays = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 3);
+    const dates = [];
+    for (let dt = pastThreeDays; dt <= today; dt.setDate(dt.getDate() + 1)) {
+      dates.push(new Date(dt));
+    }
+    setDates(dates);
+    setSelectedDate(new Date()); // Keep defaulting to today
+    fetchAreas(); // Fetch areas on component mount
+  }, []);
+
+  const debouncedSearch = useCallback(
+    debounce((text) => {
+      setSearching(true);
+      if (text) {
+        const lowerCaseSearchText = text.toLowerCase();
+        const filtered = allAreas.filter(area =>
+          area.area_name.toLowerCase().includes(lowerCaseSearchText)
+        );
+        setFilteredAreas(filtered);
+      } else {
+        setFilteredAreas(allAreas);
+      }
+      setSearching(false);
+    }, 300),
+    [allAreas]
+  );
+
   // Filter areas based on search text
   useEffect(() => {
-    if (areaSearchText) {
-      const lowerCaseSearchText = areaSearchText.toLowerCase();
-      const filtered = allAreas.filter(area =>
-        area.area_name.toLowerCase().includes(lowerCaseSearchText)
-      );
-      setFilteredAreas(filtered);
-    } else {
-      setFilteredAreas(allAreas); // Show all areas if search text is empty
-    }
-  }, [areaSearchText, allAreas]);
+    debouncedSearch(areaSearchText);
+  }, [areaSearchText, debouncedSearch]);
 
     useEffect(() => {
 
@@ -501,14 +559,17 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
             <Text style={styles.sectionHeader}>Add New Expense</Text>
 
             <Text style={styles.inputLabel}>Area:</Text>
-            <AreaSearchBar
-              areas={allAreas}
-              onAreaSelect={(id, name) => {
-                setSelectedAreaId(id);
-                setAreaSearchText(name);
-              }}
-              selectedAreaName={areaSearchText}
-            />
+            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+              <AreaSearchBar
+                areas={allAreas}
+                onAreaSelect={(id, name) => {
+                  setSelectedAreaId(id);
+                  setAreaSearchText(name);
+                }}
+                selectedAreaName={areaSearchText}
+              />
+              {searching && <ActivityIndicator />}
+            </View>
 
             <Text style={styles.inputLabel}>Expense Amount</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
