@@ -216,8 +216,12 @@ export default function App() {
   // ---------------- Initialization ----------------
   useEffect(() => {
     const initializeApp = async () => {
-      await loadSession();
-      
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      if (session) {
+        await loadUserProfile(session.user.id);
+      }
+
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (_event, session) => {
           console.log('onAuthStateChange event:', _event);
@@ -225,7 +229,9 @@ export default function App() {
           if (session) {
             await SecureStore.setItemAsync('userSession', JSON.stringify(session));
             setSession(session);
-            await loadUserProfile(session.user.id);
+            if (session.user.id !== userProfile?.id) {
+              await loadUserProfile(session.user.id);
+            }
           } else {
             await SecureStore.deleteItemAsync('userSession');
             setSession(null);
@@ -243,20 +249,7 @@ export default function App() {
     initializeApp();
   }, []);
 
-  const loadSession = async () => {
-    try {
-      const sessionData = await SecureStore.getItemAsync('userSession');
-      if (sessionData) {
-        const parsedSession = JSON.parse(sessionData);
-        setSession(parsedSession);
-        if (parsedSession?.user?.id) {
-          await loadUserProfile(parsedSession.user.id);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load session from secure store', error);
-    }
-  };
+
 
   const loadUserProfile = async (userId) => {
     const { data } = await supabase.from('users').select('*').eq('id', userId).single();

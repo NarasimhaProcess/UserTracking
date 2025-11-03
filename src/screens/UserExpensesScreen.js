@@ -63,6 +63,7 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
   const [selectedAreaId, setSelectedAreaId] = useState(null);
   const [areaSearchText, setAreaSearchText] = useState('');
   const [showAreaDropdown, setShowAreaDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const fetchAreas = useCallback(async () => {
     // Fetch all areas initially, regardless of search text
@@ -74,7 +75,7 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
       if (isConnected) {
         try {
           let areaList = [];
-          if (user?.user_type?.toLowerCase() === 'superadmin' || user?.user_type?.toLowerCase() === 'admin') {
+          if (userProfile?.user_type?.toLowerCase() === 'superadmin' || userProfile?.user_type?.toLowerCase() === 'admin') {
             const { data, error } = await supabase
               .from('area_master')
               .select('id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter')
