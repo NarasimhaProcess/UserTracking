@@ -10,34 +10,19 @@ import {
 } from 'react-native';
 import { debounce } from 'lodash';
 
-export default function AreaSearchBar({ areas, onAreaSelect, selectedAreaName, onChangeText }) {
+export default function AreaSearchBar({ areas, onAreaSelect, selectedAreaName, onChangeText, style }) {
   const [query, setQuery] = useState(selectedAreaName || '');
   const [suggestions, setSuggestions] = useState([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setQuery(selectedAreaName || '');
   }, [selectedAreaName]);
 
-  const debouncedSearch = useCallback(
-    debounce((text) => {
-      setLoading(true);
-      if (text) {
-        const filteredAreas = areas.filter(area =>
-          area.area_name.toLowerCase().includes(text.toLowerCase())
-        );
-        setSuggestions(filteredAreas);
-      } else {
-        setSuggestions(areas);
-      }
-      setLoading(false);
-    }, 300),
-    [areas]
-  );
-
   const handleInputChange = (text) => {
     setQuery(text);
-    debouncedSearch(text);
+    if (onChangeText) {
+      onChangeText(text);
+    }
   };
 
   useEffect(() => {
@@ -49,6 +34,9 @@ export default function AreaSearchBar({ areas, onAreaSelect, selectedAreaName, o
     } else {
       setSuggestions(areas);
     }
+    console.log('areas:', areas);
+    console.log('query:', query);
+    console.log('suggestions:', suggestions);
   }, [query, areas]);
 
   const handleSelectArea = (area) => {
@@ -58,14 +46,13 @@ export default function AreaSearchBar({ areas, onAreaSelect, selectedAreaName, o
   };
 
   return (
-    <View>
+    <View style={style}>
       <TextInput
         style={styles.input}
         placeholder="Search Area..."
         value={query}
         onChangeText={handleInputChange}
       />
-      {loading && <ActivityIndicator />}
       <FlatList
         style={[styles.suggestionsList, suggestions.length === 0 && { height: 0 }]} // Hide when no suggestions
         data={suggestions}

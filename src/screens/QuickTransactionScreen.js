@@ -582,10 +582,10 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
       Alert.alert('Offline', 'Transaction saved locally and will be synced when you are back online.');
       setAmount('');
       setRemarks('');
+      setPaymentProofImage(null); // Clear image for next transaction
       setLoading(false);
       fetchTransactions(selectedCustomer.id);
       handleCustomerSelect(selectedCustomer.id);
-      navigation.goBack();
     } else {
       try {
         const { id, ...transactionToSync } = transaction;
@@ -599,9 +599,9 @@ export default function QuickTransactionScreen({ navigation, user, route }) {
           Alert.alert('Success', 'Transaction added successfully!');
           setAmount('');
           setRemarks('');
+          setPaymentProofImage(null); // Clear image for next transaction
           fetchTransactions(selectedCustomer.id);
           handleCustomerSelect(selectedCustomer.id);
-          navigation.goBack();
         }
       } catch (error) {
         Alert.alert('Error', 'Failed to add transaction.');

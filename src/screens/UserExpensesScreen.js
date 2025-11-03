@@ -46,13 +46,105 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
   const [calculatorTarget, setCalculatorTarget] = useState(null); // To know which field to update
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [dates, setDates] = useState([]);
+  const [searchText, setSearchText] = useState('');
+
+  useEffect(() => {
+    const filtered = userExpenses.filter(expense =>
+      expense.expense_type.toLowerCase().includes(searchText.toLowerCase()) ||
+      (expense.remarks && expense.remarks.toLowerCase().includes(searchText.toLowerCase())) ||
+      (expense.amount && expense.amount.toString().toLowerCase().includes(searchText.toLowerCase())) ||
+      (expense.area_master && expense.area_master.area_name.toLowerCase().includes(searchText.toLowerCase()))
+    );
+    setFilteredUserExpenses(filtered);
+  }, [searchText, userExpenses]);
 
   // New states for Area Search
   const [allAreas, setAllAreas] = useState([]);
   const [selectedAreaId, setSelectedAreaId] = useState(null);
   const [areaSearchText, setAreaSearchText] = useState('');
-  const [filteredAreas, setFilteredAreas] = useState([]);
   const [showAreaDropdown, setShowAreaDropdown] = useState(false);
+
+  const fetchAreas = useCallback(async () => {
+    // Fetch all areas initially, regardless of search text
+    if (allAreas.length === 0) {
+      setLoading(true);
+      const isConnected = await NetInfoService.isNetworkAvailable();
+      let fetchedAreas = [];
+
+      if (isConnected) {
+        try {
+          let areaList = [];
+          if (user?.user_type?.toLowerCase() === 'superadmin' || user?.user_type?.toLowerCase() === 'admin') {
+            const { data, error } = await supabase
+              .from('area_master')
+              .select('id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter')
+              .order('area_name', { ascending: true });
+            if (error) {
+              Alert.alert('Error', 'Failed to load all areas for superadmin.');
+            } else {
+              areaList = data || [];
+            }
+          } else {
+            const currentDayName = getDayName();
+            const currentTime = getCurrentTime();
+
+            const { data: userGroupsData, error: userGroupsError } = await supabase
+              .from('user_groups')
+              .select('groups(group_areas(area_master(id, area_name, enable_day, day_of_week, start_time_filter, end_time_filter)))')
+              .eq('user_id', user?.id);
+
+            if (userGroupsError) {
+              Alert.alert('Error', 'Failed to load areas based on user groups.');
+            } else {
+              const areaIdSet = new Set();
+              const areas = userGroupsData
+                .flatMap(userGroup => userGroup.groups?.group_areas || [])
+                .map(groupArea => groupArea.area_master)
+                .filter(Boolean);
+
+              areas.forEach(area => {
+                if (area && !areaIdSet.has(area.id)) {
+                  if (user?.user_type === 'user') {
+                    const areaStartTime = area.start_time_filter ? area.start_time_filter.substring(0, 5) : '';
+                    const areaEndTime = area.end_time_filter ? area.end_time_filter.substring(0, 5) : '';
+
+                    const isTimeFiltered = (
+                      !area.enable_day ||
+                      (area.enable_day &&
+                      area.day_of_week === currentDayName &&
+                      (
+                        (areaStartTime === '00:00' && areaEndTime === '00:00') ||
+                        (areaStartTime <= areaEndTime && currentTime >= areaStartTime && currentTime <= areaEndTime) ||
+                        (areaStartTime > areaEndTime && (currentTime >= areaStartTime || currentTime <= areaEndTime))
+                      ))
+                    );
+
+                    if (isTimeFiltered) {
+                      areaIdSet.add(area.id);
+                      areaList.push(area);
+                    }
+                  } else {
+                    areaIdSet.add(area.id);
+                    areaList.push(area);
+                  }
+                }
+              });
+            }
+          }
+          fetchedAreas = areaList;
+          await OfflineStorageService.saveOfflineAreas(areaList);
+        } catch (error) {
+          Alert.alert('Error', 'Failed to load initial data online.');
+        }
+      } else {
+        fetchedAreas = await OfflineStorageService.getOfflineAreas();
+        Alert.alert('Offline Mode', 'Loading areas from offline storage.');
+      }
+
+      setAllAreas(fetchedAreas);
+      setLoading(false);
+    }
+  }, [user, allAreas.length, userProfile]); // Add allAreas.length to dependencies
 
   useEffect(() => {
     const today = new Date();
@@ -64,7 +156,7 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
     setDates(dates);
     setSelectedDate(new Date()); // Keep defaulting to today
     fetchAreas(); // Fetch areas on component mount
-  }, []);
+  }, [fetchAreas]); // Add fetchAreas to dependency array
 
     useEffect(() => {
 
@@ -398,6 +490,7 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
             <Text style={styles.inputLabel}>Area:</Text>
             <View style={{flexDirection: 'row', alignItems: 'center'}}>
               <AreaSearchBar
+                style={{ flex: 1 }}
                 areas={allAreas}
                 onAreaSelect={(id, name) => {
                   setSelectedAreaId(id);
@@ -405,7 +498,6 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
                 }}
                 selectedAreaName={areaSearchText}
               />
-              {searching && <ActivityIndicator />}
             </View>
 
             <Text style={styles.inputLabel}>Expense Amount</Text>
@@ -461,6 +553,11 @@ export default function UserExpensesScreen({ navigation, user, userProfile }) {
               <Text style={styles.buttonText}>Add Expense</Text>
             </TouchableOpacity>
             <Text style={styles.sectionHeader}>Expense List</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Search Expenses..."
+              onChangeText={text => setSearchText(text)}
+            />
             <Text style={styles.totalExpensesText}>{`Total Spent: ₹${totalExpenses.toFixed(2)}`}</Text>
             <View style={styles.expenseHeader}>
               <Text style={styles.headerText}>Amount</Text>
