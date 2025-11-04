@@ -86,20 +86,21 @@ export async function registerForPushNotificationsAsync(user) {
     
     // 3. Save token to Supabase
     if (user) {
-      console.log("Saving token to Supabase:", pushToken);
+      console.log(`Saving token to Supabase for user ${user.id}:`, pushToken);
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('user_push_tokens')
         .upsert(
           { user_id: user.id, push_token: pushToken },
           { onConflict: ['push_token'] }
-        );
+        )
+        .select();
 
       if (error) {
         console.error("❌ Error saving token to Supabase:", error);
         Alert.alert("Supabase Error", error.message);
       } else {
-        console.log("✅ Push token saved to Supabase successfully.");
+        console.log("✅ Push token saved to Supabase successfully:", data);
       }
     } else {
       console.log("ℹ️ No user provided, skipping Supabase save.");

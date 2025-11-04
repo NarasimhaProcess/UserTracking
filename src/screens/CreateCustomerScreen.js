@@ -499,15 +499,16 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
       }
     }
 
+    // Area filter (if a specific area is selected in the UI)
+    if (areaId) {
+      query = query.eq('area_id', areaId);
+    }
+
     query = query
       .order('created_at', { ascending: false });
 
     const { data, error } = await query;
     let filtered = data || [];
-    // Area filter (if a specific area is selected in the UI)
-    if (areaId) {
-      filtered = filtered.filter(c => c.area_id === areaId);
-    }
     // Customer search filter
     if (search) {
       filtered = filtered.filter(c =>
@@ -521,7 +522,7 @@ export default function CreateCustomerScreen({ user, userProfile, route = {} }) 
   }, [user, search, areaSearch, areas, areaId, accessibleUserIds, accessibleAreaIds, userProfile]); // Dependencies for useCallback
 
   useEffect(() => {
-    if (user?.id && areaId) fetchCustomers();
+    if (user?.id) fetchCustomers();
   }, [user?.id, areaId, fetchCustomers]);
 
   // Fetch repayment plans on mount and extract unique frequencies

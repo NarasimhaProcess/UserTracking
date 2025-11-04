@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.131.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { Expo } from 'https://esm.sh/expo-server-sdk@3.6.0'
+import { Expo } from 'npm:expo-server-sdk'
 
 const expo = new Expo();
 

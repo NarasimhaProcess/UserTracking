@@ -132,6 +132,8 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     longitudeDelta: 0.01,
   });
   const [notificationStatus, setNotificationStatus] = useState('undetermined'); // New state
+  const [notificationTitle, setNotificationTitle] = useState('Test Title');
+  const [notificationMessage, setNotificationMessage] = useState('This is a test notification.');
 
   const checkNotificationStatus = useCallback(async () => {
     const { status } = await Notifications.getPermissionsAsync();
@@ -369,6 +371,35 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
     }
   };
 
+  const handleSendTestNotification = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_push_tokens')
+        .select('push_token')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error || !data) {
+        Alert.alert('Error', 'Failed to get push token. Please make sure you have enabled notifications.');
+        return;
+      }
+
+      const { push_token } = data;
+
+      const { data: result, error: functionError } = await supabase.functions.invoke('send-test-notification', {
+        body: JSON.stringify({ push_token, title: notificationTitle, message: notificationMessage }),
+      });
+
+      if (functionError) {
+        Alert.alert('Error', `Failed to send notification: ${functionError.message}`);
+      } else {
+        Alert.alert('Success', 'Test notification sent successfully!');
+      }
+    } catch (error) {
+      Alert.alert('Error', `Failed to send notification: ${error.message}`);
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
       {/* Location Icon Button at Top */}
@@ -505,6 +536,28 @@ export default function ProfileScreen({ navigation, user, userProfile, reloadUse
           
           <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
             <Text style={styles.deleteButtonText}>Delete Account</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Test Notification Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Test Notifications</Text>
+        <View style={styles.settingsCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Notification Title"
+            value={notificationTitle}
+            onChangeText={setNotificationTitle}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Notification Message"
+            value={notificationMessage}
+            onChangeText={setNotificationMessage}
+          />
+          <TouchableOpacity style={styles.actionButton} onPress={handleSendTestNotification}>
+            <Text style={styles.actionButtonText}>Send Test Notification</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -733,5 +786,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+    fontSize: 16,
   },
 });
