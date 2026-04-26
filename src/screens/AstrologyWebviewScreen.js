@@ -1,6 +1,6 @@
 
 import React, { useRef } from 'react';
-import { WebView } from 'react-native-webview';
+import WebView from '../components/WebView';
 import { useFocusEffect } from '@react-navigation/native';
 
 const AstrologyWebviewScreen = () => {

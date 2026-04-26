@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { WebView } from 'react-native-webview';
+import WebView from '../components/WebView';
 
 const { width } = Dimensions.get('window');
 

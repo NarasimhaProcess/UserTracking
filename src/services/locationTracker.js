@@ -10,65 +10,67 @@ import NetInfo from '@react-native-community/netinfo';
 
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
 
-// Define the background task
-TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
-  if (error) {
-    console.error('Background location task error:', error);
-    return;
-  }
-  if (data) {
-    const { locations } = data;
-    const latestLocation = locations[0];
-    console.log('📍 Background location update received:', latestLocation.coords);
-
-    // Retrieve user info from storage for background updates
-    const userId = await OfflineStorageService.getUserId();
-    const userEmail = await OfflineStorageService.getUserEmail();
-
-    if (!userId || !userEmail) {
-      console.warn('User ID or Email not found in background task. Cannot save location.');
+// Define the background task - Only for Native
+if (Platform.OS !== 'web') {
+  TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
+    if (error) {
+      console.error('Background location task error:', error);
       return;
     }
+    if (data) {
+      const { locations } = data;
+      const latestLocation = locations[0];
+      console.log('📍 Background location update received:', latestLocation.coords);
 
-    const { coords, timestamp } = latestLocation;
-    const deviceName = Device.deviceName || 'MobileApp';
-    const deviceId = Application.androidId || 'unknownid';
-    const deviceInfo = `${deviceName}_${deviceId}`;
+      // Retrieve user info from storage for background updates
+      const userId = await OfflineStorageService.getUserId();
+      const userEmail = await OfflineStorageService.getUserEmail();
 
-    const locationData = {
-      user_id: userId,
-      user_email: userEmail,
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      accuracy: coords.accuracy,
-      timestamp: new Date(timestamp).toISOString(),
-      device_name: deviceInfo,
-    };
-
-    const isNetworkAvailable = await NetInfoService.isNetworkAvailable();
-
-    if (isNetworkAvailable) {
-      try {
-        const { error: insertError } = await supabase
-          .from('location_history')
-          .insert([locationData]);
-
-        if (insertError) {
-          console.error('❌ Background: Error inserting into location_history:', insertError);
-          await OfflineStorageService.saveOfflineLocation(locationData); // Save if online insert fails
-        } else {
-          console.log('✅ Background: Location successfully stored in location_history table.');
-        }
-      } catch (e) {
-        console.error('❌ Background: Exception during Supabase insert:', e);
-        await OfflineStorageService.saveOfflineLocation(locationData); // Save if exception occurs
+      if (!userId || !userEmail) {
+        console.warn('User ID or Email not found in background task. Cannot save location.');
+        return;
       }
-    } else {
-      await OfflineStorageService.saveOfflineLocation(locationData);
-      console.log('💾 Background: Storing location offline due to no network.');
+
+      const { coords, timestamp } = latestLocation;
+      const deviceName = Device.deviceName || 'MobileApp';
+      const deviceId = Application.androidId || 'unknownid';
+      const deviceInfo = `${deviceName}_${deviceId}`;
+
+      const locationData = {
+        user_id: userId,
+        user_email: userEmail,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        timestamp: new Date(timestamp).toISOString(),
+        device_name: deviceInfo,
+      };
+
+      const isNetworkAvailable = await NetInfoService.isNetworkAvailable();
+
+      if (isNetworkAvailable) {
+        try {
+          const { error: insertError } = await supabase
+            .from('location_history')
+            .insert([locationData]);
+
+          if (insertError) {
+            console.error('❌ Background: Error inserting into location_history:', insertError);
+            await OfflineStorageService.saveOfflineLocation(locationData); // Save if online insert fails
+          } else {
+            console.log('✅ Background: Location successfully stored in location_history table.');
+          }
+        } catch (e) {
+          console.error('❌ Background: Exception during Supabase insert:', e);
+          await OfflineStorageService.saveOfflineLocation(locationData); // Save if exception occurs
+        }
+      } else {
+        await OfflineStorageService.saveOfflineLocation(locationData);
+        console.log('💾 Background: Storing location offline due to no network.');
+      }
     }
-  }
-});
+  });
+}
 
 class LocationTracker {
   constructor() {
@@ -140,7 +142,12 @@ class LocationTracker {
       // Check and request permissions first
       console.log('🔐 Checking location permissions...');
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-      const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+      
+      let backgroundStatus = 'granted'; // Default for web
+      if (Platform.OS !== 'web') {
+        const { status } = await Location.requestBackgroundPermissionsAsync();
+        backgroundStatus = status;
+      }
       
       console.log('📱 Permission status - Foreground:', foregroundStatus, 'Background:', backgroundStatus);
       
@@ -149,7 +156,7 @@ class LocationTracker {
         throw new Error('Foreground location permission not granted');
       }
       
-      if (backgroundStatus !== 'granted') {
+      if (Platform.OS !== 'web' && backgroundStatus !== 'granted') {
         console.error('❌ Background location permission not granted');
         throw new Error('Background location permission not granted');
       }
@@ -192,21 +199,23 @@ class LocationTracker {
       );
       console.log('✅ Foreground tracking started');
 
-      // Start background tracking with custom interval
-      console.log('🎯 Starting background location tracking...');
-      await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: interval * 1000, // use custom interval
-        distanceInterval: 50, // 50 meters
-        foregroundService: {
-          notificationTitle: "Location Tracking",
-          notificationBody: `Tracking your location every ${interval} seconds`,
-          notificationColor: "#007AFF",
-        },
-        activityType: Location.ActivityType.FITNESS,
-        showsBackgroundLocationIndicator: true,
-      });
-      console.log('✅ Background tracking started');
+      // Start background tracking only on native
+      if (Platform.OS !== 'web') {
+        console.log('🎯 Starting background location tracking...');
+        await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: interval * 1000, // use custom interval
+          distanceInterval: 50, // 50 meters
+          foregroundService: {
+            notificationTitle: "Location Tracking",
+            notificationBody: `Tracking your location every ${interval} seconds`,
+            notificationColor: "#007AFF",
+          },
+          activityType: Location.ActivityType.FITNESS,
+          showsBackgroundLocationIndicator: true,
+        });
+        console.log('✅ Background tracking started');
+      }
 
       this.isTracking = true;
       console.log(`🎉 Location tracking started - recording every ${interval} seconds`);
@@ -234,8 +243,10 @@ class LocationTracker {
         this.watchId = null;
       }
 
-      // Stop background tracking
-      await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+      // Stop background tracking only on native
+      if (Platform.OS !== 'web') {
+        await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+      }
 
       this.isTracking = false;
       

@@ -19,6 +19,11 @@ export async function registerForPushNotificationsAsync(user) {
   console.log('🔔 Notification Service: registerForPushNotificationsAsync called.');
 
   // ✅ Only physical devices and development builds support native push
+  if (Platform.OS === 'web') {
+    console.log("ℹ️ Push notifications are not supported on web in this implementation.");
+    return null;
+  }
+
   if (!Device.isDevice) {
     Alert.alert("Push Token", "❌ Must use physical device for push notifications");
     console.warn("❌ Push notifications require a physical device.");

@@ -6,8 +6,44 @@ const OFFLINE_QUICK_TRANSACTIONS_KEY = 'offline_quick_transactions';
 const OFFLINE_AREAS_KEY = 'offline_areas';
 const OFFLINE_CUSTOMERS_KEY = 'offline_customers';
 const OFFLINE_IMAGES_KEY = 'offline_images';
+const USER_ID_KEY = 'user_id';
+const USER_EMAIL_KEY = 'user_email';
 
 export const OfflineStorageService = {
+  getUserId: async () => {
+    try {
+      return await AsyncStorage.getItem(USER_ID_KEY);
+    } catch (e) {
+      console.error('Error getting user ID', e);
+      return null;
+    }
+  },
+
+  saveUserId: async (userId) => {
+    try {
+      await AsyncStorage.setItem(USER_ID_KEY, userId);
+    } catch (e) {
+      console.error('Error saving user ID', e);
+    }
+  },
+
+  getUserEmail: async () => {
+    try {
+      return await AsyncStorage.getItem(USER_EMAIL_KEY);
+    } catch (e) {
+      console.error('Error getting user email', e);
+      return null;
+    }
+  },
+
+  saveUserEmail: async (userEmail) => {
+    try {
+      await AsyncStorage.setItem(USER_EMAIL_KEY, userEmail);
+    } catch (e) {
+      console.error('Error saving user email', e);
+    }
+  },
+
   getOfflineExpenses: async () => {
     try {
       const jsonValue = await AsyncStorage.getItem(OFFLINE_EXPENSES_KEY);

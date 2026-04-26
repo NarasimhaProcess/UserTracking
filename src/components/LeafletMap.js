@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState, useCallback } from 'react';
-import { WebView } from 'react-native-webview';
+import WebView from './WebView';
 import { StyleSheet, View } from 'react-native';
 
 const SimpleLeafletMap = forwardRef(({ 

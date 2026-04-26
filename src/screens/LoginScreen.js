@@ -70,7 +70,9 @@ export default function LoginScreen({ navigation, route, onAuthSuccess }) {
         }
 
         // After successful login, ask to enable biometrics
-        await promptForBiometrics(data.user.email);
+        if (Platform.OS !== 'web') {
+          await promptForBiometrics(data.user.email);
+        }
       } else {
         Alert.alert('Login Error', 'Could not establish a session.');
       }
@@ -162,7 +164,7 @@ export default function LoginScreen({ navigation, route, onAuthSuccess }) {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>

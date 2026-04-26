@@ -4,7 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, Linking, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import { MaterialIcons } from '@expo/vector-icons';
 import CalculatorModal from './src/components/CalculatorModal';
@@ -12,7 +12,29 @@ import RealtimeCollaboration from './src/components/RealtimeCollaboration';
 import GlobalChatAndPresence from './src/components/GlobalChatAndPresence';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync } from './src/services/notificationService';
-import * as SecureStore from 'expo-secure-store';
+import SecureStoreAdapter from './src/services/SecureStoreAdapter';
+
+// Inject font-face for web icons
+if (Platform.OS === 'web') {
+  const iconFontStyles = `
+    @font-face {
+      font-family: 'MaterialIcons';
+      src: url('https://cdnjs.cloudflare.com/ajax/libs/material-design-icons/3.0.1/iconfont/MaterialIcons-Regular.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'FontAwesome';
+      src: url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/fonts/fontawesome-webfont.ttf') format('truetype');
+    }
+  `;
+  const style = document.createElement('style');
+  style.type = 'text/css';
+  if (style.styleSheet) {
+    style.styleSheet.cssText = iconFontStyles;
+  } else {
+    style.appendChild(document.createTextNode(iconFontStyles));
+  }
+  document.head.appendChild(style);
+}
 
 // Screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -276,7 +298,7 @@ export default function App() {
           .select('group_id')
           .eq('user_id', userId);
 
-        if (userGroupLinks || userGroupLinks.length === 0) {
+        if (userGroupLinkError || !userGroupLinks || userGroupLinks.length === 0) {
           return [];
         }
 
@@ -308,7 +330,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await SecureStore.deleteItemAsync('userSession');
+    await SecureStoreAdapter.removeItem('userSession');
     await supabase.auth.signOut();
   };
 
