@@ -204,6 +204,44 @@ function TabNavigator({ route }) {
 
 
 // ---------------- App ----------------
+const linking = {
+  prefixes: [
+    'https://NarasimhaProcess.github.io/UserTracking',
+    'usertracking://'
+  ],
+  config: {
+    screens: {
+      Main: {
+        path: '',
+        screens: {
+          Dashboard: 'dashboard',
+          Map: 'map',
+          History: 'history',
+          Admin: 'admin',
+          Customers: 'customers',
+          News: {
+            path: 'news',
+            screens: {
+              Newspapers: 'newspapers',
+              Astrology: 'astrology',
+              Marriage: 'marriage',
+              Birthday: 'birthday',
+              Videos: 'videos',
+            },
+          },
+          Profile: 'profile',
+        },
+      },
+      Login: 'login',
+      Signup: 'signup',
+      CustomerMap: 'customer-map',
+      Expenses: 'expenses',
+      QuickTransaction: 'quick-transaction',
+      BankTransaction: 'bank-transaction',
+    },
+  },
+};
+
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState(null);
@@ -445,41 +483,6 @@ export default function App() {
 
       {isAuthenticated && (
         <CalculatorModal isVisible={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} />
-      )}
-
-      {isAuthenticated && user && showRealtimeCollaboration && (
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
-          {memoizedCollaboration}
-        </View>
-      )}
-
-      {isAuthenticated && user && showGlobalChat && (
-        <GlobalChatAndPresence
-          user={user}
-          userProfile={userProfile}
-          selectedGroup={selectedGroup}
-          setSelectedGroup={setSelectedGroup}
-          accessToken={session?.access_token}
-        />
-      )}
-    </NavigationContainer>
-  );
-}
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-  },
-  loadingText: {
-    fontSize: 18,
-    color: '#333333',
-    fontWeight: '500',
-  },
-});
-alculatorModal} onClose={() => setShowCalculatorModal(false)} />
       )}
 
       {isAuthenticated && user && showRealtimeCollaboration && (
