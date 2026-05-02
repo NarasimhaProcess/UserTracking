@@ -74,7 +74,9 @@ export default {
       "policy": "appVersion"
     },
     "sdkVersion": "53.0.0",
-    
+    "experiments": {
+      "baseUrl": "/UserTracking"
+    },
     "extra": {
       SUPABASE_URL: "https://lodjfazrbdxvpengusxn.supabase.co",
       SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvZGpmYXpyYmR4dnBlbmd1c3huIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjI3MDIsImV4cCI6MjA5MzIzODcwMn0.t9yxku6j7-8ugxP_zGsRfjhT3F6P7rKsnX-wDloy_OM",

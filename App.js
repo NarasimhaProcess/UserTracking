@@ -404,7 +404,7 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <StatusBar style="auto" />
       <Stack.Navigator>
         {!isAuthenticated ? (
@@ -445,6 +445,41 @@ export default function App() {
 
       {isAuthenticated && (
         <CalculatorModal isVisible={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} />
+      )}
+
+      {isAuthenticated && user && showRealtimeCollaboration && (
+        <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+          {memoizedCollaboration}
+        </View>
+      )}
+
+      {isAuthenticated && user && showGlobalChat && (
+        <GlobalChatAndPresence
+          user={user}
+          userProfile={userProfile}
+          selectedGroup={selectedGroup}
+          setSelectedGroup={setSelectedGroup}
+          accessToken={session?.access_token}
+        />
+      )}
+    </NavigationContainer>
+  );
+}
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  loadingText: {
+    fontSize: 18,
+    color: '#333333',
+    fontWeight: '500',
+  },
+});
+alculatorModal} onClose={() => setShowCalculatorModal(false)} />
       )}
 
       {isAuthenticated && user && showRealtimeCollaboration && (

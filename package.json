@@ -2,14 +2,14 @@
   "name": "location-tracker-mobile",
   "version": "1.0.0",
   "main": "node_modules/expo/AppEntry.js",
-  "homepage": "https://NarasimhaProcess.github.io/location-tracker-mobile",
+  "homepage": "https://NarasimhaProcess.github.io/UserTracking",
   "scripts": {
     "start": "npx expo start",
     "android": "npx expo start --android",
     "ios": "npx expo start --ios",
     "web": "npx expo start --web",
     "eject": "expo eject",
-    "predeploy": "npx expo export --platform web && touch dist/.nojekyll && sed -i 's|src=\"/|src=\"/location-tracker-mobile/|g' dist/index.html && sed -i 's|href=\"/|href=\"/location-tracker-mobile/|g' dist/index.html",
+    "predeploy": "npx expo export --platform web && touch dist/.nojekyll && cp dist/index.html dist/404.html",
     "deploy": "gh-pages -d dist --dotfiles"
   },
   "dependencies": {
