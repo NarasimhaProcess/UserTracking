@@ -45,7 +45,11 @@ export default function SignupScreen({ navigation, route }) {
         .from('users')
         .select('*')
         .eq('email', email)
-        .single();
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Signup: Error checking existing user:', checkError);
+      }
 
       if (existingUser) {
         Alert.alert('Signup Error', 'User with this email already exists. Please login instead.');

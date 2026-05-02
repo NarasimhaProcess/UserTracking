@@ -272,13 +272,18 @@ export default function App() {
 
 
   const loadUserProfile = async (userId) => {
-    const { data } = await supabase.from('users').select('*').eq('id', userId).single();
+    const { data, error } = await supabase.from('users').select('*').eq('id', userId).maybeSingle();
+    if (error) {
+      console.error('App: Error loading user profile:', error);
+      return null;
+    }
     if (data) {
       const groups = await fetchUserGroups(data.id, data.user_type);
       const profileWithGroups = { ...data, groups };
       setUserProfile(profileWithGroups);
       return profileWithGroups;
     }
+    return null;
   };
 
   const fetchUserGroups = async (userId, userType) => {

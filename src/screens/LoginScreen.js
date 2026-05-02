@@ -35,9 +35,16 @@ export default function LoginScreen({ navigation, route, onAuthSuccess }) {
         .from('users')
         .select('id')
         .eq('email', email)
-        .single();
+        .maybeSingle();
 
-      if (userError || !userData) {
+      if (userError) {
+        console.error('Login: Error checking user existence:', userError);
+        Alert.alert('Login Error', 'An error occurred while checking your account.');
+        setLoading(false);
+        return;
+      }
+
+      if (!userData) {
         Alert.alert('Login Error', 'User not found. Please check your email or sign up.');
         setLoading(false);
         return;

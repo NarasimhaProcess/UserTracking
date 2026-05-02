@@ -129,7 +129,7 @@ class LocationTracker {
             .from('users')
             .select('location_update_interval')
             .eq('id', userId)
-            .single();
+            .maybeSingle();
           if (!error && data && data.location_update_interval) {
             interval = data.location_update_interval;
           }
