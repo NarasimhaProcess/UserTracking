@@ -1,0 +1,66 @@
+name: Android CI
+
+on:
+  push:
+    branches:
+      - 'stop' # Runs on all branches. Change to your branch name if you want specific branches.
+  pull_request:
+    branches:
+      - 'stop'
+
+jobs:
+  build_android_apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 33
+          build-tools: 33.0.0
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Android Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Run Expo Prebuild
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Install Detox dependencies
+        run: npm install detox-cli
+
+      - name: Build app for Detox
+        run: npx detox build --configuration android.emu.debug
+
+      - name: Run Detox tests
+        run: npx detox test --configuration android.emu.debug
+
+      - name: Upload Detox Artifacts (Screenshots, Logs)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: detox-artifacts
+          path: |
+            ./artifacts/
+            ./detox-logs/
