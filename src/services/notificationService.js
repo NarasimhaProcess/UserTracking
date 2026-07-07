@@ -97,7 +97,7 @@ export async function registerForPushNotificationsAsync(user) {
         .from('user_push_tokens')
         .upsert(
           { user_id: user.id, push_token: pushToken },
-          { onConflict: ['push_token'] }
+          { onConflict: ['user_id'] }
         )
         .select();
 
