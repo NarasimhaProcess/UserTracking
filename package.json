@@ -10,7 +10,8 @@
     "web": "npx expo start --web",
     "eject": "expo eject",
     "predeploy": "npx expo export --platform web && touch dist/.nojekyll && cp dist/index.html dist/404.html",
-    "deploy": "gh-pages -d dist --dotfiles"
+    "deploy": "gh-pages -d dist --dotfiles",
+    "postinstall": "node print-env-info.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.4",

@@ -10,7 +10,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { supabase } from '../services/supabaseClient';
+import { supabase, supabaseUrl, supabaseAnonKey } from '../services/supabaseClient';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { registerForPushNotificationsAsync } from '../services/notificationService';
@@ -233,6 +233,8 @@ export default function LoginScreen({ navigation, route, onAuthSuccess }) {
       </ScrollView>
       <View style={styles.footer}>
         <Text style={styles.footerText}>© 2025 localwala's. Version 1.0</Text>
+        <Text style={styles.debugText}>URL: {supabaseUrl || 'None'}</Text>
+        <Text style={styles.debugText}>Anon: {supabaseAnonKey ? supabaseAnonKey.substring(0, 5) + '...' : 'None'}</Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -333,5 +335,11 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     color: '#8E8E93',
+  },
+  debugText: {
+    fontSize: 10,
+    color: '#8E8E93',
+    marginTop: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });

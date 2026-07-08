@@ -62,7 +62,7 @@ import QuickTransactionScreen from './src/screens/QuickTransactionScreen';
 import BankTransactionScreen from './src/screens/BankTransactionScreen';
 
 // Services
-import { supabase } from './src/services/supabaseClient';
+import { supabase, supabaseUrl, supabaseAnonKey } from './src/services/supabaseClient';
 import { locationTracker } from './src/services/locationTracker';
 
 const Stack = createStackNavigator();
@@ -441,6 +441,8 @@ export default function App() {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Loading...</Text>
+        <Text style={styles.debugText}>URL: {supabaseUrl || 'None'}</Text>
+        <Text style={styles.debugText}>Anon: {supabaseAnonKey ? supabaseAnonKey.substring(0, 5) + '...' : 'None'}</Text>
       </View>
     );
   }
@@ -519,5 +521,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#333333',
     fontWeight: '500',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 8,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });

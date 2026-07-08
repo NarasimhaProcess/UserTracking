@@ -10,7 +10,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { supabase } from '../services/supabaseClient';
+import { supabase, supabaseUrl, supabaseAnonKey } from '../services/supabaseClient';
 import { registerForPushNotificationsAsync } from '../services/notificationService'; // New import
 
 export default function SignupScreen({ navigation, route }) {
@@ -210,6 +210,11 @@ export default function SignupScreen({ navigation, route }) {
           </View>
         </View>
       </ScrollView>
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>© 2025 localwala's. Version 1.0</Text>
+        <Text style={styles.debugText}>URL: {supabaseUrl || 'None'}</Text>
+        <Text style={styles.debugText}>Anon: {supabaseAnonKey ? supabaseAnonKey.substring(0, 5) + '...' : 'None'}</Text>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -290,5 +295,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#007AFF',
     fontWeight: '600',
+  },
+  footer: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+    backgroundColor: '#F2F2F7',
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+  debugText: {
+    fontSize: 10,
+    color: '#8E8E93',
+    marginTop: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 }); 
